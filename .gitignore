@@ -1,0 +1,11 @@
+# Ignorar entornos virtuales en subcarpetas
+01_ING_DATOS/env/
+02_ING_MODELOS/env/
+
+# Ingorar archivos específicos
+01_ING_DATOS/Docs/Dataset_Original.zip
+
+# Ignorar archivos temporales de Python y Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

@@ -1,0 +1,18 @@
+name: coco_eda
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - seaborn
+  - ipykernel
+  - pandas
+  - pycocotools
+  - tqdm
+  - scikit-image
+  - jupyterlab
+  - matplotlib
+  - numpy
+  - opencv
+  - tabulate
+  - tensorflow
+prefix: /opt/homebrew/Caskroom/miniforge/base/envs/coco_eda
