@@ -1,0 +1,13 @@
+{
+    "reportAttributeAccessIssue": "none",
+    "typeCheckingMode": "basic",
+    "pythonVersion": "3.10",
+    "include": [
+        "01_ING_DATOS",
+        "02_ING_MODELOS"
+    ],
+    "exclude": [
+        "**/env",
+        "**/__pycache__"
+    ]
+}

@@ -9,3 +9,7 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# Archivos muy pesados
+02_ING_MODELOS/models/final_export/ssd_v2_model.keras
+02_ING_MODELOS/models/checkpoints/ssd_v2_best.keras
