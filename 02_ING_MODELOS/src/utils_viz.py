@@ -68,3 +68,128 @@ def show_random_samples(
         ax.axis("off")
     fig.suptitle(title)
     plt.show()
+
+
+try:
+    import pandas as pd
+    _HAS_PANDAS = True
+except ImportError:
+    _HAS_PANDAS = False
+    pd = None
+
+
+def plot_training_history(
+    history_df: "pd.DataFrame",
+    title: str = "Training History",
+    loss_title: str = "Loss",
+    acc_title: str = "Accuracy",
+    secondary_title: str = "Secondary Loss",
+    loss_cols: tuple = ("loss", "val_loss"),
+    acc_pattern: str = "accuracy",
+    secondary_pattern: str = "bbox",
+    figsize: tuple = (15, 4),
+    save_path: str | None = None,
+) -> None:
+    """Plot training history curves (loss, accuracy, secondary metric).
+    
+    Generic function that works for both SSD and YOLO training histories.
+    
+    Args:
+        history_df: DataFrame with training history (columns: loss, val_loss, etc.)
+        title: Main figure title
+        loss_title: Title for loss subplot
+        acc_title: Title for accuracy subplot
+        secondary_title: Title for secondary metric subplot
+        loss_cols: Tuple of (train_loss_col, val_loss_col) names
+        acc_pattern: Pattern to match accuracy columns
+        secondary_pattern: Pattern to match secondary metric columns (e.g., 'bbox', 'class_out_loss')
+        figsize: Figure size
+        save_path: Optional path to save the figure
+    """
+    if not _HAS_PANDAS:
+        raise RuntimeError("pandas is required for plot_training_history")
+    
+    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    fig.suptitle(title, fontsize=12, fontweight='bold')
+
+    # Plot 1: Loss
+    train_loss, val_loss = loss_cols
+    if train_loss in history_df.columns:
+        axes[0].plot(history_df[train_loss], label='train', color='blue')
+    if val_loss in history_df.columns:
+        axes[0].plot(history_df[val_loss], label='val', color='orange')
+    axes[0].set_title(loss_title)
+    axes[0].set_xlabel('Epoch')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+
+    # Plot 2: Accuracy
+    acc_cols_found = [c for c in history_df.columns if acc_pattern in c and not c.startswith('val')]
+    if acc_cols_found:
+        axes[1].plot(history_df[acc_cols_found[0]], label='train', color='blue')
+    val_acc_cols = [c for c in history_df.columns if acc_pattern in c and c.startswith('val')]
+    if val_acc_cols:
+        axes[1].plot(history_df[val_acc_cols[0]], label='val', color='orange')
+    axes[1].set_title(acc_title)
+    axes[1].set_xlabel('Epoch')
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+
+    # Plot 3: Secondary metric (bbox loss, class loss, etc.)
+    sec_cols = [c for c in history_df.columns if secondary_pattern in c and 'loss' in c and not c.startswith('val')]
+    if sec_cols:
+        axes[2].plot(history_df[sec_cols[0]], label='train', color='blue')
+    val_sec_cols = [c for c in history_df.columns if secondary_pattern in c and 'loss' in c and c.startswith('val')]
+    if val_sec_cols:
+        axes[2].plot(history_df[val_sec_cols[0]], label='val', color='orange')
+    axes[2].set_title(secondary_title)
+    axes[2].set_xlabel('Epoch')
+    axes[2].legend()
+    axes[2].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"✅ Gráfico guardado en: {save_path}")
+    
+    plt.show()
+
+
+def plot_ssd_history(
+    history_df: "pd.DataFrame",
+    title: str = "SSD Training",
+    save_path: str | None = None,
+) -> None:
+    """Convenience wrapper for SSD training history."""
+    plot_training_history(
+        history_df=history_df,
+        title=title,
+        loss_title="Total Loss",
+        acc_title="Class Accuracy",
+        secondary_title="BBox Loss",
+        loss_cols=("loss", "val_loss"),
+        acc_pattern="class_out_accuracy",
+        secondary_pattern="bbox_out",
+        save_path=save_path,
+    )
+
+
+def plot_ssd_v2_history(
+    history_df: "pd.DataFrame",
+    title: str = "SSD Anchor V2 - Focal Loss + HNM",
+    save_path: str | None = None,
+) -> None:
+    """Convenience wrapper for SSD V2 (Focal Loss) training history."""
+    plot_training_history(
+        history_df=history_df,
+        title=title,
+        loss_title="Total Loss (Focal + BBox)",
+        acc_title="Class Accuracy",
+        secondary_title="Focal Classification Loss",
+        loss_cols=("loss", "val_loss"),
+        acc_pattern="class_out_accuracy",
+        secondary_pattern="class_out_loss",
+        save_path=save_path,
+    )
+

@@ -33,12 +33,15 @@ class COCOTargets:
         images_dir: str,
         class_names: List[str],
         image_size: Tuple[int, int] = (224, 224),
+        category_id_map: Dict[int, int] | None = None,
     ) -> None:
         self.coco_json_path = coco_json_path
         self.images_dir = images_dir
         self.class_names = class_names
         self.image_size = image_size
-        self.category_id_to_class = {i + 1: i for i in range(len(class_names))}
+        # Allow custom category_id mapping; default builds from COCO file
+        self._custom_cat_map = category_id_map
+        self.category_id_to_class: Dict[int, int] = {}
         self.class_id_to_name = {i: name for i, name in enumerate(class_names)}
         self.images: Dict[int, ImageInfo] = {}
         self.targets: Dict[int, List[BoundingBox]] = {}
@@ -48,6 +51,21 @@ class COCOTargets:
     def _load_annotations(self) -> None:
         with open(self.coco_json_path, "r", encoding="utf-8") as f:
             coco = json.load(f)
+
+        # Build category_id -> class_id map from COCO categories
+        if self._custom_cat_map is not None:
+            self.category_id_to_class = self._custom_cat_map
+        else:
+            # Auto-build from categories in COCO file, matching by name
+            name_to_idx = {name: idx for idx, name in enumerate(self.class_names)}
+            for cat in coco.get("categories", []):
+                cat_name = cat.get("name", "")
+                if cat_name in name_to_idx:
+                    self.category_id_to_class[cat["id"]] = name_to_idx[cat_name]
+            if not self.category_id_to_class:
+                # Fallback: assume category_ids are 1-indexed
+                self.category_id_to_class = {i + 1: i for i in range(len(self.class_names))}
+                log("⚠️ No matching categories found in COCO file, using default 1-indexed mapping.")
 
         for img in coco.get("images", []):
             self.images[img["id"]] = ImageInfo(
