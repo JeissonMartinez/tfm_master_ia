@@ -1,7 +1,10 @@
 """Loss functions for SSD heads with padding masks."""
 from __future__ import annotations
 
-from .utils_io import log
+try:
+    from .utils_io import log
+except ImportError:  # fallback when running as a script/notebook
+    from utils_io import log
 
 try:
     import tensorflow as tf  # type: ignore
@@ -52,3 +55,24 @@ def masked_huber_loss(y_true, y_pred, delta: float = 1.0):
 
     masked_loss = huber_per_slot * valid_mask
     return tf.reduce_sum(masked_loss) / (tf.reduce_sum(valid_mask) + 1e-7)
+
+
+def weighted_categorical_crossentropy(class_weights):
+    """Weighted categorical cross-entropy for anchor classification.
+
+    Args:
+        class_weights: list/array of shape (num_classes+1,) with background at index 0
+    """
+    if tf is None:
+        raise RuntimeError("TensorFlow es requerido para weighted_categorical_crossentropy.")
+
+    weights = tf.constant(class_weights, dtype=tf.float32)
+
+    def loss_fn(y_true, y_pred):
+        y_pred = tf.clip_by_value(y_pred, 1e-7, 1 - 1e-7)
+        ce = -tf.reduce_sum(y_true * tf.math.log(y_pred), axis=-1)
+        class_indices = tf.argmax(y_true, axis=-1)
+        sample_weights = tf.gather(weights, class_indices)
+        return tf.reduce_mean(ce * sample_weights)
+
+    return loss_fn

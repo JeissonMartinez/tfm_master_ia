@@ -4,7 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from .utils_io import log, safe_exists
+try:
+    from .utils_io import log, safe_exists
+except ImportError:  # fallback when running as a script/notebook
+    from utils_io import log, safe_exists
 
 try:
     from ultralytics import YOLO  # type: ignore
@@ -17,7 +20,7 @@ except Exception as exc:  # pragma: no cover - defensive
 class YoloTrainConfig:
     model: str = "yolo11n.pt"
     imgsz: int = 224
-    epochs: int = 100
+    epochs: int = 50
     patience: int = 15
     batch: int = 32
     optimizer: str = "AdamW"

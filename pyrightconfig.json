@@ -9,5 +9,10 @@
     "exclude": [
         "**/env",
         "**/__pycache__"
+    ],
+    "pythonPath": ".",
+    "extraPaths": [
+        "02_ING_MODELOS/src",
+        "01_ING_DATOS/src"
     ]
 }

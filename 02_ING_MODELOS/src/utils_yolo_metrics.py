@@ -7,7 +7,10 @@ from typing import Dict, Optional
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from .utils_io import log, safe_copy, safe_exists, safe_filesize_mb
+try:
+    from .utils_io import log, safe_copy, safe_exists, safe_filesize_mb
+except ImportError:  # fallback when running as a script/notebook
+    from utils_io import log, safe_copy, safe_exists, safe_filesize_mb
 
 
 def extract_yolo_metrics(results_dir: str, logs_dir: str, version_tag: str) -> Optional[pd.DataFrame]:

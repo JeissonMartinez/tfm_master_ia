@@ -4,7 +4,10 @@ from __future__ import annotations
 import os
 from typing import List
 
-from .utils_io import log, safe_mkdir
+try:
+    from .utils_io import log, safe_mkdir
+except ImportError:  # fallback when running as a script/notebook
+    from utils_io import log, safe_mkdir
 
 try:
     import tensorflow as tf  # type: ignore

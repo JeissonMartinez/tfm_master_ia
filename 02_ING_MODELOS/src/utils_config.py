@@ -5,7 +5,10 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict
 
-from .utils_io import safe_mkdir, log
+try:
+    from .utils_io import safe_mkdir, log
+except ImportError:  # fallback when running as a script/notebook
+    from utils_io import safe_mkdir, log
 
 
 @dataclass
@@ -25,8 +28,8 @@ class ProjectConfig:
 
     def __post_init__(self) -> None:
         self.dataset_root = os.path.join(self.base_project_dir, "01_ING_DATOS", "Dataset")
-        self.train_img_dir = os.path.join(self.dataset_root, "train", "augmented_images")
-        self.train_json = os.path.join(self.train_img_dir, "train_final.json")
+        self.train_img_dir = os.path.join(self.dataset_root, "train", "augmented2_images")
+        self.train_json = os.path.join(self.train_img_dir,  "train_final2.json")
         self.val_img_dir = os.path.join(self.dataset_root, "valid")
         self.val_json = os.path.join(self.val_img_dir, "val_final.json")
         self.test_img_dir = os.path.join(self.dataset_root, "test")
