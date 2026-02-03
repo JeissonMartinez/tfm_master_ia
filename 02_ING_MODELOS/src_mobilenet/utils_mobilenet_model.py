@@ -231,6 +231,111 @@ def build_mobilenetv3_ssd_lite(
     return model
 
 
+def build_mobilenetv3_large_ssd_lite(
+    input_shape: Tuple[int, int, int] = (224, 224, 3),
+    num_classes: int = 4,
+    num_anchors_per_cell: int = 6,
+    alpha: float = 0.75,
+    minimalistic: bool = True,
+    feature_channels: int = 128,
+    use_batchnorm: bool = True,
+    dropout_rate: float = 0.2,
+    model_name: str = "MobileNetV3Large_SSDLite",
+) -> tf.keras.Model:
+    """Build MobileNetV3 Large + SSD-Lite for object detection.
+    
+    Larger capacity backbone compared to MobileNetV3 Small.
+    Useful when Small doesn't provide enough feature extraction power.
+    
+    IMPORTANT: 
+    - With minimalistic=True + ImageNet weights: only alpha=1.0 is supported
+    - With minimalistic=False + ImageNet weights: alpha can be 0.75 or 1.0
+    - For ESP32-S3 deployment, alpha=0.75 with minimalistic=False is recommended
+      (uses hard-swish but provides more capacity)
+    
+    Size estimates (INT8):
+    - MobileNetV3 Small (alpha=1.0): ~600-800 KB
+    - MobileNetV3 Large (alpha=0.75): ~1.0-1.3 MB
+    - MobileNetV3 Large (alpha=1.0): ~1.5-1.8 MB
+    
+    Args:
+        input_shape: Input image shape (H, W, C)
+        num_classes: Number of object classes (excluding background)
+        num_anchors_per_cell: Number of anchors per spatial location
+        alpha: Width multiplier (0.75 or 1.0 for ImageNet weights)
+        minimalistic: Use ReLU instead of hard-swish. 
+                      Note: With minimalistic=True, only alpha=1.0 is supported.
+        feature_channels: Channels in SSD-Lite head
+        use_batchnorm: Whether to use batch normalization
+        dropout_rate: Dropout rate before detection heads
+        model_name: Model name
+    
+    Returns:
+        Keras Model with outputs: objectness, class_out, bbox_out
+    
+    Example:
+        >>> model = build_mobilenetv3_large_ssd_lite(
+        ...     input_shape=(224, 224, 3),
+        ...     num_classes=2,
+        ...     num_anchors_per_cell=12,
+        ...     alpha=0.75,
+        ...     minimalistic=False,  # Uses hard-swish for more capacity
+        ... )
+        >>> model.summary()
+    """
+    # Validate alpha for ImageNet weights compatibility
+    if minimalistic and alpha != 1.0:
+        raise ValueError(
+            f"With minimalistic=True and ImageNet weights, only alpha=1.0 is supported. "
+            f"Got alpha={alpha}. Use minimalistic=False for alpha=0.75."
+        )
+    if not minimalistic and alpha not in [0.75, 1.0]:
+        raise ValueError(
+            f"With minimalistic=False and ImageNet weights, alpha must be 0.75 or 1.0. "
+            f"Got alpha={alpha}."
+        )
+    
+    # Load MobileNetV3 Large backbone
+    base_model = tf.keras.applications.MobileNetV3Large(
+        input_shape=input_shape,
+        alpha=alpha,
+        minimalistic=minimalistic,
+        include_top=False,
+        weights="imagenet",
+        include_preprocessing=False,
+    )
+    
+    # Get feature map from backbone
+    # MobileNetV3 Large output: 7x7 for 224x224 input
+    features = base_model.output
+    
+    # Optional dropout for regularization
+    if dropout_rate > 0:
+        features = tf.keras.layers.SpatialDropout2D(
+            dropout_rate,
+            name="feature_dropout"
+        )(features)
+    
+    # SSD-Lite detection head (same as Small version)
+    outputs = ssd_lite_head(
+        features,
+        num_anchors=num_anchors_per_cell,
+        num_classes=num_classes,
+        feature_channels=feature_channels,
+        use_batchnorm=use_batchnorm,
+        name_prefix="ssd_lite",
+    )
+    
+    # Build model
+    model = tf.keras.Model(
+        inputs=base_model.input,
+        outputs=outputs,
+        name=model_name,
+    )
+    
+    return model
+
+
 def build_mobilenetv2_ssd_lite(
     input_shape: Tuple[int, int, int] = (224, 224, 3),
     num_classes: int = 4,

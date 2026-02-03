@@ -328,11 +328,18 @@ def build_confusion_matrix(
     score_threshold: float = 0.5,
     normalize: bool = True,
 ) -> np.ndarray:
-    """Build confusion matrix for object detection.
+    """Build symmetric confusion matrix for object detection.
     
-    Matrix layout:
+    Matrix layout (symmetric):
     - Rows: Predicted class (0..N-1) + "Background" (N)
-    - Columns: GT class (0..N-1) + "No Detection" (N)
+    - Columns: GT class (0..N-1) + "Background" (N)
+    
+    Interpretation:
+    - Diagonal: Correct detections (TP for each class)
+    - Off-diagonal (rows 0..N-1, cols 0..N-1): Class confusion
+    - Row i, col N (Background): False Positives for class i (detected but no GT)
+    - Row N, col j: False Negatives for class j (GT not detected)
+    - Cell [N, N]: True Negatives (not used in object detection, set to 0)
     
     Args:
         all_detections: List of detection lists per image
@@ -340,12 +347,12 @@ def build_confusion_matrix(
         num_classes: Number of classes
         iou_threshold: IoU threshold for matching
         score_threshold: Confidence threshold for predictions
-        normalize: Whether to normalize by row (pred class)
+        normalize: Whether to normalize by column (GT class) for recall view
         
     Returns:
         Confusion matrix (N+1) x (N+1)
     """
-    # Matrix: rows = predicted (0..N-1, N=Background), cols = GT (0..N-1, N=No Detection)
+    # Matrix: both rows and cols = classes (0..N-1) + Background (N)
     cm = np.zeros((num_classes + 1, num_classes + 1), dtype=np.float32)
     
     for detections, ground_truths in zip(all_detections, all_ground_truths):
@@ -362,20 +369,23 @@ def build_confusion_matrix(
             filtered_dets, gts, iou_threshold
         )
         
-        # True positives: pred class vs GT class
+        # True positives and class confusion: pred class vs GT class
         for det, gt in matched:
             cm[det.class_id, gt.class_id] += 1
         
-        # False positives (no matching GT): pred class vs "Background" column
+        # False positives (detected but no GT): pred class row, Background column
         for det in unmatched_dets:
-            cm[det.class_id, num_classes] += 1  # Background column
+            cm[det.class_id, num_classes] += 1
         
-        # False negatives (no detection): "No Detection" row vs GT class
+        # False negatives (GT not detected): Background row, GT class column
         for gt in unmatched_gts:
-            cm[num_classes, gt.class_id] += 1  # No Detection row
+            cm[num_classes, gt.class_id] += 1
+    
+    # Note: cm[num_classes, num_classes] stays 0 (TN not meaningful in detection)
     
     if normalize:
         # Normalize by column (GT class) to show recall per class
+        # This answers: "Of all GT of class X, what fraction was detected as each class?"
         col_sums = cm.sum(axis=0, keepdims=True)
         col_sums[col_sums == 0] = 1  # Avoid division by zero
         cm = cm / col_sums
@@ -390,8 +400,16 @@ def plot_confusion_matrix(
     figsize: Tuple[int, int] = (10, 8),
     cmap: str = "Blues",
     save_path: Optional[str] = None,
+    show_tn_cell: bool = False,
 ) -> plt.Figure:
-    """Plot confusion matrix.
+    """Plot symmetric confusion matrix for object detection.
+    
+    Matrix interpretation:
+    - Diagonal (class, class): True Positives (correct detections)
+    - Off-diagonal (pred_i, gt_j): Class confusion (detected as i, was j)
+    - (pred_class, Background): False Positives (detected but no GT)
+    - (Background, gt_class): False Negatives (GT not detected)
+    - (Background, Background): Not applicable in detection (shown in gray)
     
     Args:
         cm: Confusion matrix (N+1 x N+1)
@@ -400,24 +418,39 @@ def plot_confusion_matrix(
         figsize: Figure size
         cmap: Colormap
         save_path: Path to save figure
+        show_tn_cell: Whether to show value in TN cell (usually N/A)
         
     Returns:
         Matplotlib figure
     """
-    # Extended labels
-    row_labels = class_names + ["No Detection"]
-    col_labels = class_names + ["Background (FP)"]
+    # Symmetric labels: classes + Background for both axes
+    labels = class_names + ["Background"]
     
     fig, ax = plt.subplots(figsize=figsize)
     
-    im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
+    # Create masked array to gray out the TN cell if needed
+    masked_cm = np.ma.array(cm, mask=False)
+    if not show_tn_cell:
+        # Mask the bottom-right cell (Background, Background)
+        mask = np.zeros_like(cm, dtype=bool)
+        mask[-1, -1] = True
+        masked_cm = np.ma.array(cm, mask=mask)
+    
+    im = ax.imshow(masked_cm, interpolation='nearest', cmap=cmap)
     ax.figure.colorbar(im, ax=ax)
+    
+    # Gray out the TN cell
+    if not show_tn_cell:
+        ax.add_patch(plt.Rectangle(
+            (cm.shape[1] - 1.5, cm.shape[0] - 1.5), 1, 1,
+            fill=True, facecolor='lightgray', edgecolor='gray', linewidth=1
+        ))
     
     # Ticks
     ax.set(xticks=np.arange(cm.shape[1]),
            yticks=np.arange(cm.shape[0]),
-           xticklabels=col_labels,
-           yticklabels=row_labels,
+           xticklabels=labels,
+           yticklabels=labels,
            title=title,
            ylabel='Predicted',
            xlabel='Ground Truth')
@@ -429,12 +462,28 @@ def plot_confusion_matrix(
     thresh = cm.max() / 2.
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
+            # Skip TN cell annotation if not showing
+            if not show_tn_cell and i == cm.shape[0] - 1 and j == cm.shape[1] - 1:
+                ax.text(j, i, "N/A",
+                        ha="center", va="center",
+                        color="gray", fontsize=9, fontstyle='italic')
+                continue
+                
             value = cm[i, j]
             text = f"{value:.2f}" if value < 1 else f"{value:.0f}"
             ax.text(j, i, text,
                     ha="center", va="center",
                     color="white" if value > thresh else "black",
                     fontsize=9)
+    
+    # Add legend explaining the matrix
+    legend_text = (
+        "Diagonal: TP | Off-diag: Confusion\n"
+        "Row→Bkg: FP | Col→Bkg: FN"
+    )
+    ax.text(0.02, 0.98, legend_text, transform=ax.transAxes,
+            fontsize=8, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
     
     fig.tight_layout()
     
