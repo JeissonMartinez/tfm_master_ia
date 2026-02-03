@@ -1,0 +1,58 @@
+{
+  "config": {
+    "name": "MBNTv3_ssdlite_v1",
+    "description": "Baseline con clases 'obstacle' y 'footpath', augmentation heavy, 45 \u00e9pocas totales",
+    "backbone": "MobileNetV3Small",
+    "minimalistic": true,
+    "num_anchors": 25,
+    "num_classes": 2,
+    "selected_classes": [
+      "footpath",
+      "obstacle"
+    ],
+    "img_size": 224,
+    "augmentation_level": "heavy",
+    "phase1_epochs": 20,
+    "phase1_lr": 0.0005,
+    "phase2_epochs": 50,
+    "phase2_lr": 5e-05,
+    "batch_size": 16,
+    "warmup_epochs": 3,
+    "use_focal_loss": true,
+    "focal_alpha": 0.25,
+    "focal_gamma": 2.5,
+    "dropout_rate": 0.2,
+    "l2_reg": 0.0001,
+    "quantization": "int8",
+    "created_at": "2026-02-03T15:03:46.795366"
+  },
+  "results": {
+    "map50_keras": 0.567456455725858,
+    "map50_tflite": 0.5509252590113616,
+    "precision_keras": 0.26744186046511625,
+    "precision_tflite": 0.26046511627906976,
+    "recall_keras": 0.43125,
+    "recall_tflite": 0.35,
+    "f1_keras": 0.33014354066985646,
+    "f1_tflite": 0.29866666666666664,
+    "ap_per_class_keras": {
+      "footpath": 0.7777912938483857,
+      "obstacle": 0.35712161760333033
+    },
+    "ap_per_class_tflite": {
+      "footpath": 0.7603894053751699,
+      "obstacle": 0.3414611126475533
+    },
+    "final_train_loss": 0.0,
+    "final_val_loss": 0.0,
+    "best_val_loss": 0.0,
+    "total_epochs": 0,
+    "training_time_minutes": 0.0,
+    "keras_model_size_mb": 0.0,
+    "tflite_model_size_kb": 749.8203125,
+    "keras_model_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/models/final_export/MBNTv3_ssdlite_v1_final.keras",
+    "tflite_model_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/models/final_export/MBNTv3_ssdlite_v1_int8.tflite",
+    "history_csv_path": "",
+    "confusion_matrix_path": ""
+  }
+}

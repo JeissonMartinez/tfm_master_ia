@@ -23,12 +23,30 @@ print("="*60)
 # Configuración
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_DIR = SCRIPT_DIR.parent
-MODEL_NAME = "mobilenetv3_ssdlite_v1"
-MODEL_PATH = PROJECT_DIR / "models/final_export" / f"{MODEL_NAME}_final.keras"
-OUTPUT_PATH = PROJECT_DIR / "models/final_export" / f"{MODEL_NAME}_tflite.tflite"
 CALIBRATION_DIR = PROJECT_DIR.parent / "01_ING_DATOS/Dataset/train/augmented2_images"
 NUM_SAMPLES = 50
 IMG_SIZE = 224
+
+# Obtener nombre del modelo desde argumentos o buscar el más reciente
+if len(sys.argv) > 1:
+    MODEL_NAME = sys.argv[1]
+else:
+    # Buscar el modelo .keras más reciente en final_export
+    export_dir = PROJECT_DIR / "models/final_export"
+    keras_models = sorted(
+        export_dir.glob("*_final.keras"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
+    if keras_models:
+        MODEL_NAME = keras_models[0].stem.replace("_final", "")
+        print(f"\n🔍 Auto-detectado modelo más reciente: {MODEL_NAME}")
+    else:
+        print("❌ No se encontraron modelos .keras en final_export")
+        sys.exit(1)
+
+MODEL_PATH = PROJECT_DIR / "models/final_export" / f"{MODEL_NAME}_final.keras"
+OUTPUT_PATH = PROJECT_DIR / "models/final_export" / f"{MODEL_NAME}_int8.tflite"
 
 print(f"\n📁 Modelo entrada: {MODEL_PATH}")
 print(f"📁 Modelo salida:  {OUTPUT_PATH}")

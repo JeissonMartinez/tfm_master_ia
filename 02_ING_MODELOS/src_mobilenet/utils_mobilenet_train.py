@@ -361,6 +361,7 @@ def plot_training_history(
     history: tf.keras.callbacks.History,
     output_path: Optional[str] = None,
     figsize: Tuple[int, int] = (14, 10),
+    title: Optional[str] = None,
 ) -> None:
     """Plot training history with loss and metrics.
     
@@ -368,6 +369,7 @@ def plot_training_history(
         history: Keras History object or dict
         output_path: Optional path to save figure
         figsize: Figure size
+        title: Optional title for the entire figure
     """
     import matplotlib.pyplot as plt
     
@@ -427,6 +429,10 @@ def plot_training_history(
     # Hide unused subplots
     for idx in range(plot_idx, len(axes)):
         axes[idx].set_visible(False)
+    
+    # Add figure title if provided
+    if title:
+        fig.suptitle(title, fontsize=14, fontweight='bold', y=1.02)
     
     plt.tight_layout()
     

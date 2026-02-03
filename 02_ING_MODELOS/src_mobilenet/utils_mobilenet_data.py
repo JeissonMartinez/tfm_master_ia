@@ -21,22 +21,32 @@ import tensorflow as tf
 def load_coco_annotations(
     json_path: str,
     image_dir: str,
-) -> Tuple[List[Dict[str, Any]], Dict[int, str], Dict[int, int]]:
-    """Load COCO format annotations.
+    allowed_classes: List[str] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[int, str], Dict[int, int], List[str]]:
+    """Load COCO format annotations with optional class filtering.
     
     Args:
         json_path: Path to COCO JSON annotation file
         image_dir: Directory containing images
+        allowed_classes: List of class names to include. If None, all classes.
+                        Example: ["door", "person"] to train only on 2 classes.
     
     Returns:
         Tuple of:
         - List of image data dicts with annotations
-        - Category id to name mapping
-        - Category id to index mapping (0-indexed)
+        - Category id to name mapping (filtered)
+        - Category id to index mapping (0-indexed, filtered)
+        - List of class names in order (for model output)
     
     Example:
-        >>> images, cat_names, cat_to_idx = load_coco_annotations(
+        >>> # Load all classes
+        >>> images, cat_names, cat_to_idx, class_names = load_coco_annotations(
         ...     "train.json", "train_images/"
+        ... )
+        >>> # Load only specific classes
+        >>> images, cat_names, cat_to_idx, class_names = load_coco_annotations(
+        ...     "train.json", "train_images/",
+        ...     allowed_classes=["door", "person"]
         ... )
     """
     with open(json_path, "r", encoding="utf-8") as f:
@@ -44,11 +54,30 @@ def load_coco_annotations(
     
     # Build category mappings
     categories = coco_data.get("categories", [])
-    cat_id_to_name = {cat["id"]: cat["name"] for cat in categories}
+    all_cat_id_to_name = {cat["id"]: cat["name"] for cat in categories}
+    
+    # Filter categories if allowed_classes specified
+    if allowed_classes is not None:
+        cat_id_to_name = {
+            cat_id: name 
+            for cat_id, name in all_cat_id_to_name.items() 
+            if name in allowed_classes
+        }
+        if not cat_id_to_name:
+            raise ValueError(
+                f"None of allowed_classes {allowed_classes} found in dataset. "
+                f"Available: {list(all_cat_id_to_name.values())}"
+            )
+        print(f"📋 Filtering to {len(cat_id_to_name)} classes: {list(cat_id_to_name.values())}")
+    else:
+        cat_id_to_name = all_cat_id_to_name
     
     # Create 0-indexed mapping for model (sorted by category id)
     sorted_cat_ids = sorted(cat_id_to_name.keys())
     cat_id_to_idx = {cat_id: idx for idx, cat_id in enumerate(sorted_cat_ids)}
+    
+    # Create ordered class names list for model output interpretation
+    class_names = [cat_id_to_name[cat_id] for cat_id in sorted_cat_ids]
     
     # Build image id to annotations mapping
     annotations = coco_data.get("annotations", [])
@@ -109,11 +138,20 @@ def load_coco_annotations(
             "classes": np.array(classes, dtype=np.int32) if classes else np.zeros((0,), dtype=np.int32),
         })
     
+    # Filter out images with no annotations after class filtering
+    if allowed_classes is not None:
+        original_count = len(images_data)
+        images_data = [img for img in images_data if len(img["boxes"]) > 0]
+        filtered_count = original_count - len(images_data)
+        if filtered_count > 0:
+            print(f"   Removed {filtered_count} images with no annotations for selected classes")
+    
     print(f"✅ Loaded {len(images_data)} images with annotations")
     print(f"   Categories: {cat_id_to_name}")
     print(f"   Class mapping: {cat_id_to_idx}")
+    print(f"   Class names (ordered): {class_names}")
     
-    return images_data, cat_id_to_name, cat_id_to_idx
+    return images_data, cat_id_to_name, cat_id_to_idx, class_names
 
 
 def compute_class_weights(
@@ -324,7 +362,7 @@ class COCODataGenerator(tf.keras.utils.Sequence):
     Features:
     - Loads images and annotations in batches
     - Encodes targets for SSD anchor-based detection
-    - Supports data augmentation
+    - Supports configurable data augmentation levels
     - Handles class imbalance through weighted sampling
     
     Args:
@@ -334,16 +372,58 @@ class COCODataGenerator(tf.keras.utils.Sequence):
         img_size: Target image size
         num_classes: Number of classes
         iou_threshold: IoU threshold for positive anchors
-        augment: Whether to apply data augmentation
+        augment: Whether to apply data augmentation (legacy, use augmentation_level)
+        augmentation_level: Level of augmentation:
+            - "none": No augmentation
+            - "light": Only horizontal flip
+            - "medium": Flip + brightness + contrast (default)
+            - "heavy": Flip + brightness + contrast + saturation + hue + blur
         shuffle: Whether to shuffle data each epoch
     
     Example:
-        >>> images, _, _ = load_coco_annotations("train.json", "images/")
+        >>> images, _, _, _ = load_coco_annotations("train.json", "images/")
         >>> anchors = generate_anchors(7)
-        >>> gen = COCODataGenerator(images, anchors, batch_size=32)
+        >>> gen = COCODataGenerator(images, anchors, batch_size=32, 
+        ...                         augmentation_level="heavy")
         >>> for images, targets in gen:
         ...     model.train_on_batch(images, targets)
     """
+    
+    # Augmentation configurations per level
+    AUGMENTATION_CONFIGS = {
+        "none": {
+            "flip": False,
+            "brightness": 0.0,
+            "contrast": 0.0,
+            "saturation": 0.0,
+            "hue": 0.0,
+            "blur": False,
+        },
+        "light": {
+            "flip": True,
+            "brightness": 0.0,
+            "contrast": 0.0,
+            "saturation": 0.0,
+            "hue": 0.0,
+            "blur": False,
+        },
+        "medium": {
+            "flip": True,
+            "brightness": 0.2,
+            "contrast": 0.2,
+            "saturation": 0.0,
+            "hue": 0.0,
+            "blur": False,
+        },
+        "heavy": {
+            "flip": True,
+            "brightness": 0.3,
+            "contrast": 0.3,
+            "saturation": 0.2,
+            "hue": 0.05,
+            "blur": True,
+        },
+    }
     
     def __init__(
         self,
@@ -354,6 +434,7 @@ class COCODataGenerator(tf.keras.utils.Sequence):
         num_classes: int = 4,
         iou_threshold: float = 0.35,
         augment: bool = False,
+        augmentation_level: str = "medium",
         shuffle: bool = True,
     ):
         super().__init__()
@@ -363,12 +444,31 @@ class COCODataGenerator(tf.keras.utils.Sequence):
         self.img_size = img_size
         self.num_classes = num_classes
         self.iou_threshold = iou_threshold
-        self.augment = augment
         self.shuffle = shuffle
+        
+        # Handle augmentation configuration
+        if augmentation_level not in self.AUGMENTATION_CONFIGS:
+            raise ValueError(
+                f"Invalid augmentation_level '{augmentation_level}'. "
+                f"Choose from: {list(self.AUGMENTATION_CONFIGS.keys())}"
+            )
+        
+        # If legacy augment=True/False is used, map to levels
+        if augment and augmentation_level == "medium":
+            self.augmentation_level = "medium"
+        elif not augment and augmentation_level == "medium":
+            self.augmentation_level = "none"
+        else:
+            self.augmentation_level = augmentation_level
+        
+        self.aug_config = self.AUGMENTATION_CONFIGS[self.augmentation_level]
+        self.augment = self.augmentation_level != "none"
         
         self.indices = np.arange(len(images_data))
         if shuffle:
             np.random.shuffle(self.indices)
+        
+        print(f"📊 DataGenerator: {len(images_data)} images, augmentation={self.augmentation_level}")
     
     def __len__(self) -> int:
         return int(np.ceil(len(self.images_data) / self.batch_size))
@@ -394,31 +494,56 @@ class COCODataGenerator(tf.keras.utils.Sequence):
         img: np.ndarray, 
         boxes: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Apply data augmentation.
+        """Apply data augmentation based on configured level.
         
-        Augmentations:
-        - Horizontal flip (50% chance)
-        - Brightness adjustment
-        - Contrast adjustment
+        Augmentations depend on self.augmentation_level:
+        - light: Horizontal flip only
+        - medium: Flip + brightness + contrast
+        - heavy: All of the above + saturation + hue + blur
         """
         aug_img = img.copy()
         aug_boxes = boxes.copy()
+        cfg = self.aug_config
         
         # Horizontal flip
-        if np.random.random() > 0.5:
+        if cfg["flip"] and np.random.random() > 0.5:
             aug_img = np.fliplr(aug_img).copy()
             if len(aug_boxes) > 0:
                 aug_boxes[:, 0] = 1.0 - aug_boxes[:, 0]  # Flip x center
         
         # Brightness adjustment
-        if np.random.random() > 0.5:
-            delta = np.random.uniform(-0.2, 0.2)
+        if cfg["brightness"] > 0 and np.random.random() > 0.5:
+            delta = np.random.uniform(-cfg["brightness"], cfg["brightness"])
             aug_img = np.clip(aug_img + delta, 0, 1)
         
         # Contrast adjustment
-        if np.random.random() > 0.5:
-            factor = np.random.uniform(0.8, 1.2)
+        if cfg["contrast"] > 0 and np.random.random() > 0.5:
+            factor = np.random.uniform(1 - cfg["contrast"], 1 + cfg["contrast"])
             aug_img = np.clip((aug_img - 0.5) * factor + 0.5, 0, 1)
+        
+        # Saturation adjustment (heavy only)
+        if cfg["saturation"] > 0 and np.random.random() > 0.5:
+            # Convert to HSV
+            aug_img_uint8 = (aug_img * 255).astype(np.uint8)
+            hsv = cv2.cvtColor(aug_img_uint8, cv2.COLOR_RGB2HSV).astype(np.float32)
+            factor = np.random.uniform(1 - cfg["saturation"], 1 + cfg["saturation"])
+            hsv[:, :, 1] = np.clip(hsv[:, :, 1] * factor, 0, 255)
+            aug_img_uint8 = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
+            aug_img = aug_img_uint8.astype(np.float32) / 255.0
+        
+        # Hue adjustment (heavy only)
+        if cfg["hue"] > 0 and np.random.random() > 0.5:
+            aug_img_uint8 = (aug_img * 255).astype(np.uint8)
+            hsv = cv2.cvtColor(aug_img_uint8, cv2.COLOR_RGB2HSV).astype(np.float32)
+            delta = np.random.uniform(-cfg["hue"] * 180, cfg["hue"] * 180)
+            hsv[:, :, 0] = (hsv[:, :, 0] + delta) % 180
+            aug_img_uint8 = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
+            aug_img = aug_img_uint8.astype(np.float32) / 255.0
+        
+        # Gaussian blur (heavy only)
+        if cfg["blur"] and np.random.random() > 0.7:  # 30% chance
+            ksize = np.random.choice([3, 5])
+            aug_img = cv2.GaussianBlur(aug_img, (ksize, ksize), 0)
         
         return aug_img, aug_boxes
     
