@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -179,11 +179,27 @@ class Yolo26Experiment:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Yolo26Experiment":
-        """Create experiment from dictionary."""
-        config = Yolo26ExperimentConfig(**data.get("config", {}))
+        """Create experiment from dictionary.
         
+        Handles backward compatibility by ignoring unknown fields
+        from older experiment versions.
+        """
+        # Get valid field names for each dataclass
+        config_fields = {f.name for f in fields(Yolo26ExperimentConfig)}
+        results_fields = {f.name for f in fields(Yolo26ExperimentResults)}
+        
+        # Filter config data to only include known fields
+        config_data = data.get("config", {})
+        filtered_config = {k: v for k, v in config_data.items() if k in config_fields}
+        config = Yolo26ExperimentConfig(**filtered_config)
+        
+        # Filter results data to only include known fields
         results_data = data.get("results")
-        results = Yolo26ExperimentResults(**results_data) if results_data else None
+        if results_data:
+            filtered_results = {k: v for k, v in results_data.items() if k in results_fields}
+            results = Yolo26ExperimentResults(**filtered_results)
+        else:
+            results = None
         
         return cls(
             config=config,

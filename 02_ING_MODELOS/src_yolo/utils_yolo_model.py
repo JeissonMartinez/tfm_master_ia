@@ -24,46 +24,88 @@ except ImportError:
 # YOLO26 model specifications (from official docs)
 YOLO26_SPECS = {
     "yolo26n": {
-        "params_m": 2.4,
-        "flops_g": 5.4,
-        "map50_coco": 40.9,
-        "map5095_coco": 40.1,
+        "params": "2.4M",
+        "gflops": "5.4",
+        "map50": 40.9,
+        "map50_95": 40.1,
         "cpu_speed_ms": 38.9,
         "gpu_speed_ms": 1.7,
     },
     "yolo26s": {
-        "params_m": 9.5,
-        "flops_g": 20.7,
-        "map50_coco": 48.6,
-        "map5095_coco": 47.8,
+        "params": "9.5M",
+        "gflops": "20.7",
+        "map50": 48.6,
+        "map50_95": 47.8,
         "cpu_speed_ms": 87.2,
         "gpu_speed_ms": 2.5,
     },
     "yolo26m": {
-        "params_m": 20.4,
-        "flops_g": 68.2,
-        "map50_coco": 53.1,
-        "map5095_coco": 52.5,
+        "params": "20.4M",
+        "gflops": "68.2",
+        "map50": 53.1,
+        "map50_95": 52.5,
         "cpu_speed_ms": 220.0,
         "gpu_speed_ms": 4.7,
     },
     "yolo26l": {
-        "params_m": 24.8,
-        "flops_g": 86.4,
-        "map50_coco": 55.0,
-        "map5095_coco": 54.4,
+        "params": "24.8M",
+        "gflops": "86.4",
+        "map50": 55.0,
+        "map50_95": 54.4,
         "cpu_speed_ms": 286.2,
         "gpu_speed_ms": 6.2,
     },
     "yolo26x": {
-        "params_m": 55.7,
-        "flops_g": 193.9,
-        "map50_coco": 57.5,
-        "map5095_coco": 56.9,
+        "params": "55.7M",
+        "gflops": "193.9",
+        "map50": 57.5,
+        "map50_95": 56.9,
         "cpu_speed_ms": 525.8,
         "gpu_speed_ms": 11.8,
     },
 }
+
+
+def check_ultralytics_version(verbose: bool = True) -> Optional[str]:
+    """Check and display Ultralytics version.
+
+    Args:
+        verbose: Whether to print version info
+
+    Returns:
+        Version string or None if not available
+    """
+    if not ULTRALYTICS_AVAILABLE:
+        if verbose:
+            log("❌ Ultralytics no está instalado")
+            log("   Instalar con: pip install ultralytics")
+        return None
+
+    try:
+        import ultralytics
+        version = getattr(ultralytics, "__version__", "unknown")
+        
+        if verbose:
+            log(f"✅ Ultralytics version: {version}")
+            
+            # Check minimum version for YOLO26
+            try:
+                major, minor, *_ = version.split(".")
+                major, minor = int(major), int(minor)
+                if major >= 8 and minor >= 4:
+                    log("   ✅ Compatible con YOLO26 (end2end, DFL-free)")
+                else:
+                    log(f"   ⚠️ Versión {version} puede no soportar YOLO26")
+                    log("   Actualizar con: pip install -U ultralytics")
+            except (ValueError, IndexError):
+                pass
+        
+        return version
+        
+    except Exception as exc:
+        if verbose:
+            log(f"❌ Error verificando Ultralytics: {exc}")
+        return None
 
 
 def load_yolo26_model(
@@ -95,8 +137,8 @@ def load_yolo26_model(
             if variant in YOLO26_SPECS:
                 specs = YOLO26_SPECS[variant]
                 log(f"✅ Modelo cargado: {model_name}")
-                log(f"   📊 Params: {specs['params_m']}M | FLOPs: {specs['flops_g']}G")
-                log(f"   🎯 mAP50 COCO: {specs['map50_coco']}%")
+                log(f"   📊 Params: {specs['params']} | FLOPs: {specs['gflops']}G")
+                log(f"   🎯 mAP50 COCO: {specs['map50']}%")
                 log(f"   ⚡ CPU: {specs['cpu_speed_ms']}ms | GPU: {specs['gpu_speed_ms']}ms")
             else:
                 log(f"✅ Modelo cargado: {model_name}")

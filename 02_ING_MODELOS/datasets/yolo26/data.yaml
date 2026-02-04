@@ -1,0 +1,10 @@
+# YOLO26 Dataset Configuration
+# Generated for ESP32-S3 deployment
+
+path: /Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/datasets/yolo26
+train: images/train
+val: images/val
+test: images/test
+
+nc: 2
+names: ['footpath', 'obstacle']

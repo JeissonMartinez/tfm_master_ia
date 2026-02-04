@@ -1,0 +1,112 @@
+{
+  "config": {
+    "name": "yolo26n_v0",
+    "description": "Prueba de funcionamiento del experiment pipeline del notebook",
+    "model": "yolo26n.pt",
+    "imgsz": 224,
+    "epochs": 2,
+    "patience": 50,
+    "batch": 16,
+    "optimizer": "auto",
+    "lr0": 0.001,
+    "lrf": 0.01,
+    "cos_lr": true,
+    "mosaic": 0.5,
+    "mixup": 0.5,
+    "close_mosaic": 10,
+    "scale": 0.5,
+    "fliplr": 0.5,
+    "box": 7.5,
+    "cls": 0.5,
+    "num_classes": 2,
+    "class_names": [
+      "footpath",
+      "obstacle"
+    ],
+    "end2end": true,
+    "conf_threshold": 0.25,
+    "iou_threshold": 0.5,
+    "data_yaml": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/datasets/yolo26/data.yaml",
+    "project_dir": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/logs"
+  },
+  "results": {
+    "best_epoch": 2,
+    "final_train_loss": 0.0,
+    "final_val_loss": 0.0,
+    "map50_keras": 0.3742223557692308,
+    "map50_95_keras": 0.2251780358493261,
+    "precision_keras": 0.6875,
+    "recall_keras": 0.051082251082251076,
+    "f1_keras": 0.09509854201773021,
+    "per_class_ap50_keras": {},
+    "per_class_precision_keras": {},
+    "per_class_recall_keras": {},
+    "map50_tflite": 0.0,
+    "map50_95_tflite": 0.0,
+    "precision_tflite": 0.0,
+    "recall_tflite": 0.0,
+    "f1_tflite": 0.0,
+    "per_class_ap50_tflite": {},
+    "confusion_matrix": [
+      [
+        3.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        5.0,
+        3.0
+      ],
+      [
+        52.0,
+        99.0,
+        0.0
+      ]
+    ],
+    "total_images": 0,
+    "total_predictions": 0,
+    "total_ground_truth": 0,
+    "pytorch_model_size_mb": 5.086423873901367,
+    "tflite_model_size_mb": 0.0,
+    "tflite_int8_size_mb": 2.538005828857422,
+    "inference_time_pytorch_ms": 12.84738333828478,
+    "inference_time_tflite_ms": 5.053413919655673,
+    "comparison_speedup": 2.5423176376496324,
+    "comparison_keras_detections": 12,
+    "comparison_tflite_detections": 12622,
+    "comparison_keras_detections_per_image": 0.14285714285714285,
+    "comparison_tflite_detections_per_image": 150.26190476190476,
+    "comparison_agreement_rate": 0.0,
+    "comparison_matched_detections": 0,
+    "comparison_unmatched_keras": 12,
+    "comparison_unmatched_tflite": 12622,
+    "comparison_mean_iou": 0.0,
+    "comparison_min_iou": 0.0,
+    "comparison_max_iou": 0.0,
+    "comparison_std_iou": 0.0,
+    "comparison_mean_conf_keras": 0.0,
+    "comparison_mean_conf_tflite": 0.0,
+    "comparison_mean_conf_diff": 0.0,
+    "comparison_conf_correlation": 0.0,
+    "comparison_per_class_agreement": {
+      "footpath": 0.0,
+      "obstacle": 0.0
+    },
+    "comparison_per_class_detections_keras": {
+      "footpath": 3,
+      "obstacle": 9
+    },
+    "comparison_per_class_detections_tflite": {
+      "footpath": 3,
+      "obstacle": 12619
+    },
+    "best_model_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/logs/yolo26n_v0/weights/best.pt",
+    "tflite_model_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/logs/yolo26n_v0/weights/best_saved_model/best_int8.tflite",
+    "history_csv_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/logs/yolo26n_v0_history.csv",
+    "confusion_matrix_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/reports/yolo26n_v0/yolo26n_v0_confusion_matrix.png"
+  },
+  "timestamp": "20260204_112026",
+  "status": "completed",
+  "notes": "Se espera:\n- Probar funcionamiento completo del notebook\n- Validar que se calculen métricas, gráficos y exportación TFLite\n- Resolver errores posibles en el pipeline"
+}
