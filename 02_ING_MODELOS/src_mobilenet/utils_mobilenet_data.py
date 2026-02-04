@@ -364,6 +364,7 @@ class COCODataGenerator(tf.keras.utils.Sequence):
     - Encodes targets for SSD anchor-based detection
     - Supports configurable data augmentation levels
     - Handles class imbalance through weighted sampling
+    - **NEW**: Copy-Paste augmentation for minority classes
     
     Args:
         images_data: List of image data dicts from load_coco_annotations
@@ -379,14 +380,24 @@ class COCODataGenerator(tf.keras.utils.Sequence):
             - "medium": Flip + brightness + contrast (default)
             - "heavy": Flip + brightness + contrast + saturation + hue + blur
         shuffle: Whether to shuffle data each epoch
+        copy_paste_config: Dict with Copy-Paste augmentation settings:
+            - "enabled": bool, whether to enable (default: False)
+            - "obstacle_bank": ObstacleBank instance (created if None)
+            - "target_class_idx": class to augment (default: 1)
+            - "num_pastes": crops to paste per image (default: 2)
+            - "paste_prob": probability per paste attempt (default: 0.5)
+            - "scale_range": (min, max) scale factors (default: (0.7, 1.3))
     
     Example:
         >>> images, _, _, _ = load_coco_annotations("train.json", "images/")
         >>> anchors = generate_anchors(7)
+        >>> # Standard generator
         >>> gen = COCODataGenerator(images, anchors, batch_size=32, 
         ...                         augmentation_level="heavy")
-        >>> for images, targets in gen:
-        ...     model.train_on_batch(images, targets)
+        >>> # With Copy-Paste augmentation
+        >>> gen = COCODataGenerator(images, anchors, batch_size=32,
+        ...                         augmentation_level="heavy",
+        ...                         copy_paste_config={"enabled": True})
     """
     
     # Augmentation configurations per level
@@ -425,6 +436,17 @@ class COCODataGenerator(tf.keras.utils.Sequence):
         },
     }
     
+    # Default Copy-Paste configuration
+    DEFAULT_COPY_PASTE_CONFIG = {
+        "enabled": False,
+        "obstacle_bank": None,
+        "target_class_idx": 1,
+        "num_pastes": 2,
+        "paste_prob": 0.5,
+        "scale_range": (0.7, 1.3),
+        "blend_mode": "direct",
+    }
+    
     def __init__(
         self,
         images_data: List[Dict[str, Any]],
@@ -436,6 +458,7 @@ class COCODataGenerator(tf.keras.utils.Sequence):
         augment: bool = False,
         augmentation_level: str = "medium",
         shuffle: bool = True,
+        copy_paste_config: Optional[Dict[str, Any]] = None,
     ):
         super().__init__()
         self.images_data = images_data
@@ -464,11 +487,25 @@ class COCODataGenerator(tf.keras.utils.Sequence):
         self.aug_config = self.AUGMENTATION_CONFIGS[self.augmentation_level]
         self.augment = self.augmentation_level != "none"
         
+        # Configure Copy-Paste augmentation
+        self.cp_config = self.DEFAULT_COPY_PASTE_CONFIG.copy()
+        if copy_paste_config is not None:
+            self.cp_config.update(copy_paste_config)
+        
+        # Build obstacle bank if Copy-Paste enabled but no bank provided
+        if self.cp_config["enabled"] and self.cp_config["obstacle_bank"] is None:
+            self.cp_config["obstacle_bank"] = ObstacleBank(
+                images_data=images_data,
+                target_class_idx=self.cp_config["target_class_idx"],
+                img_size=img_size,
+            )
+        
         self.indices = np.arange(len(images_data))
         if shuffle:
             np.random.shuffle(self.indices)
         
-        print(f"📊 DataGenerator: {len(images_data)} images, augmentation={self.augmentation_level}")
+        cp_status = "enabled" if self.cp_config["enabled"] else "disabled"
+        print(f"📊 DataGenerator: {len(images_data)} images, augmentation={self.augmentation_level}, copy-paste={cp_status}")
     
     def __len__(self) -> int:
         return int(np.ceil(len(self.images_data) / self.batch_size))
@@ -568,9 +605,23 @@ class COCODataGenerator(tf.keras.utils.Sequence):
             boxes = img_data["boxes"].copy()
             classes = img_data["classes"].copy()
             
-            # Apply augmentation
+            # Apply standard augmentation
             if self.augment:
                 img, boxes = self._augment_image(img, boxes)
+            
+            # Apply Copy-Paste augmentation (AFTER standard augmentation)
+            if self.cp_config["enabled"] and self.cp_config["obstacle_bank"] is not None:
+                img, boxes, classes = apply_copy_paste_augmentation(
+                    img=img,
+                    boxes=boxes,
+                    classes=classes,
+                    obstacle_bank=self.cp_config["obstacle_bank"],
+                    target_class_idx=self.cp_config["target_class_idx"],
+                    num_pastes=self.cp_config["num_pastes"],
+                    scale_range=self.cp_config["scale_range"],
+                    paste_prob=self.cp_config["paste_prob"],
+                    blend_mode=self.cp_config["blend_mode"],
+                )
             
             # Encode targets
             obj_targets, cls_targets, bbox_targets = encode_targets(
@@ -651,6 +702,256 @@ def create_tf_dataset(
         dataset = dataset.prefetch(tf.data.AUTOTUNE)
     
     return dataset
+
+
+###############################################################################
+# COPY-PASTE AUGMENTATION FOR MINORITY CLASS BALANCING
+###############################################################################
+
+class ObstacleBank:
+    """Bank of extracted obstacle crops for Copy-Paste augmentation.
+    
+    This class extracts and stores obstacle (or any minority class) crops
+    from the training dataset, which can then be pasted into other images
+    to increase the variety of obstacle appearances and contexts.
+    
+    Args:
+        images_data: List of image data dicts from load_coco_annotations
+        target_class_idx: Class index to extract (e.g., 1 for obstacle)
+        min_crop_size: Minimum crop size in pixels (after resize to img_size)
+        max_crops_per_image: Maximum crops to extract per source image
+        img_size: Target image size for loading
+        
+    Example:
+        >>> bank = ObstacleBank(images_data, target_class_idx=1)
+        >>> crop, bbox = bank.get_random_crop()
+    """
+    
+    def __init__(
+        self,
+        images_data: List[Dict[str, Any]],
+        target_class_idx: int = 1,
+        min_crop_size: int = 10,
+        max_crops_per_image: int = 5,
+        img_size: int = 224,
+    ):
+        self.img_size = img_size
+        self.min_crop_size = min_crop_size
+        self.crops = []  # List of (crop_image, normalized_wh)
+        
+        print(f"🏦 Building obstacle bank for class {target_class_idx}...")
+        
+        for img_data in images_data:
+            boxes = img_data["boxes"]
+            classes = img_data["classes"]
+            
+            # Filter for target class
+            target_mask = classes == target_class_idx
+            if not np.any(target_mask):
+                continue
+            
+            target_boxes = boxes[target_mask]
+            
+            # Load image once per source
+            try:
+                img = cv2.imread(img_data["path"])
+                if img is None:
+                    continue
+                img = cv2.resize(img, (img_size, img_size))
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            except Exception:
+                continue
+            
+            # Extract crops
+            crops_extracted = 0
+            for box in target_boxes:
+                if crops_extracted >= max_crops_per_image:
+                    break
+                    
+                xc, yc, w, h = box
+                
+                # Convert normalized to pixel coords
+                x1 = int((xc - w/2) * img_size)
+                y1 = int((yc - h/2) * img_size)
+                x2 = int((xc + w/2) * img_size)
+                y2 = int((yc + h/2) * img_size)
+                
+                # Clip to image bounds
+                x1 = max(0, x1)
+                y1 = max(0, y1)
+                x2 = min(img_size, x2)
+                y2 = min(img_size, y2)
+                
+                crop_w = x2 - x1
+                crop_h = y2 - y1
+                
+                # Skip too small crops
+                if crop_w < min_crop_size or crop_h < min_crop_size:
+                    continue
+                
+                crop = img[y1:y2, x1:x2].copy()
+                
+                # Store crop with its normalized dimensions
+                self.crops.append({
+                    "image": crop,
+                    "w_norm": w,
+                    "h_norm": h,
+                })
+                crops_extracted += 1
+        
+        print(f"   ✅ Extracted {len(self.crops)} obstacle crops")
+    
+    def __len__(self) -> int:
+        return len(self.crops)
+    
+    def get_random_crop(self) -> Optional[Dict]:
+        """Get a random crop from the bank."""
+        if not self.crops:
+            return None
+        return self.crops[np.random.randint(len(self.crops))]
+    
+    def get_random_crops(self, n: int) -> List[Dict]:
+        """Get n random crops (with replacement if needed)."""
+        if not self.crops:
+            return []
+        indices = np.random.randint(0, len(self.crops), size=min(n, len(self.crops)))
+        return [self.crops[i] for i in indices]
+
+
+def apply_copy_paste_augmentation(
+    img: np.ndarray,
+    boxes: np.ndarray,
+    classes: np.ndarray,
+    obstacle_bank: ObstacleBank,
+    target_class_idx: int = 1,
+    num_pastes: int = 2,
+    scale_range: Tuple[float, float] = (0.7, 1.3),
+    paste_prob: float = 0.5,
+    blend_mode: str = "direct",
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Apply Copy-Paste augmentation by pasting obstacle crops into image.
+    
+    This augmentation technique increases the variety of obstacle appearances
+    and contexts by taking obstacle crops from other images and pasting them
+    into the current image at random valid positions.
+    
+    Args:
+        img: Input image (H, W, 3) normalized [0, 1]
+        boxes: Ground truth boxes (N, 4) in [xc, yc, w, h] normalized
+        classes: Ground truth classes (N,)
+        obstacle_bank: ObstacleBank instance with extracted crops
+        target_class_idx: Class index being augmented (for new bbox labels)
+        num_pastes: Number of crops to attempt pasting
+        scale_range: (min_scale, max_scale) for random scaling of crops
+        paste_prob: Probability of actually pasting (per attempt)
+        blend_mode: "direct" for hard paste, "alpha" for soft edges
+    
+    Returns:
+        Tuple of (augmented_img, new_boxes, new_classes)
+    """
+    if obstacle_bank is None or len(obstacle_bank) == 0:
+        return img, boxes, classes
+    
+    aug_img = img.copy()
+    new_boxes = list(boxes)
+    new_classes = list(classes)
+    
+    img_h, img_w = aug_img.shape[:2]
+    
+    for _ in range(num_pastes):
+        # Random skip based on probability
+        if np.random.random() > paste_prob:
+            continue
+        
+        # Get random crop
+        crop_data = obstacle_bank.get_random_crop()
+        if crop_data is None:
+            continue
+        
+        crop_img = crop_data["image"].copy()
+        orig_w_norm = crop_data["w_norm"]
+        orig_h_norm = crop_data["h_norm"]
+        
+        # Random scale
+        scale = np.random.uniform(scale_range[0], scale_range[1])
+        new_w_norm = orig_w_norm * scale
+        new_h_norm = orig_h_norm * scale
+        
+        # Clip to reasonable size
+        new_w_norm = np.clip(new_w_norm, 0.05, 0.5)
+        new_h_norm = np.clip(new_h_norm, 0.05, 0.5)
+        
+        # Calculate pixel dimensions
+        new_w_px = int(new_w_norm * img_w)
+        new_h_px = int(new_h_norm * img_h)
+        
+        if new_w_px < 5 or new_h_px < 5:
+            continue
+        
+        # Resize crop
+        try:
+            crop_resized = cv2.resize(crop_img, (new_w_px, new_h_px))
+        except Exception:
+            continue
+        
+        # Convert to float if needed
+        if crop_resized.dtype == np.uint8:
+            crop_resized = crop_resized.astype(np.float32) / 255.0
+        
+        # Random position (ensuring crop fits in image)
+        max_x = img_w - new_w_px
+        max_y = img_h - new_h_px
+        
+        if max_x <= 0 or max_y <= 0:
+            continue
+        
+        paste_x = np.random.randint(0, max_x)
+        paste_y = np.random.randint(0, max_y)
+        
+        # Calculate center for bbox
+        xc = (paste_x + new_w_px / 2) / img_w
+        yc = (paste_y + new_h_px / 2) / img_h
+        
+        # Check for excessive overlap with existing boxes
+        new_bbox = np.array([[xc, yc, new_w_norm, new_h_norm]])
+        if len(new_boxes) > 0:
+            existing = np.array(new_boxes)
+            ious = compute_iou_matrix(new_bbox, existing)[0]
+            if np.any(ious > 0.5):  # Skip if >50% overlap
+                continue
+        
+        # Paste the crop
+        if blend_mode == "direct":
+            aug_img[paste_y:paste_y+new_h_px, paste_x:paste_x+new_w_px] = crop_resized
+        else:
+            # Soft blending at edges
+            mask = np.ones((new_h_px, new_w_px, 1), dtype=np.float32)
+            border = min(5, min(new_w_px, new_h_px) // 4)
+            if border > 0:
+                for b in range(border):
+                    alpha = (b + 1) / border
+                    mask[b, :] *= alpha
+                    mask[-b-1, :] *= alpha
+                    mask[:, b] *= alpha
+                    mask[:, -b-1] *= alpha
+            
+            region = aug_img[paste_y:paste_y+new_h_px, paste_x:paste_x+new_w_px]
+            aug_img[paste_y:paste_y+new_h_px, paste_x:paste_x+new_w_px] = \
+                mask * crop_resized + (1 - mask) * region
+        
+        # Add new bbox and class
+        new_boxes.append([xc, yc, new_w_norm, new_h_norm])
+        new_classes.append(target_class_idx)
+    
+    # Convert back to numpy arrays
+    if len(new_boxes) > 0:
+        new_boxes = np.array(new_boxes, dtype=np.float32)
+        new_classes = np.array(new_classes, dtype=np.int32)
+    else:
+        new_boxes = np.zeros((0, 4), dtype=np.float32)
+        new_classes = np.zeros((0,), dtype=np.int32)
+    
+    return aug_img, new_boxes, new_classes
 
 
 def compute_anchor_statistics(
