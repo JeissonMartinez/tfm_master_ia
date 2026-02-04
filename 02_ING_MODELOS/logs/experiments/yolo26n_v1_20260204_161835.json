@@ -1,0 +1,112 @@
+{
+  "config": {
+    "name": "yolo26n_v1",
+    "description": "Primer entrenamiento real YOLO26n para ESP32-S3.\nObjetivo: Superar MobileNetV3 baseline (mAP@50=0.606).\nConfiguración optimizada basada en análisis de dataset:\n- obstacle: 68% de anotaciones, 20% objetos pequeños\n- footpath: 32% de anotaciones, 62% objetos grandes\n- Desbalance 2.1:1 obstacle/footpath",
+    "model": "yolo26n.pt",
+    "imgsz": 224,
+    "epochs": 150,
+    "patience": 30,
+    "batch": 16,
+    "optimizer": "MuSGD",
+    "lr0": 0.01,
+    "lrf": 0.01,
+    "cos_lr": true,
+    "mosaic": 1.0,
+    "mixup": 0.15,
+    "close_mosaic": 15,
+    "scale": 0.5,
+    "fliplr": 0.5,
+    "box": 7.5,
+    "cls": 1.0,
+    "num_classes": 2,
+    "class_names": [
+      "footpath",
+      "obstacle"
+    ],
+    "end2end": true,
+    "conf_threshold": 0.25,
+    "iou_threshold": 0.5,
+    "data_yaml": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/datasets/yolo26/data.yaml",
+    "project_dir": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/logs"
+  },
+  "results": {
+    "best_epoch": 75,
+    "final_train_loss": 0.0,
+    "final_val_loss": 0.0,
+    "map50_keras": 0.6230530313043108,
+    "map50_95_keras": 0.367973647091742,
+    "precision_keras": 0.6715930295106263,
+    "recall_keras": 0.5303030303030303,
+    "f1_keras": 0.5926432918585242,
+    "per_class_ap50_keras": {},
+    "per_class_precision_keras": {},
+    "per_class_recall_keras": {},
+    "map50_tflite": 0.0,
+    "map50_95_tflite": 0.0,
+    "precision_tflite": 0.0,
+    "recall_tflite": 0.0,
+    "f1_tflite": 0.0,
+    "per_class_ap50_tflite": {},
+    "confusion_matrix": [
+      [
+        45.0,
+        0.0,
+        9.0
+      ],
+      [
+        0.0,
+        39.0,
+        34.0
+      ],
+      [
+        10.0,
+        66.0,
+        0.0
+      ]
+    ],
+    "total_images": 0,
+    "total_predictions": 0,
+    "total_ground_truth": 0,
+    "pytorch_model_size_mb": 14.784686088562012,
+    "tflite_model_size_mb": 0.0,
+    "tflite_int8_size_mb": 2.537228584289551,
+    "inference_time_pytorch_ms": 16.747566590826196,
+    "inference_time_tflite_ms": 4.800621285495988,
+    "comparison_speedup": 3.4886248247545066,
+    "comparison_keras_detections": 131,
+    "comparison_tflite_detections": 16820,
+    "comparison_keras_detections_per_image": 1.5595238095238095,
+    "comparison_tflite_detections_per_image": 200.23809523809524,
+    "comparison_agreement_rate": 0.0,
+    "comparison_matched_detections": 0,
+    "comparison_unmatched_keras": 131,
+    "comparison_unmatched_tflite": 16820,
+    "comparison_mean_iou": 0.0,
+    "comparison_min_iou": 0.0,
+    "comparison_max_iou": 0.0,
+    "comparison_std_iou": 0.0,
+    "comparison_mean_conf_keras": 0.0,
+    "comparison_mean_conf_tflite": 0.0,
+    "comparison_mean_conf_diff": 0.0,
+    "comparison_conf_correlation": 0.0,
+    "comparison_per_class_agreement": {
+      "footpath": 0.0,
+      "obstacle": 0.0
+    },
+    "comparison_per_class_detections_keras": {
+      "footpath": 61,
+      "obstacle": 70
+    },
+    "comparison_per_class_detections_tflite": {
+      "footpath": 53,
+      "obstacle": 16767
+    },
+    "best_model_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/logs/yolo26n_v1/weights/best.pt",
+    "tflite_model_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/logs/yolo26n_v1/weights/best_saved_model/best_int8.tflite",
+    "history_csv_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/logs/yolo26n_v1_history.csv",
+    "confusion_matrix_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/reports/yolo26n_v1/yolo26n_v1_confusion_matrix.png"
+  },
+  "timestamp": "20260204_161835",
+  "status": "completed",
+  "notes": "Análisis del problema:\n1. Dataset: 2,432 anotaciones (obstacle:1648, footpath:784)\n2. Desbalance de clases: 2.1:1 a favor de obstacle\n3. obstacle tiene 20% de objetos pequeños (<32x32) vs 3% en footpath\n4. obstacle tiene área mediana 4,123px² vs 11,399px² en footpath\n\nConfiguración justificada:\n- EPOCHS=150: Suficiente para convergencia, dataset mediano (~1,400 imgs)\n- LR0=0.01: Default Ultralytics, mayor que v0 para mejor convergencia\n- MOSAIC=1.0: Máximo para mejorar detección de objetos pequeños (obstacle)\n- MIXUP=0.15: Bajo-moderado, regularización sin confusión\n- CLS_LOSS_WEIGHT=1.0: Aumentado para mejorar clasificación (problema en MobileNetV3)\n- SCALE=0.5: ±50% escala para variabilidad de tamaños de obstacle\n\nObjetivos:\n- mAP@50 (Keras) ≥ 0.65 (vs 0.606 MobileNetV3)\n- mAP@50 (TFLite) ≥ 0.60 (vs 0.574 MobileNetV3)\n- Precision ≥ 0.50 (vs 0.204 MobileNetV3)\n- Recall ≥ 0.55 (vs 0.419 MobileNetV3)\n- F1 ≥ 0.52 (vs 0.274 MobileNetV3)"
+}
