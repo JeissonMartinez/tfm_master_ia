@@ -1,0 +1,10 @@
+path: ./data
+train: images
+val: images
+nc: 5
+names:
+- obstacle
+- dog
+- person
+- stair
+- door

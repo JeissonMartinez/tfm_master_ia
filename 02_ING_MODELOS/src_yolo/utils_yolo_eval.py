@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -267,6 +268,8 @@ def evaluate_model(
     iou_threshold: float = 0.5,
     end2end: bool = True,
     verbose: bool = True,
+    project: Optional[str] = None,
+    name: str = "val",
 ) -> Optional[EvaluationResults]:
     """Evaluate YOLO26 model on a dataset split.
 
@@ -279,6 +282,10 @@ def evaluate_model(
         iou_threshold: IoU threshold for mAP
         end2end: Use end-to-end inference
         verbose: Print progress
+        project: Directory to save validation results. If None, derived
+            automatically from the model's checkpoint path so that results
+            are stored inside the experiment folder (e.g. logs/yolo26n_v1/val).
+        name: Subdirectory name inside *project* (default ``"val"``).
 
     Returns:
         EvaluationResults object or None on failure
@@ -287,12 +294,24 @@ def evaluate_model(
         log("❌ Modelo no disponible")
         return None
 
+    # Derive project from model checkpoint path if not provided
+    if project is None:
+        try:
+            ckpt_path = getattr(model, 'ckpt_path', None)
+            if ckpt_path:
+                # e.g. "logs/yolo26n_v1/weights/best.pt" → "logs/yolo26n_v1"
+                project = str(Path(ckpt_path).parent.parent)
+        except Exception:
+            pass  # Fall back to Ultralytics default (runs/detect/val)
+
     if verbose:
         log(f"\n🔍 Evaluando modelo en split: {split}")
+        if project:
+            log(f"   📂 Resultados en: {project}/{name}")
 
     try:
         # Run validation with Ultralytics
-        results = model.val(
+        val_kwargs: Dict[str, Any] = dict(
             data=data_yaml,
             split=split,
             imgsz=imgsz,
@@ -301,6 +320,11 @@ def evaluate_model(
             end2end=end2end,
             verbose=verbose,
         )
+        if project is not None:
+            val_kwargs["project"] = project
+            val_kwargs["name"] = name
+
+        results = model.val(**val_kwargs)
 
         # Extract metrics
         eval_results = EvaluationResults(

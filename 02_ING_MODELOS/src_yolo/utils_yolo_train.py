@@ -8,6 +8,7 @@ Optimized for YOLO26n deployment on ESP32-S3 with:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .utils_io import log, safe_exists
@@ -274,6 +275,8 @@ def validate_yolo26(
     iou: float = 0.6,
     max_det: int = 300,
     end2end: bool = True,
+    project: Optional[str] = None,
+    name: str = "val",
 ) -> Optional[Any]:
     """Validate YOLO26 model on a dataset split.
 
@@ -286,6 +289,10 @@ def validate_yolo26(
         iou: IoU threshold for NMS (ignored if end2end=True)
         max_det: Maximum detections
         end2end: Use end-to-end inference (NMS-free)
+        project: Directory to save validation results. If None, derived
+            automatically from model_path so that results are stored
+            inside the experiment folder (e.g. logs/yolo26n_v1/val).
+        name: Subdirectory name inside *project* (default ``"val"``).
 
     Returns:
         Validation results or None on failure
@@ -294,11 +301,21 @@ def validate_yolo26(
         log("❌ Ultralytics no disponible")
         return None
 
+    # Derive project from model_path if not provided
+    if project is None:
+        try:
+            # e.g. "logs/yolo26n_v1/weights/best.pt" → "logs/yolo26n_v1"
+            project = str(Path(model_path).parent.parent)
+        except Exception:
+            pass  # Fall back to Ultralytics default (runs/detect/val)
+
     try:
         log(f"\n🔍 Validando modelo en split: {split}")
+        if project:
+            log(f"   📂 Resultados en: {project}/{name}")
         model = YOLO(model_path)
         
-        results = model.val(
+        val_kwargs = dict(
             data=data_yaml,
             split=split,
             imgsz=imgsz,
@@ -308,6 +325,11 @@ def validate_yolo26(
             end2end=end2end,
             verbose=True,
         )
+        if project is not None:
+            val_kwargs["project"] = project
+            val_kwargs["name"] = name
+
+        results = model.val(**val_kwargs)
         
         return results
 
