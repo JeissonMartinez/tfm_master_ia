@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import shutil
 from collections import defaultdict
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from .utils_io import safe_read_json, safe_mkdir, safe_write_text, log
@@ -507,3 +508,183 @@ def verify_yolo_labels(
         log(f"{'='*60}\n")
     
     return results
+
+
+def prepare_yolo_from_existing(
+    source_dir: str,
+    output_dir: str,
+    class_names: List[str],
+    split_ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+    seed: int = 42,
+    verbose: bool = True,
+) -> Optional[str]:
+    """Prepare YOLO dataset from existing YOLO format with automatic splitting.
+
+    Takes a flat YOLO dataset (images/, labels/) without train/val/test splits
+    and creates the proper directory structure with shuffled splits.
+
+    Args:
+        source_dir: Path to source YOLO dataset (must contain data/images/, data/labels/ or images/, labels/)
+        output_dir: Output directory for structured YOLO dataset
+        class_names: List of class names in correct order
+        split_ratios: Tuple of (train, val, test) ratios, must sum to 1.0
+        seed: Random seed for reproducibility
+        verbose: Whether to print progress
+
+    Returns:
+        Path to generated data.yaml file, or None if failed
+    """
+    import random
+    
+    if verbose:
+        log(f"\n{'='*60}")
+        log("🔧 PREPARANDO DATASET YOLO EXISTENTE")
+        log(f"{'='*60}")
+        log(f"📁 Origen: {source_dir}")
+        log(f"📁 Destino: {output_dir}")
+        log(f"📊 Ratios: train={split_ratios[0]}, val={split_ratios[1]}, test={split_ratios[2]}")
+
+    # Validate split ratios
+    if abs(sum(split_ratios) - 1.0) > 0.001:
+        log(f"❌ Error: Los ratios deben sumar 1.0, actual: {sum(split_ratios)}")
+        return None
+
+    # Find source directories (handle both flat and nested structures)
+    source_path = Path(source_dir)
+    
+    # Check for data/ subdirectory structure
+    if (source_path / "data" / "images").exists():
+        src_images_dir = source_path / "data" / "images"
+        src_labels_dir = source_path / "data" / "labels"
+    elif (source_path / "images").exists():
+        src_images_dir = source_path / "images"
+        src_labels_dir = source_path / "labels"
+    else:
+        log(f"❌ Error: No se encontró carpeta images/ en {source_dir}")
+        return None
+
+    if not src_labels_dir.exists():
+        log(f"❌ Error: No se encontró carpeta labels/ en {source_dir}")
+        return None
+
+    # Get list of images with valid labels
+    valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    image_files = [
+        f for f in os.listdir(src_images_dir) 
+        if os.path.splitext(f)[1].lower() in valid_extensions
+    ]
+    
+    # Filter to only include images that have corresponding labels
+    paired_files = []
+    for img_file in image_files:
+        label_file = os.path.splitext(img_file)[0] + ".txt"
+        if os.path.exists(src_labels_dir / label_file):
+            paired_files.append(img_file)
+    
+    if not paired_files:
+        log(f"❌ Error: No se encontraron pares imagen-label válidos")
+        return None
+
+    if verbose:
+        log(f"\n📊 Encontradas {len(paired_files)} imágenes con labels")
+
+    # Shuffle with seed for reproducibility
+    random.seed(seed)
+    random.shuffle(paired_files)
+
+    # Calculate split indices
+    n_total = len(paired_files)
+    n_train = int(n_total * split_ratios[0])
+    n_val = int(n_total * split_ratios[1])
+    
+    train_files = paired_files[:n_train]
+    val_files = paired_files[n_train:n_train + n_val]
+    test_files = paired_files[n_train + n_val:]
+
+    if verbose:
+        log(f"   Train: {len(train_files)} imágenes ({len(train_files)/n_total*100:.1f}%)")
+        log(f"   Val:   {len(val_files)} imágenes ({len(val_files)/n_total*100:.1f}%)")
+        log(f"   Test:  {len(test_files)} imágenes ({len(test_files)/n_total*100:.1f}%)")
+
+    # Clean output directory
+    output_path = Path(output_dir)
+    if output_path.exists():
+        try:
+            shutil.rmtree(output_path)
+            if verbose:
+                log("\n🗑️ Directorio existente eliminado")
+        except Exception as exc:
+            log(f"⚠️ No se pudo limpiar {output_dir}: {exc}")
+
+    # Create directory structure
+    splits = {"train": train_files, "val": val_files, "test": test_files}
+    class_counts = {name: 0 for name in class_names}
+    
+    for split_name, files in splits.items():
+        images_dest = output_path / "images" / split_name
+        labels_dest = output_path / "labels" / split_name
+        safe_mkdir(str(images_dest))
+        safe_mkdir(str(labels_dest))
+        
+        if verbose:
+            log(f"\n🔄 Procesando split: {split_name.upper()}...")
+        
+        copied = 0
+        for img_file in files:
+            # Copy image
+            src_img = src_images_dir / img_file
+            dst_img = images_dest / img_file
+            try:
+                shutil.copy2(src_img, dst_img)
+            except Exception as exc:
+                log(f"⚠️ Error copiando {src_img}: {exc}")
+                continue
+            
+            # Copy label
+            label_file = os.path.splitext(img_file)[0] + ".txt"
+            src_lbl = src_labels_dir / label_file
+            dst_lbl = labels_dest / label_file
+            try:
+                shutil.copy2(src_lbl, dst_lbl)
+                
+                # Count classes in this label file
+                with open(src_lbl, "r") as f:
+                    for line in f:
+                        parts = line.strip().split()
+                        if len(parts) >= 5:
+                            cls_idx = int(parts[0])
+                            if 0 <= cls_idx < len(class_names):
+                                class_counts[class_names[cls_idx]] += 1
+            except Exception as exc:
+                log(f"⚠️ Error copiando {src_lbl}: {exc}")
+                continue
+            
+            copied += 1
+        
+        if verbose:
+            log(f"   ✅ {copied} pares imagen-label copiados")
+
+    # Create data.yaml
+    yaml_content = (
+        f"# YOLO26 Dataset Configuration\n"
+        f"# Generated from existing YOLO dataset with automatic splitting\n"
+        f"# Seed: {seed} | Ratios: {split_ratios}\n\n"
+        f"path: {output_dir}\n"
+        f"train: images/train\n"
+        f"val: images/val\n"
+        f"test: images/test\n\n"
+        f"nc: {len(class_names)}\n"
+        f"names: {class_names}\n"
+    )
+    yaml_path = output_path / "data.yaml"
+    safe_write_text(str(yaml_path), yaml_content)
+    
+    if verbose:
+        log(f"\n{'='*60}")
+        log(f"✅ Dataset YOLO preparado correctamente")
+        log(f"📄 data.yaml: {yaml_path}")
+        log(f"📦 Clases: {class_names}")
+        log(f"📊 Distribución total: {class_counts}")
+        log(f"{'='*60}\n")
+
+    return str(yaml_path)

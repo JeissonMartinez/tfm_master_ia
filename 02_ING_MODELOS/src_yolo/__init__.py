@@ -32,6 +32,7 @@ from src_yolo.utils_yolo_data import (
     get_class_distribution_yolo,
     calculate_class_weights,
     verify_yolo_labels,
+    prepare_yolo_from_existing,
 )
 from src_yolo.utils_yolo_model import (
     load_yolo26_model,

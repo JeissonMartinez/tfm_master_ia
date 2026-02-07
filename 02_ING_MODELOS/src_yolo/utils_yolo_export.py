@@ -314,34 +314,69 @@ def _parse_tflite_detections(
     output: np.ndarray,
     conf_threshold: float = 0.25,
     num_classes: int = 2,
+    imgsz: int = 224,
 ) -> List[Dict[str, Any]]:
     """Parse TFLite output to get detections.
     
-    Handles different output formats from YOLO TFLite models.
+    Handles different output formats from YOLO TFLite models:
+      - End-to-end (NMS-free): [batch, max_det, 6] → [x1, y1, x2, y2, conf, class_id]
+      - Standard YOLO grid:    [batch, 4+num_classes, num_anchors] → xywh + class_scores
     
     Args:
         output: Raw TFLite output tensor
         conf_threshold: Confidence threshold for filtering
         num_classes: Number of classes
+        imgsz: Input image size (for coordinate scaling)
     
     Returns:
         List of detections with keys: box, confidence, class_id
     """
     detections = []
     
-    # Common YOLO output format: [batch, num_detections, 4+num_classes] or [batch, 4+num_classes, num_detections]
+    # Remove batch dimension
     if len(output.shape) == 3:
-        output = output[0]  # Remove batch dimension
+        output = output[0]  # [num_det, features] or [features, num_det]
     
     if len(output.shape) != 2:
         return detections
     
+    num_features = output.shape[1] if output.shape[0] >= output.shape[1] else output.shape[0]
+    
+    # -------------------------------------------------------------------------
+    # Format 1: End-to-end (NMS-free) → [max_det, 6] = [x1, y1, x2, y2, conf, class_id]
+    # This is the output when model is exported with end2end=True
+    # -------------------------------------------------------------------------
+    if num_features == 6:
+        # Ensure shape is [num_det, 6]
+        if output.shape[1] != 6:
+            output = output.T
+        
+        for i in range(output.shape[0]):
+            x1, y1, x2, y2, confidence, class_id = output[i]
+            confidence = float(confidence)
+            class_id = int(round(class_id))
+            
+            if confidence >= conf_threshold and 0 <= class_id < num_classes:
+                # Coordinates are normalized (0-1) from end2end export;
+                # scale to pixel coordinates to match PyTorch output
+                detections.append({
+                    "box": np.array([
+                        x1 * imgsz, y1 * imgsz,
+                        x2 * imgsz, y2 * imgsz,
+                    ]),
+                    "confidence": confidence,
+                    "class_id": class_id,
+                })
+        
+        return detections
+    
+    # -------------------------------------------------------------------------
+    # Format 2: Standard YOLO grid → [4+num_classes, num_anchors] or transposed
+    # -------------------------------------------------------------------------
     # Determine format: [num_det, features] or [features, num_det]
     if output.shape[0] < output.shape[1]:
-        # Format: [features, num_det] -> transpose to [num_det, features]
         output = output.T
     
-    # Expected: [num_detections, 4 + num_classes] or [num_detections, 5 + num_classes] with objectness
     num_features = output.shape[1]
     
     for i in range(output.shape[0]):
@@ -350,12 +385,10 @@ def _parse_tflite_detections(
         if num_features >= 4 + num_classes:
             # Format: [x, y, w, h, class_scores...] or [x, y, w, h, obj, class_scores...]
             if num_features == 4 + num_classes:
-                # No objectness score
                 box = row[:4]
                 class_scores = row[4:]
                 obj_score = 1.0
             else:
-                # With objectness score
                 box = row[:4]
                 obj_score = row[4]
                 class_scores = row[5:5+num_classes]
@@ -364,7 +397,6 @@ def _parse_tflite_detections(
             confidence = float(obj_score * class_scores[class_id])
             
             if confidence >= conf_threshold:
-                # Convert from xywh to xyxy if needed
                 x, y, w, h = box
                 x1 = x - w / 2
                 y1 = y - h / 2
@@ -380,6 +412,51 @@ def _parse_tflite_detections(
     return detections
 
 
+def _draw_detections_on_ax(
+    ax: Any,
+    image_rgb: np.ndarray,
+    detections: List[Dict[str, Any]],
+    class_names: List[str],
+    title: str,
+) -> None:
+    """Draw bounding boxes with labels on a matplotlib axis.
+
+    Args:
+        ax: Matplotlib axis
+        image_rgb: Image in RGB format
+        detections: List of dicts with keys: box (xyxy), confidence, class_id
+        class_names: List of class names
+        title: Subplot title
+    """
+    import matplotlib.patches as patches
+
+    COLORS = ["green", "blue", "red", "purple", "orange", "cyan", "magenta", "yellow"]
+
+    ax.imshow(image_rgb)
+    ax.set_title(title, fontsize=10, fontweight="bold")
+    ax.axis("off")
+
+    for det in detections:
+        x1, y1, x2, y2 = det["box"]
+        cls_id = det["class_id"]
+        conf = det["confidence"]
+        color = COLORS[cls_id % len(COLORS)]
+        cls_name = class_names[cls_id] if 0 <= cls_id < len(class_names) else f"cls{cls_id}"
+
+        rect = patches.Rectangle(
+            (x1, y1), x2 - x1, y2 - y1,
+            linewidth=2, edgecolor=color, facecolor="none",
+        )
+        ax.add_patch(rect)
+
+        label = f"{cls_name} {conf:.2f}"
+        ax.text(
+            x1, max(y1 - 3, 0), label,
+            fontsize=7, fontweight="bold", color="white",
+            bbox=dict(facecolor=color, alpha=0.7, edgecolor="none", pad=1),
+        )
+
+
 def compare_keras_vs_tflite(
     keras_model: Any,
     tflite_path: str,
@@ -388,6 +465,9 @@ def compare_keras_vs_tflite(
     imgsz: int = 224,
     conf_threshold: float = 0.25,
     iou_threshold: float = 0.5,
+    save_path: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+    num_visual_samples: int = 3,
 ) -> Dict[str, Any]:
     """Compare inference results between Keras/PyTorch and TFLite models.
     
@@ -397,6 +477,7 @@ def compare_keras_vs_tflite(
     - Agreement rate (matching detections via IoU)
     - IoU statistics between matched detections
     - Confidence comparison (correlation, mean difference)
+    - Side-by-side visual comparison of sample images
 
     Args:
         keras_model: YOLO model instance
@@ -406,6 +487,9 @@ def compare_keras_vs_tflite(
         imgsz: Image size
         conf_threshold: Confidence threshold for filtering detections
         iou_threshold: IoU threshold for matching detections
+        save_path: Optional path to save visual comparison figure
+        experiment_name: Optional experiment name for figure title
+        num_visual_samples: Number of random images for visual comparison (default: 3)
 
     Returns:
         Dictionary with comprehensive comparison results
@@ -525,7 +609,7 @@ def compare_keras_vs_tflite(
         tflite_times.append((time.time() - start) * 1000)
         
         # Parse TFLite output
-        img_dets = _parse_tflite_detections(output, conf_threshold, num_classes)
+        img_dets = _parse_tflite_detections(output, conf_threshold, num_classes, imgsz)
         all_tflite_dets.append(img_dets)
 
     results["tflite_time_ms"] = float(np.mean(tflite_times[1:]) if len(tflite_times) > 1 else tflite_times[0])
@@ -647,6 +731,69 @@ def compare_keras_vs_tflite(
             corr_matrix = np.corrcoef(all_keras_confs, all_tflite_confs)
             results["conf_correlation"] = float(corr_matrix[0, 1]) if not np.isnan(corr_matrix[0, 1]) else 0.0
     
+    # =========================================================================
+    # Visual comparison (side-by-side)
+    # =========================================================================
+    if num_visual_samples > 0 and len(test_images) > 0:
+        try:
+            import matplotlib.pyplot as plt
+            import cv2
+
+            # Prefer images with detections in at least one model
+            candidates = [
+                i for i in range(len(test_images))
+                if len(all_keras_dets[i]) > 0 or len(all_tflite_dets[i]) > 0
+            ]
+            if len(candidates) < num_visual_samples:
+                candidates = list(range(len(test_images)))
+
+            rng = np.random.default_rng()
+            sample_indices = rng.choice(
+                candidates,
+                size=min(num_visual_samples, len(candidates)),
+                replace=False,
+            )
+
+            n_rows = len(sample_indices)
+            fig_vis, axes = plt.subplots(
+                n_rows, 2,
+                figsize=(10, 4.5 * n_rows),
+                squeeze=False,
+            )
+
+            exp_label = experiment_name or "Experiment"
+            fig_vis.suptitle(
+                f"Comparación Visual PyTorch vs TFLite INT8 — {exp_label}",
+                fontsize=14, fontweight="bold", y=1.0,
+            )
+
+            for row, idx in enumerate(sample_indices):
+                img_rgb = cv2.cvtColor(test_images[idx], cv2.COLOR_BGR2RGB)
+
+                k_dets = all_keras_dets[idx]
+                t_dets = all_tflite_dets[idx]
+
+                _draw_detections_on_ax(
+                    axes[row, 0], img_rgb, k_dets, class_names,
+                    title=f"PyTorch ({len(k_dets)} det)",
+                )
+                _draw_detections_on_ax(
+                    axes[row, 1], img_rgb, t_dets, class_names,
+                    title=f"TFLite INT8 ({len(t_dets)} det)",
+                )
+
+            fig_vis.tight_layout()
+
+            if save_path:
+                safe_mkdir(os.path.dirname(save_path))
+                fig_vis.savefig(save_path, dpi=150, bbox_inches="tight")
+                log(f"\n📸 Comparación visual guardada: {save_path}")
+
+            results["visual_comparison_fig"] = fig_vis
+
+        except Exception as exc:
+            log(f"⚠️ No se pudo generar comparación visual: {exc}")
+
     # =========================================================================
     # Log results
     # =========================================================================

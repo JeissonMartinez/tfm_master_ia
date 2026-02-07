@@ -1,0 +1,9 @@
+{
+  "tflite_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/models/yolo11n_v0-2/tflite/best_int8.tflite",
+  "n_samples": 8,
+  "agreement_rate": 0.0,
+  "avg_iou": 0.0,
+  "avg_conf_diff": 0.0,
+  "avg_inference_ms": 5.706723874027375,
+  "passed": false
+}

@@ -1,0 +1,39 @@
+{
+  "model_name": "best",
+  "family": "yolo",
+  "split": "val",
+  "mAP50": 0.5508097116118694,
+  "mAP50_95": 0.29810495145848975,
+  "precision": 0.8578199052132701,
+  "recall": 0.2535014005602241,
+  "f1": 0.39135134782985537,
+  "per_class_ap50": {
+    "dog": 0.5508097116118694
+  },
+  "per_class_precision": {
+    "dog": 0.8578199052132701
+  },
+  "per_class_recall": {
+    "dog": 0.2535014005602241
+  },
+  "per_class_f1": {
+    "dog": 0.39135134782985537
+  },
+  "n_images": 0,
+  "n_detections": 714,
+  "n_ground_truths": 211,
+  "avg_inference_ms": 29.044973790320334,
+  "class_names": [
+    "dog"
+  ],
+  "confusion_matrix": [
+    [
+      190.0,
+      21.0
+    ],
+    [
+      524.0,
+      0.0
+    ]
+  ]
+}

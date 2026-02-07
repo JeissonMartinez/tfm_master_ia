@@ -1,0 +1,22 @@
+description: Ultralytics YOLO11n model trained on /Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/datasets/_work/yolo_v11__person/data.yaml
+author: Ultralytics
+date: '2026-02-07T13:59:00.579116'
+version: 8.4.9
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 224
+- 224
+names:
+  0: person
+args:
+  batch: 1
+  fraction: 1.0
+  half: false
+  int8: true
+  nms: false
+channels: 3
+end2end: false

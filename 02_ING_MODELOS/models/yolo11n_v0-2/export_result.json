@@ -1,0 +1,23 @@
+{
+  "model_name": "best",
+  "family": "yolo",
+  "tflite_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/models/yolo11n_v0-2/tflite/best_int8.tflite",
+  "size_mb": 2.6784610748291016,
+  "input_shape": [
+    "1",
+    "224",
+    "224",
+    "3"
+  ],
+  "output_shapes": {
+    "Identity": [
+      "1",
+      "5",
+      "1029"
+    ]
+  },
+  "quantization": "int8",
+  "export_time_s": 192.20673894882202,
+  "esp32_compatible": true,
+  "errors": []
+}

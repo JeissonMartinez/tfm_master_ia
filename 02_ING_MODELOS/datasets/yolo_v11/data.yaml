@@ -1,7 +1,0 @@
-
-path: /Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/datasets/yolo_v11
-train: images/train
-val: images/val
-test: images/test
-nc: 4
-names: ['door', 'footpath', 'obstacle', 'person']
