@@ -1,0 +1,25 @@
+item {
+    name: "dog",
+    id: 1,
+    display_name: "dog"
+}
+item {
+    name: "door",
+    id: 2,
+    display_name: "door"
+}
+item {
+    name: "obstacle",
+    id: 3,
+    display_name: "obstacle"
+}
+item {
+    name: "person",
+    id: 4,
+    display_name: "person"
+}
+item {
+    name: "stair",
+    id: 5,
+    display_name: "stair"
+}

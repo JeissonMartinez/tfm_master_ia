@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 5
+names: ['dog', 'door', 'obstacle', 'person', 'stair']
+
+roboflow:
+  workspace: tfmunirjeisson
+  project: tfm_dataset
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/tfmunirjeisson/tfm_dataset/dataset/1

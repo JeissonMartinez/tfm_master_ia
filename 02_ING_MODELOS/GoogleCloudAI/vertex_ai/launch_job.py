@@ -35,11 +35,12 @@ BUCKET_URI = "gs://project-18f58341-12cf-47bc-861-tfm-data"
 EXPERIMENT_NAME = "tfm-deteccion-objetos"
 
 # ── Contenedores pre-built de Vertex AI ──────────────────────────────
-CONTAINER_TF = "us-docker.pkg.dev/vertex-ai/training/tf-gpu.2-15:latest"
-CONTAINER_PYTORCH = "us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4:latest"
+# Docs: https://cloud.google.com/vertex-ai/docs/training/pre-built-containers
+CONTAINER_TF = "us-docker.pkg.dev/vertex-ai/training/tf-gpu.2-17.py310:latest"
+CONTAINER_PYTORCH = "us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest"
 
 # ── Paquete en GCS ───────────────────────────────────────────────────
-PACKAGE_GCS_URI = f"{BUCKET_URI}/packages/tfm-trainer-1.0.0.tar.gz"
+PACKAGE_GCS_URI = f"{BUCKET_URI}/packages/tfm_trainer-1.0.0.tar.gz"
 
 
 def parse_args() -> argparse.Namespace:
@@ -93,22 +94,9 @@ def main() -> None:
     if family in ("YOLO11", "YOLO26"):
         container_uri = CONTAINER_PYTORCH
         python_module = "trainer.task_yolo"
-        requirements_file = "requirements_yolo.txt"
     else:
         container_uri = CONTAINER_TF
         python_module = "trainer.task_mobilenet"
-        requirements_file = "requirements_mobilenet.txt"
-
-    # Leer requirements
-    req_path = Path(__file__).parent.parent / requirements_file
-    if req_path.exists():
-        requirements = [
-            line.strip()
-            for line in req_path.read_text().splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-    else:
-        requirements = []
 
     # ── 3. Subir config YAML al bucket ───────────────────────────────
     run_name = args.run_name or f"{experiment_name_from_config}-{int(time.time())}"
@@ -143,7 +131,6 @@ def main() -> None:
     print(f"  Paquete:       {PACKAGE_GCS_URI}")
     print(f"  Config GCS:    {config_gcs_uri}")
     print(f"  Job Dir:       {job_dir}")
-    print(f"  Requirements:  {len(requirements)} paquetes")
     print(f"  Args:          {job_args}")
     print("=" * 60)
 
@@ -174,15 +161,13 @@ def main() -> None:
         python_package_gcs_uri=PACKAGE_GCS_URI,
         python_module_name=python_module,
         container_uri=container_uri,
-        requirements=requirements,
     )
 
     print(f"\n🚀 Lanzando Custom Job: {display_name}")
     print(f"   Revisa el progreso en: https://console.cloud.google.com/"
           f"vertex-ai/training/custom-jobs?project={PROJECT_ID}")
 
-    model = job.run(
-        model_display_name=f"modelo-{experiment_name_from_config}",
+    job.run(
         replica_count=1,
         machine_type=args.machine_type,
         accelerator_type=args.accelerator_type,

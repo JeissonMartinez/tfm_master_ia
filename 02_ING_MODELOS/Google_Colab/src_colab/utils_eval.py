@@ -287,17 +287,13 @@ def evaluate_mobilenet_model(
                     ))
                 ev.n_detections += len(cls_ids)
 
-            # ground truths — también en [xc,yc,w,h], convertir a [x1,y1,x2,y2]
-            gt_pos = gt_obj[b, :, 0] > 0.5
-            if gt_pos.any():
-                gt_c = np.argmax(gt_cls[b][gt_pos], axis=-1)
-                gt_b = gt_bbox[b][gt_pos]
-                gt_b = _xywh_to_xyxy(gt_b)  # convertir formato
-                for j in range(len(gt_c)):
-                    all_ground_truths.append((
-                        img_idx, int(gt_c[j]), tuple(gt_b[j].tolist()),
-                    ))
-                ev.n_ground_truths += len(gt_c)
+            # ground truths — deduplicar desde anchor-encoding
+            unique_gts = _extract_unique_gts_from_anchors(
+                gt_obj[b], gt_cls[b], gt_bbox[b]
+            )
+            for cls_id, bbox_xyxy in unique_gts:
+                all_ground_truths.append((img_idx, cls_id, bbox_xyxy))
+            ev.n_ground_truths += len(unique_gts)
 
             img_idx += 1
 
@@ -381,18 +377,13 @@ def evaluate_tflite_model(
                     ))
                     ev.n_detections += 1
 
-                # Ground truths
-                gt_pos = gt_obj[b, :, 0] > 0.5
-                if gt_pos.any():
-                    gt_c = np.argmax(gt_cls[b][gt_pos], axis=-1)
-                    gt_b = gt_bbox[b][gt_pos]
-                    gt_b = _xywh_to_xyxy(gt_b)
-                    for j in range(len(gt_c)):
-                        all_ground_truths.append((
-                            img_idx, int(gt_c[j]),
-                            tuple(gt_b[j].tolist()),
-                        ))
-                        ev.n_ground_truths += 1
+                # Ground truths — deduplicar desde anchor-encoding
+                unique_gts = _extract_unique_gts_from_anchors(
+                    gt_obj[b], gt_cls[b], gt_bbox[b]
+                )
+                for cls_id, bbox_xyxy in unique_gts:
+                    all_ground_truths.append((img_idx, cls_id, bbox_xyxy))
+                    ev.n_ground_truths += 1
 
                 img_idx += 1
 
@@ -496,6 +487,50 @@ def _xywh_to_xyxy(boxes: np.ndarray) -> np.ndarray:
     x2 = np.clip(cx + w / 2, 0, 1)
     y2 = np.clip(cy + h / 2, 0, 1)
     return np.stack([x1, y1, x2, y2], axis=-1)
+
+
+def _extract_unique_gts_from_anchors(
+    gt_obj: np.ndarray,
+    gt_cls: np.ndarray,
+    gt_bbox: np.ndarray,
+) -> List[Tuple[int, Tuple[float, ...]]]: 
+    """Extract unique ground-truth boxes from anchor-encoded SSD targets.
+
+    The SSD encoding assigns each real GT box to *multiple* anchors
+    (best anchor + all anchors above IoU threshold).  This helper
+    deduplicates them so that evaluation counts each real object once.
+
+    Parameters
+    ----------
+    gt_obj : (A, 1) objectness targets for one image.
+    gt_cls : (A, C) one-hot class targets for one image.
+    gt_bbox : (A, 4) bbox targets [xc,yc,w,h] for one image.
+
+    Returns
+    -------
+    List of (class_id, (x1, y1, x2, y2)) — one per unique GT box.
+    """
+    pos_mask = gt_obj[:, 0] > 0.5
+    if not pos_mask.any():
+        return []
+
+    cls_ids = np.argmax(gt_cls[pos_mask], axis=-1)
+    bboxes = gt_bbox[pos_mask]  # [xc, yc, w, h]
+    bboxes_xyxy = _xywh_to_xyxy(bboxes)
+
+    # Round to 4 decimals to avoid floating-point duplicates
+    seen: set = set()
+    unique: List[Tuple[int, Tuple[float, ...]]] = []
+    for j in range(len(cls_ids)):
+        key = (int(cls_ids[j]),
+               round(float(bboxes_xyxy[j, 0]), 4),
+               round(float(bboxes_xyxy[j, 1]), 4),
+               round(float(bboxes_xyxy[j, 2]), 4),
+               round(float(bboxes_xyxy[j, 3]), 4))
+        if key not in seen:
+            seen.add(key)
+            unique.append((int(cls_ids[j]), tuple(bboxes_xyxy[j].tolist())))
+    return unique
 
 
 def _compute_map(

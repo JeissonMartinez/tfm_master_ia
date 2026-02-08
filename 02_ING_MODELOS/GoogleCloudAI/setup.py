@@ -26,6 +26,11 @@ setup(
     packages=find_packages(),         # descubre src_colab/ y trainer/
     install_requires=[
         "pyyaml>=6.0",
+        "numpy>=1.26",
+        "pandas>=2.0",
+        "matplotlib>=3.8",
+        "scikit-learn>=1.4",
+        "protobuf>=3.20.3,<4.0.0",
         "google-cloud-storage>=2.14",
         "google-cloud-aiplatform>=1.40",
     ],

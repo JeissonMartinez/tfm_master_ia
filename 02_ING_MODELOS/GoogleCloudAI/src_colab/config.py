@@ -118,9 +118,10 @@ def detect_environment() -> ColabEnvironment:
         )
         if env.cuda_available:
             env.gpu_name = torch.cuda.get_device_name(0)
-            env.gpu_memory_mb = int(
-                torch.cuda.get_device_properties(0).total_mem / 1024 / 1024
-            )
+            props = torch.cuda.get_device_properties(0)
+            # PyTorch >=2.4 usa 'total_memory'; versiones anteriores 'total_mem'
+            raw = getattr(props, "total_memory", 0) or getattr(props, "total_mem", 0)
+            env.gpu_memory_mb = int(raw / 1024 / 1024)
             env.gpu_available = True
         elif env.mps_available:
             env.gpu_name = "Apple MPS"

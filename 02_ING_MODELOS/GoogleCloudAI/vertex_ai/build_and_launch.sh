@@ -53,7 +53,7 @@ rm -rf dist/ build/ *.egg-info
 
 python setup.py sdist --formats=gztar 2>&1 | tail -3
 
-SDIST=$(ls dist/tfm-trainer-*.tar.gz 2>/dev/null | head -1)
+SDIST=$(ls dist/tfm_trainer-*.tar.gz 2>/dev/null | head -1)
 if [[ -z "$SDIST" ]]; then
     echo "❌ Error: no se generó el sdist"
     exit 1

@@ -1,0 +1,14 @@
+{
+  "model_name": "best",
+  "family": "yolo",
+  "tflite_path": "",
+  "size_mb": 0.0,
+  "input_shape": [],
+  "output_shapes": {},
+  "quantization": "int8",
+  "export_time_s": 0.0,
+  "esp32_compatible": false,
+  "errors": [
+    "'NoneType' object has no attribute 'shape'"
+  ]
+}

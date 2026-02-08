@@ -26,11 +26,11 @@ common:
 
 mobilenet:
   # Phase 1 — backbone congelado
-  phase1_epochs: 10 # 30
+  phase1_epochs: 30 # 30
   phase1_lr: 0.001
 
   # Phase 2 — fine-tuning parcial
-  phase2_epochs: 10 # 50
+  phase2_epochs: 50 # 50
   phase2_lr: 0.00005
   phase2_unfreeze_layers: 40
 

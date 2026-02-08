@@ -1,0 +1,2728 @@
+[
+  {
+    "insertId": "1p86yaf3in5ro",
+    "jsonPayload": {
+      "message": "Error in sitecustomize; set PYTHONVERBOSE for traceback:",
+      "severity": "ERROR",
+      "timestampSeconds": 1770557421,
+      "created": 1770557421.6984127,
+      "lineno": 136,
+      "pathname": "//run_module.py",
+      "timestampNanos": 698412656,
+      "levelname": "ERROR",
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T13:30:21.861233645Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:30:26.378566224Z"
+  },
+  {
+    "insertId": "1p86yaf3in5rp",
+    "jsonPayload": {
+      "name": "root",
+      "lineno": 136,
+      "message": "ModuleNotFoundError: No module named 'pythonjsonlogger'",
+      "pathname": "//run_module.py",
+      "severity": "ERROR",
+      "created": 1770557421.6988163,
+      "timestampSeconds": 1770557421,
+      "levelname": "ERROR",
+      "timestampNanos": 698816299
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T13:30:21.861242033Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:30:26.378566224Z"
+  },
+  {
+    "insertId": "1p86yaf3in5rq",
+    "jsonPayload": {
+      "created": 1770557424.6629064,
+      "levelname": "ERROR",
+      "lineno": 136,
+      "severity": "ERROR",
+      "timestampSeconds": 1770557424,
+      "name": "root",
+      "timestampNanos": 662906408,
+      "message": "Error in sitecustomize; set PYTHONVERBOSE for traceback:",
+      "pathname": "//run_module.py"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T13:30:24.860506141Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:30:26.378566224Z"
+  },
+  {
+    "insertId": "1p86yaf3in5rr",
+    "jsonPayload": {
+      "severity": "ERROR",
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "timestampNanos": 663389205,
+      "name": "root",
+      "lineno": 136,
+      "created": 1770557424.6633892,
+      "timestampSeconds": 1770557424,
+      "message": "ModuleNotFoundError: No module named 'pythonjsonlogger'"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:30:24.860520406Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:30:26.378566224Z"
+  },
+  {
+    "insertId": "o5daisf3mj09n",
+    "jsonPayload": {
+      "severity": "ERROR",
+      "timestampSeconds": 1770557438,
+      "lineno": 136,
+      "pathname": "//run_module.py",
+      "created": 1770557438.8915188,
+      "timestampNanos": 891518831,
+      "levelname": "ERROR",
+      "message": "WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.",
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T13:30:39.060823300Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:30:39.385121145Z"
+  },
+  {
+    "insertId": "o5daisf3mj09o",
+    "jsonPayload": {
+      "lineno": 136,
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "timestampSeconds": 1770557439,
+      "name": "root",
+      "pathname": "//run_module.py",
+      "message": "[notice] A new release of pip is available: 25.1.1 -> 26.0.1",
+      "created": 1770557439.1001656,
+      "timestampNanos": 100165605
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:30:39.260890512Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:30:39.385121145Z"
+  },
+  {
+    "insertId": "o5daisf3mj09p",
+    "jsonPayload": {
+      "name": "root",
+      "timestampNanos": 100449085,
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "timestampSeconds": 1770557439,
+      "message": "[notice] To update, run: pip install --upgrade pip",
+      "lineno": 136,
+      "created": 1770557439.100449
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:30:39.260901813Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:30:39.385121145Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekk6",
+    "jsonPayload": {
+      "timestampSeconds": 1770557461,
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "name": "root",
+      "created": 1770557461.3076227,
+      "lineno": 136,
+      "message": "  WARNING: The script f2py is installed in '/root/.local/bin' which is not on PATH.",
+      "timestampNanos": 307622671
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:01.460438041Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekk7",
+    "jsonPayload": {
+      "levelname": "ERROR",
+      "lineno": 136,
+      "timestampNanos": 307935237,
+      "name": "root",
+      "severity": "ERROR",
+      "created": 1770557461.3079352,
+      "message": "  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.",
+      "timestampSeconds": 1770557461,
+      "pathname": "//run_module.py"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:01.460446713Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekkc",
+    "jsonPayload": {
+      "severity": "ERROR",
+      "name": "root",
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "created": 1770557463.7699363,
+      "lineno": 136,
+      "timestampSeconds": 1770557463,
+      "message": "ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.",
+      "timestampNanos": 769936323
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860788882Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekkd",
+    "jsonPayload": {
+      "message": "bigframes 0.22.0 requires pandas<2.1.4,>=1.5.0, but you have pandas 2.2.3 which is incompatible.",
+      "name": "root",
+      "levelname": "ERROR",
+      "timestampSeconds": 1770557463,
+      "pathname": "//run_module.py",
+      "timestampNanos": 770192146,
+      "lineno": 136,
+      "severity": "ERROR",
+      "created": 1770557463.7701921
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860792508Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekkf",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "name": "root",
+      "timestampSeconds": 1770557463,
+      "severity": "ERROR",
+      "levelname": "ERROR",
+      "lineno": 136,
+      "message": "pandas-gbq 0.29.1 requires google-api-core<3.0.0,>=2.10.2, but you have google-api-core 1.34.1 which is incompatible.",
+      "created": 1770557463.770439,
+      "timestampNanos": 770438909
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860797587Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekkg",
+    "jsonPayload": {
+      "timestampNanos": 770763635,
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "name": "root",
+      "pathname": "//run_module.py",
+      "lineno": 136,
+      "created": 1770557463.7707636,
+      "timestampSeconds": 1770557463,
+      "message": "ydata-profiling 4.6.0 requires matplotlib<=3.7.3,>=3.2, but you have matplotlib 3.10.8 which is incompatible."
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860802298Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekkh",
+    "jsonPayload": {
+      "timestampNanos": 770851373,
+      "lineno": 136,
+      "levelname": "ERROR",
+      "timestampSeconds": 1770557463,
+      "name": "root",
+      "severity": "ERROR",
+      "created": 1770557463.7708514,
+      "pathname": "//run_module.py",
+      "message": "ydata-profiling 4.6.0 requires numpy<1.26,>=1.16.0, but you have numpy 1.26.4 which is incompatible."
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860804554Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekki",
+    "jsonPayload": {
+      "timestampNanos": 770925998,
+      "created": 1770557463.770926,
+      "levelname": "ERROR",
+      "message": "ydata-profiling 4.6.0 requires pandas!=1.4.0,<2.1,>1.1, but you have pandas 2.2.3 which is incompatible.",
+      "pathname": "//run_module.py",
+      "name": "root",
+      "lineno": 136,
+      "severity": "ERROR",
+      "timestampSeconds": 1770557463
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860807001Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekkj",
+    "jsonPayload": {
+      "created": 1770557463.7710426,
+      "severity": "ERROR",
+      "lineno": 136,
+      "message": "WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.",
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770557463,
+      "timestampNanos": 771042585,
+      "name": "root",
+      "levelname": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860809275Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekkk",
+    "jsonPayload": {
+      "created": 1770557463.7764018,
+      "name": "root",
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "timestampSeconds": 1770557463,
+      "lineno": 136,
+      "message": "[notice] A new release of pip is available: 25.1.1 -> 26.0.1",
+      "timestampNanos": 776401758,
+      "pathname": "//run_module.py"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860844511Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "1ndz49hf3cekkl",
+    "jsonPayload": {
+      "timestampNanos": 776562929,
+      "message": "[notice] To update, run: pip install --upgrade pip",
+      "levelname": "ERROR",
+      "created": 1770557463.776563,
+      "name": "root",
+      "severity": "ERROR",
+      "lineno": 136,
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770557463
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:03.860846880Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:03.976773779Z"
+  },
+  {
+    "insertId": "htkm84f365r9p",
+    "jsonPayload": {
+      "created": 1770557496.3397303,
+      "pathname": "//run_module.py",
+      "message": "ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.",
+      "lineno": 136,
+      "name": "root",
+      "timestampSeconds": 1770557496,
+      "severity": "ERROR",
+      "levelname": "ERROR",
+      "timestampNanos": 339730262
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460929582Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9q",
+    "jsonPayload": {
+      "severity": "ERROR",
+      "timestampNanos": 341411352,
+      "message": "ibis-framework 7.1.0 requires numpy<2,>=1, but you have numpy 2.2.6 which is incompatible.",
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "lineno": 136,
+      "timestampSeconds": 1770557496,
+      "name": "root",
+      "created": 1770557496.3414114
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460944312Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9r",
+    "jsonPayload": {
+      "timestampNanos": 341579198,
+      "timestampSeconds": 1770557496,
+      "name": "root",
+      "severity": "ERROR",
+      "lineno": 136,
+      "created": 1770557496.3415792,
+      "levelname": "ERROR",
+      "pathname": "//run_module.py",
+      "message": "numba 0.58.1 requires numpy<1.27,>=1.22, but you have numpy 2.2.6 which is incompatible."
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460946025Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9s",
+    "jsonPayload": {
+      "name": "root",
+      "timestampSeconds": 1770557496,
+      "levelname": "ERROR",
+      "message": "pandas-gbq 0.29.1 requires google-api-core<3.0.0,>=2.10.2, but you have google-api-core 1.34.1 which is incompatible.",
+      "lineno": 136,
+      "timestampNanos": 341766595,
+      "created": 1770557496.3417666,
+      "pathname": "//run_module.py",
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460947443Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9t",
+    "jsonPayload": {
+      "created": 1770557496.341909,
+      "timestampNanos": 341908931,
+      "message": "ydata-profiling 4.6.0 requires matplotlib<=3.7.3,>=3.2, but you have matplotlib 3.10.8 which is incompatible.",
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "name": "root",
+      "lineno": 136,
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770557496
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460948796Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9u",
+    "jsonPayload": {
+      "lineno": 136,
+      "message": "ydata-profiling 4.6.0 requires numpy<1.26,>=1.16.0, but you have numpy 2.2.6 which is incompatible.",
+      "timestampSeconds": 1770557496,
+      "name": "root",
+      "severity": "ERROR",
+      "pathname": "//run_module.py",
+      "timestampNanos": 342037677,
+      "levelname": "ERROR",
+      "created": 1770557496.3420377
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460950510Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9v",
+    "jsonPayload": {
+      "name": "root",
+      "timestampNanos": 342163801,
+      "created": 1770557496.3421638,
+      "levelname": "ERROR",
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770557496,
+      "severity": "ERROR",
+      "lineno": 136,
+      "message": "ydata-profiling 4.6.0 requires pandas!=1.4.0,<2.1,>1.1, but you have pandas 2.2.3 which is incompatible."
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460951906Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9w",
+    "jsonPayload": {
+      "timestampNanos": 342289209,
+      "pathname": "//run_module.py",
+      "message": "ydata-profiling 4.6.0 requires scipy<1.12,>=1.4.1, but you have scipy 1.15.3 which is incompatible.",
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "created": 1770557496.3422892,
+      "name": "root",
+      "timestampSeconds": 1770557496,
+      "lineno": 136
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460962151Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9x",
+    "jsonPayload": {
+      "created": 1770557496.3424275,
+      "levelname": "ERROR",
+      "timestampNanos": 342427492,
+      "severity": "ERROR",
+      "timestampSeconds": 1770557496,
+      "name": "root",
+      "pathname": "//run_module.py",
+      "lineno": 136,
+      "message": "WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning."
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460965358Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9y",
+    "jsonPayload": {
+      "lineno": 136,
+      "timestampSeconds": 1770557496,
+      "severity": "ERROR",
+      "timestampNanos": 347198724,
+      "created": 1770557496.3471987,
+      "pathname": "//run_module.py",
+      "message": "[notice] A new release of pip is available: 25.1.1 -> 26.0.1",
+      "levelname": "ERROR",
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460968028Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "htkm84f365r9z",
+    "jsonPayload": {
+      "message": "[notice] To update, run: pip install --upgrade pip",
+      "timestampNanos": 347452163,
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "timestampSeconds": 1770557496,
+      "lineno": 136,
+      "name": "root",
+      "severity": "ERROR",
+      "created": 1770557496.3474522
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T13:31:36.460971467Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T13:31:36.575710416Z"
+  },
+  {
+    "insertId": "y62ma9f35f6lk",
+    "jsonPayload": {
+      "lineno": 136,
+      "levelname": "ERROR",
+      "timestampSeconds": 1770559319,
+      "pathname": "//run_module.py",
+      "name": "root",
+      "severity": "ERROR",
+      "timestampNanos": 533654451,
+      "message": "WARNING: All log messages before absl::InitializeLog() is called are written to STDERR",
+      "created": 1770559319.5336545
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:01:59.661179765Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:01:59.779759225Z"
+  },
+  {
+    "insertId": "y62ma9f35f6ll",
+    "jsonPayload": {
+      "name": "root",
+      "timestampNanos": 533956527,
+      "pathname": "//run_module.py",
+      "severity": "ERROR",
+      "levelname": "ERROR",
+      "created": 1770559319.5339565,
+      "message": "E0000 00:00:1770559319.533462     209 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered",
+      "timestampSeconds": 1770559319,
+      "lineno": 136
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:01:59.661189044Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:01:59.779759225Z"
+  },
+  {
+    "insertId": "y62ma9f35f6lm",
+    "jsonPayload": {
+      "timestampNanos": 539323568,
+      "lineno": 136,
+      "created": 1770559319.5393236,
+      "timestampSeconds": 1770559319,
+      "levelname": "ERROR",
+      "pathname": "//run_module.py",
+      "name": "root",
+      "severity": "ERROR",
+      "message": "E0000 00:00:1770559319.539203     209 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:01:59.661190613Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:01:59.779759225Z"
+  },
+  {
+    "insertId": "y62ma9f35f6ln",
+    "jsonPayload": {
+      "message": "W0000 00:00:1770559319.558379     209 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.",
+      "timestampNanos": 558480501,
+      "lineno": 136,
+      "name": "root",
+      "severity": "ERROR",
+      "timestampSeconds": 1770559319,
+      "levelname": "ERROR",
+      "pathname": "//run_module.py",
+      "created": 1770559319.5584805
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:01:59.661192173Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:01:59.779759225Z"
+  },
+  {
+    "insertId": "y62ma9f35f6lo",
+    "jsonPayload": {
+      "message": "W0000 00:00:1770559319.558401     209 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.",
+      "timestampSeconds": 1770559319,
+      "created": 1770559319.5587204,
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "lineno": 136,
+      "timestampNanos": 558720350,
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:01:59.661193371Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:01:59.779759225Z"
+  },
+  {
+    "insertId": "y62ma9f35f6lp",
+    "jsonPayload": {
+      "name": "root",
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "created": 1770559319.5588582,
+      "timestampNanos": 558858156,
+      "severity": "ERROR",
+      "lineno": 136,
+      "message": "W0000 00:00:1770559319.558407     209 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.",
+      "timestampSeconds": 1770559319
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:01:59.661195440Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:01:59.779759225Z"
+  },
+  {
+    "insertId": "y62ma9f35f6lq",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "severity": "ERROR",
+      "timestampNanos": 558973789,
+      "message": "W0000 00:00:1770559319.558410     209 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.",
+      "timestampSeconds": 1770559319,
+      "levelname": "ERROR",
+      "lineno": 136,
+      "name": "root",
+      "created": 1770559319.5589738
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:01:59.661196774Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:01:59.779759225Z"
+  },
+  {
+    "insertId": "yp04ozf3brzkq",
+    "jsonPayload": {
+      "created": 1770559370.9718277,
+      "name": "root",
+      "lineno": 136,
+      "timestampSeconds": 1770559370,
+      "message": "/opt/python/3.10/lib/python3.10/site-packages/torch/onnx/symbolic_opset9.py:5715: UserWarning: Exporting aten::index operator of advanced indexing in opset 19 is achieved by combination of multiple ONNX operators, including Reshape, Transpose, Concat, and Gather. If indices include negative values, the exported graph will produce incorrect results.",
+      "severity": "ERROR",
+      "levelname": "ERROR",
+      "timestampNanos": 971827745,
+      "pathname": "//run_module.py"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:02:51.061261341Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:02:52.177740961Z"
+  },
+  {
+    "insertId": "yp04ozf3brzkr",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770559370,
+      "severity": "ERROR",
+      "levelname": "ERROR",
+      "timestampNanos": 972131013,
+      "message": "  warnings.warn(",
+      "lineno": 136,
+      "created": 1770559370.972131,
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:02:51.061268787Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:02:52.177740961Z"
+  },
+  {
+    "insertId": "yfrp65f39w6cd",
+    "jsonPayload": {
+      "levelname": "ERROR",
+      "lineno": 136,
+      "timestampNanos": 772171735,
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770559388,
+      "severity": "ERROR",
+      "name": "root",
+      "created": 1770559388.7721717,
+      "message": "I0000 00:00:1770559388.771933     209 gpu_device.cc:2019] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 13459 MB memory:  -> device: 0, name: Tesla T4, pci bus id: 0000:00:04.0, compute capability: 7.5"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:08.861299981Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:12.177752836Z"
+  },
+  {
+    "insertId": "1226yehf3j3l4f",
+    "jsonPayload": {
+      "created": 1770559395.8641665,
+      "lineno": 136,
+      "timestampNanos": 864166498,
+      "name": "root",
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770559395,
+      "severity": "ERROR",
+      "message": "E0000 00:00:1770559395.864043     209 cuda_dnn.cc:522] Loaded runtime CuDNN library: 9.1.0 but source was compiled with: 9.3.0.  CuDNN library needs to have matching major version and equal or higher minor version. If using a binary install, upgrade your CuDNN library.  If building from sources, make sure the library loaded at runtime is compatible with the version specified during compile configuration.",
+      "levelname": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:16.061075314Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:17.182404249Z"
+  },
+  {
+    "insertId": "1226yehf3j3l4g",
+    "jsonPayload": {
+      "name": "root",
+      "severity": "ERROR",
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770559396,
+      "message": "E0000 00:00:1770559396.620919     209 cuda_dnn.cc:522] Loaded runtime CuDNN library: 9.1.0 but source was compiled with: 9.3.0.  CuDNN library needs to have matching major version and equal or higher minor version. If using a binary install, upgrade your CuDNN library.  If building from sources, make sure the library loaded at runtime is compatible with the version specified during compile configuration.",
+      "lineno": 136,
+      "timestampNanos": 621040821,
+      "levelname": "ERROR",
+      "created": 1770559396.6210408
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:16.660657870Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:17.182404249Z"
+  },
+  {
+    "insertId": "cdlpyf3ajd6v",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770559397,
+      "levelname": "ERROR",
+      "name": "root",
+      "created": 1770559397.102938,
+      "lineno": 136,
+      "severity": "ERROR",
+      "message": "E0000 00:00:1770559397.102739     209 cuda_dnn.cc:522] Loaded runtime CuDNN library: 9.1.0 but source was compiled with: 9.3.0.  CuDNN library needs to have matching major version and equal or higher minor version. If using a binary install, upgrade your CuDNN library.  If building from sources, make sure the library loaded at runtime is compatible with the version specified during compile configuration.",
+      "timestampNanos": 102937936
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:17.261146882Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:17.778596519Z"
+  },
+  {
+    "insertId": "cdlpyf3ajd6w",
+    "jsonPayload": {
+      "timestampNanos": 596353292,
+      "name": "root",
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "lineno": 136,
+      "message": "E0000 00:00:1770559397.596235     209 cuda_dnn.cc:522] Loaded runtime CuDNN library: 9.1.0 but source was compiled with: 9.3.0.  CuDNN library needs to have matching major version and equal or higher minor version. If using a binary install, upgrade your CuDNN library.  If building from sources, make sure the library loaded at runtime is compatible with the version specified during compile configuration.",
+      "severity": "ERROR",
+      "created": 1770559397.5963533,
+      "timestampSeconds": 1770559397
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:17.661046269Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:17.778596519Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzgs",
+    "jsonPayload": {
+      "name": "root",
+      "message": "Traceback (most recent call last):",
+      "levelname": "ERROR",
+      "created": 1770559412.7781332,
+      "severity": "ERROR",
+      "timestampSeconds": 1770559412,
+      "pathname": "//run_module.py",
+      "lineno": 136,
+      "timestampNanos": 778133153
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860495994Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzgu",
+    "jsonPayload": {
+      "timestampNanos": 778759241,
+      "timestampSeconds": 1770559412,
+      "message": "  File \"/root/.local/lib/python3.10/site-packages/src_colab/utils_export.py\", line 125, in export_yolo_tflite",
+      "severity": "ERROR",
+      "name": "root",
+      "lineno": 136,
+      "created": 1770559412.7787592,
+      "pathname": "//run_module.py",
+      "levelname": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860498549Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzgw",
+    "jsonPayload": {
+      "levelname": "ERROR",
+      "pathname": "//run_module.py",
+      "lineno": 136,
+      "timestampNanos": 779065370,
+      "timestampSeconds": 1770559412,
+      "message": "    export_path = model.export(**export_kwargs)",
+      "severity": "ERROR",
+      "name": "root",
+      "created": 1770559412.7790654
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860502677Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzgy",
+    "jsonPayload": {
+      "created": 1770559412.7793274,
+      "pathname": "//run_module.py",
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/ultralytics/engine/model.py\", line 710, in export",
+      "lineno": 136,
+      "name": "root",
+      "timestampNanos": 779327392,
+      "severity": "ERROR",
+      "levelname": "ERROR",
+      "timestampSeconds": 1770559412
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860505372Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzh0",
+    "jsonPayload": {
+      "timestampSeconds": 1770559412,
+      "name": "root",
+      "levelname": "ERROR",
+      "timestampNanos": 779547691,
+      "message": "    return Exporter(overrides=args, _callbacks=self.callbacks)(model=self.model)",
+      "created": 1770559412.7795477,
+      "pathname": "//run_module.py",
+      "severity": "ERROR",
+      "lineno": 136
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860507869Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzh2",
+    "jsonPayload": {
+      "timestampSeconds": 1770559412,
+      "created": 1770559412.7797794,
+      "pathname": "//run_module.py",
+      "name": "root",
+      "timestampNanos": 779779434,
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/ultralytics/engine/exporter.py\", line 587, in __call__",
+      "levelname": "ERROR",
+      "lineno": 136,
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860510192Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzh4",
+    "jsonPayload": {
+      "severity": "ERROR",
+      "timestampNanos": 780005693,
+      "lineno": 136,
+      "timestampSeconds": 1770559412,
+      "pathname": "//run_module.py",
+      "name": "root",
+      "message": "    f[5], keras_model = self.export_saved_model()",
+      "levelname": "ERROR",
+      "created": 1770559412.7800057
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860512722Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzh6",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "severity": "ERROR",
+      "levelname": "ERROR",
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/ultralytics/engine/exporter.py\", line 251, in outer_func",
+      "created": 1770559412.7802472,
+      "timestampSeconds": 1770559412,
+      "timestampNanos": 780247211,
+      "lineno": 136,
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860516556Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzh8",
+    "jsonPayload": {
+      "created": 1770559412.7804515,
+      "severity": "ERROR",
+      "timestampNanos": 780451536,
+      "timestampSeconds": 1770559412,
+      "lineno": 136,
+      "name": "root",
+      "pathname": "//run_module.py",
+      "message": "    raise e",
+      "levelname": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860518929Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzha",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "created": 1770559412.7806995,
+      "severity": "ERROR",
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/ultralytics/engine/exporter.py\", line 243, in outer_func",
+      "levelname": "ERROR",
+      "name": "root",
+      "timestampSeconds": 1770559412,
+      "lineno": 136,
+      "timestampNanos": 780699491
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860521191Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhc",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "created": 1770559412.780962,
+      "timestampSeconds": 1770559412,
+      "lineno": 136,
+      "severity": "ERROR",
+      "name": "root",
+      "message": "    f = inner_func(*args, **kwargs)  # exported file/dir or tuple of (file/dir, *)",
+      "levelname": "ERROR",
+      "timestampNanos": 780961990
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860523820Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhd",
+    "jsonPayload": {
+      "timestampSeconds": 1770559412,
+      "timestampNanos": 781144142,
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/ultralytics/engine/exporter.py\", line 1094, in export_saved_model",
+      "pathname": "//run_module.py",
+      "lineno": 136,
+      "levelname": "ERROR",
+      "name": "root",
+      "created": 1770559412.7811441,
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860524884Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhe",
+    "jsonPayload": {
+      "timestampSeconds": 1770559412,
+      "name": "root",
+      "created": 1770559412.781243,
+      "severity": "ERROR",
+      "timestampNanos": 781243085,
+      "lineno": 136,
+      "message": "    keras_model = onnx2saved_model(",
+      "levelname": "ERROR",
+      "pathname": "//run_module.py"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860526197Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhf",
+    "jsonPayload": {
+      "timestampNanos": 781370162,
+      "timestampSeconds": 1770559412,
+      "severity": "ERROR",
+      "name": "root",
+      "created": 1770559412.7813702,
+      "lineno": 136,
+      "levelname": "ERROR",
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/ultralytics/utils/export/tensorflow.py\", line 114, in onnx2saved_model",
+      "pathname": "//run_module.py"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860527407Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhg",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "name": "root",
+      "lineno": 136,
+      "timestampNanos": 781445264,
+      "levelname": "ERROR",
+      "message": "    keras_model = onnx2tf.convert(",
+      "timestampSeconds": 1770559412,
+      "created": 1770559412.7814453,
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860528776Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhh",
+    "jsonPayload": {
+      "timestampSeconds": 1770559412,
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/onnx2tf/onnx2tf.py\", line 1304, in convert",
+      "lineno": 136,
+      "severity": "ERROR",
+      "timestampNanos": 781512737,
+      "created": 1770559412.7815127,
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860530003Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhi",
+    "jsonPayload": {
+      "created": 1770559412.7815797,
+      "timestampSeconds": 1770559412,
+      "timestampNanos": 781579732,
+      "severity": "ERROR",
+      "pathname": "//run_module.py",
+      "name": "root",
+      "levelname": "ERROR",
+      "lineno": 136,
+      "message": "    raise ex"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860531263Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhj",
+    "jsonPayload": {
+      "created": 1770559412.78167,
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/onnx2tf/onnx2tf.py\", line 1218, in convert",
+      "name": "root",
+      "pathname": "//run_module.py",
+      "timestampSeconds": 1770559412,
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "lineno": 136,
+      "timestampNanos": 781670093
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860532362Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhk",
+    "jsonPayload": {
+      "message": "    op.make_node(",
+      "created": 1770559412.7817388,
+      "severity": "ERROR",
+      "timestampNanos": 781738758,
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "timestampSeconds": 1770559412,
+      "lineno": 136,
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860533551Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhl",
+    "jsonPayload": {
+      "pathname": "//run_module.py",
+      "severity": "ERROR",
+      "lineno": 136,
+      "timestampSeconds": 1770559412,
+      "levelname": "ERROR",
+      "timestampNanos": 781813859,
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/onnx2tf/utils/common_functions.py\", line 314, in print_wrapper_func",
+      "created": 1770559412.7818139,
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860537128Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhm",
+    "jsonPayload": {
+      "created": 1770559412.781884,
+      "message": "    result = func(*args, **kwargs)",
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "lineno": 136,
+      "timestampNanos": 781883955,
+      "timestampSeconds": 1770559412,
+      "pathname": "//run_module.py",
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860538174Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhn",
+    "jsonPayload": {
+      "name": "root",
+      "pathname": "//run_module.py",
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/onnx2tf/utils/common_functions.py\", line 388, in inverted_operation_enable_disable_wrapper_func",
+      "timestampNanos": 781950712,
+      "lineno": 136,
+      "timestampSeconds": 1770559412,
+      "levelname": "ERROR",
+      "created": 1770559412.7819507,
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860539424Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzho",
+    "jsonPayload": {
+      "severity": "ERROR",
+      "lineno": 136,
+      "message": "    result = func(*args, **kwargs)",
+      "name": "root",
+      "levelname": "ERROR",
+      "pathname": "//run_module.py",
+      "created": 1770559412.7820177,
+      "timestampNanos": 782017707,
+      "timestampSeconds": 1770559412
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860540370Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhp",
+    "jsonPayload": {
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/onnx2tf/utils/common_functions.py\", line 57, in get_replacement_parameter_wrapper_func",
+      "timestampSeconds": 1770559412,
+      "levelname": "ERROR",
+      "severity": "ERROR",
+      "timestampNanos": 782089948,
+      "created": 1770559412.78209,
+      "lineno": 136,
+      "name": "root",
+      "pathname": "//run_module.py"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860542771Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhq",
+    "jsonPayload": {
+      "levelname": "ERROR",
+      "name": "root",
+      "timestampSeconds": 1770559412,
+      "pathname": "//run_module.py",
+      "severity": "ERROR",
+      "timestampNanos": 782156705,
+      "created": 1770559412.7821567,
+      "lineno": 136,
+      "message": "    func(*args, **kwargs)"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860544082Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhr",
+    "jsonPayload": {
+      "levelname": "ERROR",
+      "pathname": "//run_module.py",
+      "created": 1770559412.782255,
+      "timestampSeconds": 1770559412,
+      "severity": "ERROR",
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/onnx2tf/ops/Mul.py\", line 245, in make_node",
+      "timestampNanos": 782254934,
+      "lineno": 136,
+      "name": "root"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860545133Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhs",
+    "jsonPayload": {
+      "severity": "ERROR",
+      "timestampNanos": 782325029,
+      "pathname": "//run_module.py",
+      "message": "    correction_process_for_accuracy_errors(",
+      "name": "root",
+      "created": 1770559412.782325,
+      "lineno": 136,
+      "timestampSeconds": 1770559412,
+      "levelname": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860546957Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzht",
+    "jsonPayload": {
+      "timestampSeconds": 1770559412,
+      "lineno": 136,
+      "created": 1770559412.782411,
+      "severity": "ERROR",
+      "name": "root",
+      "pathname": "//run_module.py",
+      "message": "  File \"/opt/python/3.10/lib/python3.10/site-packages/onnx2tf/utils/common_functions.py\", line 5987, in correction_process_for_accuracy_errors",
+      "timestampNanos": 782411098,
+      "levelname": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860548080Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhu",
+    "jsonPayload": {
+      "severity": "ERROR",
+      "pathname": "//run_module.py",
+      "created": 1770559412.7824826,
+      "message": "    min_abs_err_perm_1: int = [idx for idx in range(len(validation_data_1.shape))]",
+      "name": "root",
+      "timestampSeconds": 1770559412,
+      "timestampNanos": 782482624,
+      "lineno": 136,
+      "levelname": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860549403Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1lggeu1f39fzhv",
+    "jsonPayload": {
+      "name": "root",
+      "levelname": "ERROR",
+      "pathname": "//run_module.py",
+      "created": 1770559412.7825544,
+      "lineno": 136,
+      "severity": "ERROR",
+      "timestampSeconds": 1770559412,
+      "timestampNanos": 782554388,
+      "message": "AttributeError: 'NoneType' object has no attribute 'shape'"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:32.860551029Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:32.979951717Z"
+  },
+  {
+    "insertId": "1nygly2f35yqc8",
+    "jsonPayload": {
+      "timestampNanos": 50927877,
+      "created": 1770559413.0509279,
+      "name": "root",
+      "lineno": 54,
+      "timestampSeconds": 1770559413,
+      "severity": "ERROR",
+      "levelname": "ERROR",
+      "exc_info": "NoneType: None",
+      "pathname": "/var/sitecustomize/sitecustomize.py",
+      "message": "Traceback (most recent call last):\n  File \"/opt/python/3.10/lib/python3.10/runpy.py\", line 196, in _run_module_as_main\n    return _run_code(code, main_globals, None,\n  File \"/opt/python/3.10/lib/python3.10/runpy.py\", line 86, in _run_code\n    exec(code, run_globals)\n  File \"/root/.local/lib/python3.10/site-packages/trainer/task_yolo.py\", line 604, in <module>\n    main()\n  File \"/root/.local/lib/python3.10/site-packages/trainer/task_yolo.py\", line 455, in main\n    comparison = compare_framework_vs_tflite(\n  File \"/root/.local/lib/python3.10/site-packages/src_colab/utils_compare.py\", line 73, in compare_framework_vs_tflite\n    tfl_dets, avg_ms = predict_tflite(\n  File \"/root/.local/lib/python3.10/site-packages/src_colab/utils_infer.py\", line 188, in predict_tflite\n    interpreter = tf.lite.Interpreter(model_path=tflite_path)\n  File \"/opt/python/3.10/lib/python3.10/site-packages/tensorflow/lite/python/interpreter.py\", line 524, in __init__\n    raise ValueError('`model_path` or `model_content` must be specified.')\nValueError: `model_path` or `model_content` must be specified.\n"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:33.060940089Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:37.979014264Z"
+  },
+  {
+    "insertId": "1nygly2f35yqc9",
+    "jsonPayload": {
+      "levelname": "ERROR",
+      "lineno": 496,
+      "timestampNanos": 264251470,
+      "timestampSeconds": 1770559417,
+      "severity": "ERROR",
+      "pathname": "//run_module.py",
+      "message": "Command '['python3', '-m', 'trainer.task_yolo', '--config-uri=gs://project-18f58341-12cf-47bc-861-tfm-data/configs/yolo26n_v1-1770557201.yaml', '--job-dir=gs://project-18f58341-12cf-47bc-861-tfm-data/output', '--project-id=project-18f58341-12cf-47bc-861', '--region=us-central1', '--experiment-name=tfm-deteccion-objetos', '--run-name=yolo26n_v1-1770557201']' returned non-zero exit status 1.",
+      "name": "root",
+      "created": 1770559417.2642515
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:37.461105186Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:37.979014264Z"
+  },
+  {
+    "insertId": "tr3xa9f36ma6p",
+    "jsonPayload": {
+      "levelname": "ERROR",
+      "name": "root",
+      "pathname": "//run_module.py",
+      "timestampNanos": 658814668,
+      "timestampSeconds": 1770559423,
+      "created": 1770559423.6588147,
+      "lineno": 136,
+      "message": "Error in sitecustomize; set PYTHONVERBOSE for traceback:",
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:43.660860804Z",
+    "severity": "ERROR",
+    "labels": {
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:47.976512020Z"
+  },
+  {
+    "insertId": "tr3xa9f36ma6q",
+    "jsonPayload": {
+      "levelname": "ERROR",
+      "lineno": 136,
+      "message": "ModuleNotFoundError: No module named 'pythonjsonlogger'",
+      "timestampNanos": 659171342,
+      "created": 1770559423.6591713,
+      "pathname": "//run_module.py",
+      "name": "root",
+      "timestampSeconds": 1770559423,
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "task_name": "workerpool0-0",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:43.660871092Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:47.976512020Z"
+  },
+  {
+    "insertId": "tr3xa9f36ma6r",
+    "jsonPayload": {
+      "timestampSeconds": 1770559425,
+      "levelname": "ERROR",
+      "lineno": 136,
+      "created": 1770559425.2172372,
+      "message": "Error in sitecustomize; set PYTHONVERBOSE for traceback:",
+      "pathname": "//run_module.py",
+      "severity": "ERROR",
+      "name": "root",
+      "timestampNanos": 217237234
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:45.261313675Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:47.976512020Z"
+  },
+  {
+    "insertId": "tr3xa9f36ma6s",
+    "jsonPayload": {
+      "timestampSeconds": 1770559425,
+      "name": "root",
+      "pathname": "//run_module.py",
+      "timestampNanos": 217489957,
+      "lineno": 136,
+      "created": 1770559425.21749,
+      "message": "ModuleNotFoundError: No module named 'pythonjsonlogger'",
+      "levelname": "ERROR",
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:45.261322628Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:47.976512020Z"
+  },
+  {
+    "insertId": "iv9me5f3ezztb",
+    "jsonPayload": {
+      "lineno": 136,
+      "created": 1770559433.254298,
+      "levelname": "ERROR",
+      "name": "root",
+      "timestampNanos": 254297971,
+      "pathname": "//run_module.py",
+      "message": "WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.",
+      "timestampSeconds": 1770559433,
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:53.261146956Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:53.377979986Z"
+  },
+  {
+    "insertId": "1jijstpf3i6tme",
+    "jsonPayload": {
+      "lineno": 136,
+      "severity": "ERROR",
+      "pathname": "//run_module.py",
+      "levelname": "ERROR",
+      "message": "[notice] A new release of pip is available: 25.1.1 -> 26.0.1",
+      "name": "root",
+      "timestampNanos": 382958650,
+      "timestampSeconds": 1770559433,
+      "created": 1770559433.3829587
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "workerpool0-0",
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:53.461309520Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/job_id": "2289830185723232256",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:54.776621231Z"
+  },
+  {
+    "insertId": "1jijstpf3i6tmf",
+    "jsonPayload": {
+      "name": "root",
+      "message": "[notice] To update, run: pip install --upgrade pip",
+      "created": 1770559433.383222,
+      "timestampSeconds": 1770559433,
+      "pathname": "//run_module.py",
+      "lineno": 136,
+      "levelname": "ERROR",
+      "timestampNanos": 383222103,
+      "severity": "ERROR"
+    },
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "job_id": "2289830185723232256",
+        "project_id": "608533675308",
+        "task_name": "workerpool0-0"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:53.461318296Z",
+    "severity": "ERROR",
+    "labels": {
+      "compute.googleapis.com/resource_name": "gk3-cml-0208-035134-83a8-nap-1md94mkl-45c87211-p9zp",
+      "log.file.name": "outputcf1cab09a3.log",
+      "compute.googleapis.com/resource_id": "788590366946570634",
+      "ml.googleapis.com/task_name": "workerpool0-0",
+      "ml.googleapis.com/job_id": "2289830185723232256"
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/workerpool0-0",
+    "receiveTimestamp": "2026-02-08T14:03:54.776621231Z"
+  },
+  {
+    "textPayload": "The replica workerpool0-0 exited with a non-zero status of 1. Termination reason: Error. \nTraceback (most recent call last):\n  File \"/opt/python/3.10/lib/python3.10/runpy.py\", line 196, in _run_module_as_main\n    return _run_code(code, main_globals, None,\n  File \"/opt/python/3.10/lib/python3.10/runpy.py\", line 86, in _run_code\n    exec(code, run_globals)\n  File \"/root/.local/lib/python3.10/site-packages/trainer/task_yolo.py\", line 604, in <module>\n    main()\n  File \"/root/.local/lib/python3.10/site-packages/trainer/task_yolo.py\", line 455, in main\n    comparison = compare_framework_vs_tflite(\n  File \"/root/.local/lib/python3.10/site-packages/src_colab/utils_compare.py\", line 73, in compare_framework_vs_tflite\n    tfl_dets, avg_ms = predict_tflite(\n  File \"/root/.local/lib/python3.10/site-packages/src_colab/utils_infer.py\", line 188, in predict_tflite\n    interpreter = tf.lite.Interpreter(model_path=tflite_path)\n  File \"/opt/python/3.10/lib/python3.10/site-packages/tensorflow/lite/python/interpreter.py\", line 524, in __init__\n    raise ValueError('`model_path` or `model_content` must be specified.')\nValueError: `model_path` or `model_content` must be specified.\n\nTo find out more about why your job exited please check the logs: https://console.cloud.google.com/logs/viewer?project=608533675308&resource=ml_job%2Fjob_id%2F2289830185723232256&advancedFilter=resource.type%3D%22ml_job%22%0Aresource.labels.job_id%3D%222289830185723232256%22",
+    "insertId": "14umlludkt26",
+    "resource": {
+      "type": "ml_job",
+      "labels": {
+        "task_name": "service",
+        "job_id": "2289830185723232256",
+        "project_id": "project-18f58341-12cf-47bc-861"
+      }
+    },
+    "timestamp": "2026-02-08T14:03:54.661911210Z",
+    "severity": "ERROR",
+    "labels": {
+      "ml.googleapis.com/endpoint": ""
+    },
+    "logName": "projects/project-18f58341-12cf-47bc-861/logs/ml.googleapis.com%2F2289830185723232256",
+    "receiveTimestamp": "2026-02-08T14:03:55.487176784Z"
+  }
+]

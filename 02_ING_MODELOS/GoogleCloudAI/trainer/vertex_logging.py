@@ -30,11 +30,32 @@ from typing import Any, Dict, List, Optional
 from google.cloud import aiplatform
 
 
+def _safe_call(func):
+    """Decorator: si Experiments no está activo, silencia el error."""
+    import functools
+
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not self._active:
+            return
+        try:
+            return func(self, *args, **kwargs)
+        except Exception as exc:
+            print(f"  ⚠️  Experiments ({func.__name__}): {exc}")
+
+    return wrapper
+
+
 class VertexExperimentLogger:
     """Wrapper para Vertex AI Experiments dentro de un Custom Job.
 
     Registra hiperparámetros, métricas escalares, series temporales
     y figuras PNG como artefactos del experimento.
+
+    Si la cuenta de servicio del job no tiene permisos para acceder a
+    Vertex AI Experiments (Metadata Store), el logger se desactiva
+    automáticamente y todas las llamadas se convierten en no-ops,
+    permitiendo que el entrenamiento continúe sin interrupciones.
     """
 
     def __init__(
@@ -51,21 +72,30 @@ class VertexExperimentLogger:
         self.run_name = run_name
         self.staging_bucket = staging_bucket
         self._run = None
+        self._active = False
 
-        # Inicializar SDK
-        aiplatform.init(
-            project=project_id,
-            location=region,
-            staging_bucket=staging_bucket,
-            experiment=experiment_name,
-        )
+        try:
+            # Inicializar SDK
+            aiplatform.init(
+                project=project_id,
+                location=region,
+                staging_bucket=staging_bucket,
+                experiment=experiment_name,
+            )
 
-        # Iniciar run
-        self._run = aiplatform.start_run(run_name)
-        print(f"📊 Vertex AI Experiment: {experiment_name} / {run_name}")
+            # Iniciar run
+            self._run = aiplatform.start_run(run_name)
+            self._active = True
+            print(f"📊 Vertex AI Experiment: {experiment_name} / {run_name}")
+        except Exception as exc:
+            print(
+                f"⚠️  Vertex AI Experiments no disponible — el entrenamiento "
+                f"continuará sin registro de experimentos.\n   Causa: {exc}"
+            )
 
     # ── Hiperparámetros ──────────────────────────────────────────────
 
+    @_safe_call
     def log_config(self, setup) -> None:
         """Registra todos los hiperparámetros del ``ExperimentSetup``.
 
@@ -104,6 +134,7 @@ class VertexExperimentLogger:
 
     # ── Métricas de entrenamiento ────────────────────────────────────
 
+    @_safe_call
     def log_training_metrics(
         self,
         history,
@@ -131,6 +162,7 @@ class VertexExperimentLogger:
         aiplatform.log_metrics(metrics)
         print(f"  📈 Registradas métricas de entrenamiento")
 
+    @_safe_call
     def log_time_series(self, history) -> None:
         """Registra métricas por época como series temporales.
 
@@ -162,6 +194,7 @@ class VertexExperimentLogger:
 
     # ── Métricas de evaluación ───────────────────────────────────────
 
+    @_safe_call
     def log_evaluation(self, ev, prefix: str = "val") -> None:
         """Registra métricas de evaluación (val o test).
 
@@ -185,6 +218,7 @@ class VertexExperimentLogger:
         aiplatform.log_metrics(metrics)
         print(f"  📊 Registradas métricas {prefix}")
 
+    @_safe_call
     def log_export_metrics(self, export_result, comparison) -> None:
         """Registra métricas del export TFLite y comparación FW vs TFLite.
 
@@ -201,6 +235,7 @@ class VertexExperimentLogger:
         aiplatform.log_metrics(metrics)
         print(f"  📊 Registradas métricas de export")
 
+    @_safe_call
     def log_tflite_test(self, tflite_ev) -> None:
         """Registra métricas del TFLite evaluado sobre test split.
 
@@ -211,6 +246,7 @@ class VertexExperimentLogger:
 
     # ── Figuras / Artefactos ─────────────────────────────────────────
 
+    @_safe_call
     def log_figure(self, local_path: str, display_name: str) -> None:
         """Sube un archivo PNG como artefacto vinculado al run.
 
@@ -262,10 +298,8 @@ class VertexExperimentLogger:
 
     # ── Cierre ───────────────────────────────────────────────────────
 
+    @_safe_call
     def end_run(self) -> None:
         """Finaliza el run de Vertex AI Experiments."""
-        try:
-            aiplatform.end_run()
-            print(f"  ✅ Run '{self.run_name}' finalizado")
-        except Exception as e:
-            print(f"  ⚠️  Error al cerrar run: {e}")
+        aiplatform.end_run()
+        print(f"  ✅ Run '{self.run_name}' finalizado")

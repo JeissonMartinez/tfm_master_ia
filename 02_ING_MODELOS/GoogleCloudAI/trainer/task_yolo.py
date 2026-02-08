@@ -16,6 +16,27 @@ Uso desde CLI (dentro del contenedor)::
 """
 from __future__ import annotations
 
+# ── Forzar modo single-GPU: Vertex AI inyecta variables de entorno
+#    distribuidas (RANK, WORLD_SIZE, etc.) que hacen que ultralytics
+#    asuma DDP y llame dist.get_world_size() sin haber inicializado
+#    el process group.  Limpiamos estas vars para forzar single-GPU.
+import os as _os
+for _var in ("RANK", "LOCAL_RANK", "WORLD_SIZE", "MASTER_ADDR", "MASTER_PORT"):
+    _os.environ.pop(_var, None)
+
+# ── Instalar ultralytics (no incluida en setup.py para evitar
+#    conflictos con el contenedor TF cuando se usa MobileNet) ────────
+import subprocess, sys as _sys
+subprocess.check_call(
+    [_sys.executable, "-m", "pip", "install", "-q", "ultralytics>=8.4"],
+)
+
+# ── Monkey-patch: PyTorch 2.4 + ultralytics single-GPU usa RandomSampler
+#    que no tiene set_epoch (solo DistributedSampler lo tiene).
+import torch.utils.data as _tud
+if not hasattr(_tud.RandomSampler, "set_epoch"):
+    _tud.RandomSampler.set_epoch = lambda self, epoch: None  # type: ignore
+
 # Headless matplotlib — DEBE ir antes de cualquier import de matplotlib
 import matplotlib
 matplotlib.use("Agg")
@@ -244,6 +265,12 @@ def main() -> None:
     training_time_min = (time.time() - t_start) / 60
     print(f"\n⏱️  Entrenamiento total: {training_time_min:.1f} min")
 
+    if results is None:
+        raise RuntimeError(
+            "❌ Entrenamiento YOLO falló — revisa los logs anteriores. "
+            "No se generaron artefactos."
+        )
+
     # ================================================================
     # Bloque 6 — Curvas de Entrenamiento
     # ================================================================
@@ -399,98 +426,112 @@ def main() -> None:
     print_export_report(export_result)
     save_export_result(export_result, os.path.join(exp_dir, "export_result.json"))
 
+    # Determinar si la exportación TFLite fue exitosa
+    tflite_ok = bool(export_result.tflite_path) and not export_result.errors
+
+    if not tflite_ok:
+        print("\n⚠️  La exportación TFLite falló o produjo errores:")
+        for e in (export_result.errors or []):
+            print(f"     ❌ {e}")
+        print("     → Se omiten Bloques 11 (comparación) y métricas TFLite.")
+        print("     → El job continuará con registro parcial y subida a GCS.\n")
+
     # ================================================================
     # Bloque 11 — Comparación Framework vs TFLite
     # ================================================================
-    print("\n" + "=" * 60)
-    print("BLOQUE 11 — Comparación Framework vs TFLite")
-    print("=" * 60)
+    comparison = None
+    tflite_test_ev = None
 
-    from src_colab import (
-        compare_framework_vs_tflite, save_comparison_result,
-        evaluate_tflite_model,
-        plot_fw_vs_tflite_metrics, visualize_fw_vs_tflite_samples,
-        predict_tflite,
-    )
+    if tflite_ok:
+        print("\n" + "=" * 60)
+        print("BLOQUE 11 — Comparación Framework vs TFLite")
+        print("=" * 60)
 
-    # 11.1 Comparación rápida
-    N_COMPARE = 20
-    if sample_paths:
-        compare_paths = sample_paths[:N_COMPARE]
-        compare_imgs = []
-        for p in compare_paths:
-            img = cv2.imread(p)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = cv2.resize(img, (setup.img_size, setup.img_size))
-            compare_imgs.append(img / 255.0)
-        compare_imgs = np.array(compare_imgs, dtype=np.float32)
-
-        comparison = compare_framework_vs_tflite(
-            framework_model=best_pt,
-            tflite_path=export_result.tflite_path,
-            images=compare_imgs,
-            class_names=setup.class_names,
-            family=family,
-            model_path=best_pt,
-            imgsz=setup.img_size,
-        )
-        save_comparison_result(
-            comparison, os.path.join(exp_dir, "comparison_result.json")
+        from src_colab import (
+            compare_framework_vs_tflite, save_comparison_result,
+            evaluate_tflite_model,
+            plot_fw_vs_tflite_metrics, visualize_fw_vs_tflite_samples,
+            predict_tflite,
         )
 
-        # 11.2 Evaluación completa TFLite sobre test
-        print("🔍  Evaluación TFLite sobre test split (mAP, P, R, F1)")
-        tflite_test_ev = evaluate_tflite_model(
-            tflite_path=export_result.tflite_path,
-            class_names=setup.class_names,
-            imgsz=setup.img_size,
-            conf_threshold=0.25,
-            iou_threshold=0.5,
-            model_name=f"{setup.experiment_name}_tflite",
-            dataset_dir=dataset_path,
-            split="test",
-        )
+        # 11.1 Comparación rápida
+        N_COMPARE = 20
+        if sample_paths:
+            compare_paths = sample_paths[:N_COMPARE]
+            compare_imgs = []
+            for p in compare_paths:
+                img = cv2.imread(p)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, (setup.img_size, setup.img_size))
+                compare_imgs.append(img / 255.0)
+            compare_imgs = np.array(compare_imgs, dtype=np.float32)
 
-        # 11.3 Gráfica comparativa
-        fw_tfl_path = os.path.join(exp_dir, "fw_vs_tflite_metrics.png")
-        plot_fw_vs_tflite_metrics(
-            fw_ev=test_ev, tfl_ev=tflite_test_ev,
-            save_path=fw_tfl_path,
-        )
-        logger.log_figure(fw_tfl_path, "fw_vs_tflite_metrics")
+            comparison = compare_framework_vs_tflite(
+                framework_model=best_pt,
+                tflite_path=export_result.tflite_path,
+                images=compare_imgs,
+                class_names=setup.class_names,
+                family=family,
+                model_path=best_pt,
+                imgsz=setup.img_size,
+            )
+            save_comparison_result(
+                comparison, os.path.join(exp_dir, "comparison_result.json")
+            )
 
-        # 11.4 Visualización side-by-side
-        fw_vis_dets = predict_yolo(
-            model_path=best_pt,
-            image_paths=[compare_imgs[i] for i in range(compare_imgs.shape[0])],
-            imgsz=setup.img_size, conf=0.25, iou=0.45,
-            class_names=setup.class_names,
-        )
-        tfl_vis_dets, _ = predict_tflite(
-            tflite_path=export_result.tflite_path,
-            images=compare_imgs,
-            class_names=setup.class_names,
-            conf_threshold=0.25,
-            iou_threshold=0.45,
-        )
+            # 11.2 Evaluación completa TFLite sobre test
+            print("🔍  Evaluación TFLite sobre test split (mAP, P, R, F1)")
+            tflite_test_ev = evaluate_tflite_model(
+                tflite_path=export_result.tflite_path,
+                class_names=setup.class_names,
+                imgsz=setup.img_size,
+                conf_threshold=0.25,
+                iou_threshold=0.5,
+                model_name=f"{setup.experiment_name}_tflite",
+                dataset_dir=dataset_path,
+                split="test",
+            )
 
-        sbs_path = os.path.join(exp_dir, "fw_vs_tflite_samples.png")
-        visualize_fw_vs_tflite_samples(
-            images=[compare_imgs[i] for i in range(compare_imgs.shape[0])],
-            fw_dets=fw_vis_dets,
-            tfl_dets=tfl_vis_dets,
-            class_names=setup.class_names,
-            samples_per_class=1,
-            save_path=sbs_path,
-        )
-        logger.log_figure(sbs_path, "fw_vs_tflite_samples")
+            # 11.3 Gráfica comparativa
+            fw_tfl_path = os.path.join(exp_dir, "fw_vs_tflite_metrics.png")
+            plot_fw_vs_tflite_metrics(
+                fw_ev=test_ev, tfl_ev=tflite_test_ev,
+                save_path=fw_tfl_path,
+            )
+            logger.log_figure(fw_tfl_path, "fw_vs_tflite_metrics")
 
-        logger.log_export_metrics(export_result, comparison)
-        logger.log_tflite_test(tflite_test_ev)
+            # 11.4 Visualización side-by-side
+            fw_vis_dets = predict_yolo(
+                model_path=best_pt,
+                image_paths=[compare_imgs[i] for i in range(compare_imgs.shape[0])],
+                imgsz=setup.img_size, conf=0.25, iou=0.45,
+                class_names=setup.class_names,
+            )
+            tfl_vis_dets, _ = predict_tflite(
+                tflite_path=export_result.tflite_path,
+                images=compare_imgs,
+                class_names=setup.class_names,
+                conf_threshold=0.25,
+                iou_threshold=0.45,
+            )
+
+            sbs_path = os.path.join(exp_dir, "fw_vs_tflite_samples.png")
+            visualize_fw_vs_tflite_samples(
+                images=[compare_imgs[i] for i in range(compare_imgs.shape[0])],
+                fw_dets=fw_vis_dets,
+                tfl_dets=tfl_vis_dets,
+                class_names=setup.class_names,
+                samples_per_class=1,
+                save_path=sbs_path,
+            )
+            logger.log_figure(sbs_path, "fw_vs_tflite_samples")
+
+            logger.log_export_metrics(export_result, comparison)
+            logger.log_tflite_test(tflite_test_ev)
+        else:
+            print("⚠️  Sin imágenes de muestra — se omite comparación visual")
     else:
-        print("⚠️  Sin imágenes de muestra — se omite comparación visual")
-        comparison = None
-        tflite_test_ev = None
+        print("BLOQUE 11 — OMITIDO (exportación TFLite fallida)")
 
     # ================================================================
     # Bloque 12 — Registro y Comparación de Experimentos
@@ -536,8 +577,13 @@ def main() -> None:
     r.test_per_class_ap50 = test_ev.per_class_ap50
 
     # Export metrics
-    r.tflite_size_mb = export_result.size_mb
-    r.tflite_esp32_ok = export_result.esp32_compatible
+    if tflite_ok:
+        r.tflite_size_mb = export_result.size_mb
+        r.tflite_esp32_ok = export_result.esp32_compatible
+    else:
+        r.tflite_size_mb = 0.0
+        r.tflite_esp32_ok = False
+        r.export_errors = "; ".join(export_result.errors or ["unknown"])
     if comparison:
         r.tflite_agreement = comparison.agreement_rate
         r.tflite_avg_latency_ms = comparison.avg_inference_ms

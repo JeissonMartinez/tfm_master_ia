@@ -439,85 +439,101 @@ def main() -> None:
     print_export_report(export_result)
     save_export_result(export_result, os.path.join(exp_dir, "export_result.json"))
 
+    # Determinar si la exportación TFLite fue exitosa
+    tflite_ok = bool(export_result.tflite_path) and not export_result.errors
+
+    if not tflite_ok:
+        print("\n⚠️  La exportación TFLite falló o produjo errores:")
+        for e in (export_result.errors or []):
+            print(f"     ❌ {e}")
+        print("     → Se omiten Bloques 11 (comparación) y métricas TFLite.")
+        print("     → El job continuará con registro parcial y subida a GCS.\n")
+
     # ================================================================
     # Bloque 11 — Comparación Framework vs TFLite
     # ================================================================
-    print("\n" + "=" * 60)
-    print("BLOQUE 11 — Comparación Framework vs TFLite")
-    print("=" * 60)
+    comparison = None
+    tflite_test_ev = None
 
-    from src_colab import (
-        compare_framework_vs_tflite, save_comparison_result,
-        evaluate_tflite_model,
-        plot_fw_vs_tflite_metrics, visualize_fw_vs_tflite_samples,
-        predict_tflite,
-    )
+    if tflite_ok:
+        print("\n" + "=" * 60)
+        print("BLOQUE 11 — Comparación Framework vs TFLite")
+        print("=" * 60)
 
-    # 11.1 Comparación rápida (agreement, IoU, Δconf)
-    N_COMPARE = 20
-    compare_batch = next(iter(val_ds))
-    compare_imgs = compare_batch[0].numpy()[:N_COMPARE]
+        from src_colab import (
+            compare_framework_vs_tflite, save_comparison_result,
+            evaluate_tflite_model,
+            plot_fw_vs_tflite_metrics, visualize_fw_vs_tflite_samples,
+            predict_tflite,
+        )
 
-    comparison = compare_framework_vs_tflite(
-        framework_model=model,
-        tflite_path=export_result.tflite_path,
-        images=compare_imgs,
-        class_names=setup.class_names,
-        family=family,
-        anchors=anchors,
-        imgsz=setup.img_size,
-    )
-    save_comparison_result(
-        comparison, os.path.join(exp_dir, "comparison_result.json")
-    )
+        # 11.1 Comparación rápida (agreement, IoU, Δconf)
+        N_COMPARE = 20
+        compare_batch = next(iter(val_ds))
+        compare_imgs = compare_batch[0].numpy()[:N_COMPARE]
 
-    # 11.2 Evaluación completa TFLite sobre test
-    print("🔍  Evaluación TFLite sobre test split (mAP, P, R, F1)")
-    tflite_test_ev = evaluate_tflite_model(
-        tflite_path=export_result.tflite_path,
-        class_names=setup.class_names,
-        imgsz=setup.img_size,
-        conf_threshold=0.25,
-        iou_threshold=0.5,
-        model_name=f"{setup.experiment_name}_tflite",
-        test_ds=test_ds,
-    )
+        comparison = compare_framework_vs_tflite(
+            framework_model=model,
+            tflite_path=export_result.tflite_path,
+            images=compare_imgs,
+            class_names=setup.class_names,
+            family=family,
+            anchors=anchors,
+            imgsz=setup.img_size,
+        )
+        save_comparison_result(
+            comparison, os.path.join(exp_dir, "comparison_result.json")
+        )
 
-    # 11.3 Gráfica comparativa
-    fw_tfl_path = os.path.join(exp_dir, "fw_vs_tflite_metrics.png")
-    plot_fw_vs_tflite_metrics(
-        fw_ev=test_ev, tfl_ev=tflite_test_ev,
-        save_path=fw_tfl_path,
-    )
-    logger.log_figure(fw_tfl_path, "fw_vs_tflite_metrics")
+        # 11.2 Evaluación completa TFLite sobre test
+        print("🔍  Evaluación TFLite sobre test split (mAP, P, R, F1)")
+        tflite_test_ev = evaluate_tflite_model(
+            tflite_path=export_result.tflite_path,
+            class_names=setup.class_names,
+            imgsz=setup.img_size,
+            conf_threshold=0.25,
+            iou_threshold=0.5,
+            model_name=f"{setup.experiment_name}_tflite",
+            test_ds=test_ds,
+        )
 
-    # 11.4 Visualización side-by-side
-    fw_vis_dets = predict_mobilenet(
-        model=model, images=compare_imgs,
-        class_names=setup.class_names,
-        anchors=anchors,
-    )
-    tfl_vis_dets, _ = predict_tflite(
-        tflite_path=export_result.tflite_path,
-        images=compare_imgs,
-        class_names=setup.class_names,
-        conf_threshold=0.25,
-        iou_threshold=0.45,
-    )
+        # 11.3 Gráfica comparativa
+        fw_tfl_path = os.path.join(exp_dir, "fw_vs_tflite_metrics.png")
+        plot_fw_vs_tflite_metrics(
+            fw_ev=test_ev, tfl_ev=tflite_test_ev,
+            save_path=fw_tfl_path,
+        )
+        logger.log_figure(fw_tfl_path, "fw_vs_tflite_metrics")
 
-    sbs_path = os.path.join(exp_dir, "fw_vs_tflite_samples.png")
-    visualize_fw_vs_tflite_samples(
-        images=[compare_imgs[i] for i in range(compare_imgs.shape[0])],
-        fw_dets=fw_vis_dets,
-        tfl_dets=tfl_vis_dets,
-        class_names=setup.class_names,
-        samples_per_class=1,
-        save_path=sbs_path,
-    )
-    logger.log_figure(sbs_path, "fw_vs_tflite_samples")
+        # 11.4 Visualización side-by-side
+        fw_vis_dets = predict_mobilenet(
+            model=model, images=compare_imgs,
+            class_names=setup.class_names,
+            anchors=anchors,
+        )
+        tfl_vis_dets, _ = predict_tflite(
+            tflite_path=export_result.tflite_path,
+            images=compare_imgs,
+            class_names=setup.class_names,
+            conf_threshold=0.25,
+            iou_threshold=0.45,
+        )
 
-    logger.log_export_metrics(export_result, comparison)
-    logger.log_tflite_test(tflite_test_ev)
+        sbs_path = os.path.join(exp_dir, "fw_vs_tflite_samples.png")
+        visualize_fw_vs_tflite_samples(
+            images=[compare_imgs[i] for i in range(compare_imgs.shape[0])],
+            fw_dets=fw_vis_dets,
+            tfl_dets=tfl_vis_dets,
+            class_names=setup.class_names,
+            samples_per_class=1,
+            save_path=sbs_path,
+        )
+        logger.log_figure(sbs_path, "fw_vs_tflite_samples")
+
+        logger.log_export_metrics(export_result, comparison)
+        logger.log_tflite_test(tflite_test_ev)
+    else:
+        print("BLOQUE 11 — OMITIDO (exportación TFLite fallida)")
 
     # ================================================================
     # Bloque 12 — Registro y Comparación de Experimentos
@@ -563,18 +579,23 @@ def main() -> None:
     r.test_per_class_ap50 = test_ev.per_class_ap50
 
     # Export metrics
-    r.tflite_size_mb = export_result.size_mb
-    r.tflite_esp32_ok = export_result.esp32_compatible
-    r.tflite_agreement = comparison.agreement_rate
-    r.tflite_avg_latency_ms = comparison.avg_inference_ms
-
-    # TFLite test metrics
-    r.tflite_test_mAP50 = tflite_test_ev.mAP50
-    r.tflite_test_mAP50_95 = tflite_test_ev.mAP50_95
-    r.tflite_test_precision = tflite_test_ev.precision
-    r.tflite_test_recall = tflite_test_ev.recall
-    r.tflite_test_f1 = tflite_test_ev.f1
-    r.tflite_test_per_class_ap50 = tflite_test_ev.per_class_ap50
+    if tflite_ok:
+        r.tflite_size_mb = export_result.size_mb
+        r.tflite_esp32_ok = export_result.esp32_compatible
+    else:
+        r.tflite_size_mb = 0.0
+        r.tflite_esp32_ok = False
+        r.export_errors = "; ".join(export_result.errors or ["unknown"])
+    if comparison:
+        r.tflite_agreement = comparison.agreement_rate
+        r.tflite_avg_latency_ms = comparison.avg_inference_ms
+    if tflite_test_ev:
+        r.tflite_test_mAP50 = tflite_test_ev.mAP50
+        r.tflite_test_mAP50_95 = tflite_test_ev.mAP50_95
+        r.tflite_test_precision = tflite_test_ev.precision
+        r.tflite_test_recall = tflite_test_ev.recall
+        r.tflite_test_f1 = tflite_test_ev.f1
+        r.tflite_test_per_class_ap50 = tflite_test_ev.per_class_ap50
 
     save_experiment(experiment, exp_dir)
 

@@ -1,0 +1,23 @@
+{
+  "class_names": [
+    "dog",
+    "door",
+    "obstacle",
+    "person",
+    "stair"
+  ],
+  "num_classes": 5,
+  "format": "roboflow",
+  "img_size_original": 640,
+  "splits": {
+    "train": {
+      "num_samples": 9722
+    },
+    "val": {
+      "num_samples": 2066
+    },
+    "test": {
+      "num_samples": 2066
+    }
+  }
+}
