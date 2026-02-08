@@ -1,0 +1,33 @@
+{
+  "model_name": "MBNTv2_ssdlite_v0",
+  "family": "mobilenet",
+  "tflite_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/models/MBNTv2_ssdlite_v0/tflite/MBNTv2_ssdlite_v0_int8.tflite",
+  "size_mb": 2.8595504760742188,
+  "input_shape": [
+    "1",
+    "224",
+    "224",
+    "3"
+  ],
+  "output_shapes": {
+    "StatefulPartitionedCall_1:2": [
+      "1",
+      "1470",
+      "1"
+    ],
+    "StatefulPartitionedCall_1:1": [
+      "1",
+      "1470",
+      "5"
+    ],
+    "StatefulPartitionedCall_1:0": [
+      "1",
+      "1470",
+      "4"
+    ]
+  },
+  "quantization": "int8",
+  "export_time_s": 20.309096097946167,
+  "esp32_compatible": true,
+  "errors": []
+}

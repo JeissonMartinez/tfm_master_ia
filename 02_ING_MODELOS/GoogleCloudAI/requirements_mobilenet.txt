@@ -1,0 +1,13 @@
+# ---------------------------------------------------------
+# Dependencias adicionales para el contenedor TF pre-built
+# de Vertex AI (tf-gpu.2-19 ya incluye TF 2.19 + CUDA).
+# ---------------------------------------------------------
+protobuf>=3.20.3,<4.0.0
+numpy>=1.26,<2.0
+pandas>=2.0
+matplotlib>=3.8
+opencv-python-headless>=4.9
+scikit-learn>=1.4
+pyyaml>=6.0
+google-cloud-storage>=2.14
+google-cloud-aiplatform>=1.40

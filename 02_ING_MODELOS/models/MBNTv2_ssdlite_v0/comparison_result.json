@@ -1,0 +1,9 @@
+{
+  "tflite_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/models/MBNTv2_ssdlite_v0/tflite/MBNTv2_ssdlite_v0_int8.tflite",
+  "n_samples": 16,
+  "agreement_rate": 0.87,
+  "avg_iou": 0.7757802404618312,
+  "avg_conf_diff": 0.019871839589771182,
+  "avg_inference_ms": 3.137244937761352,
+  "passed": true
+}
