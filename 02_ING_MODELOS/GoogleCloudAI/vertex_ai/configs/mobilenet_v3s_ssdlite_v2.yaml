@@ -1,0 +1,81 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: MobileNetV3-Small + SSD-Lite — v2 (Ciclo 2)
+# ─────────────────────────────────────────────────────────────
+# Cambios clave respecto a v1:
+#   - Más épocas (50+250 vs 30+50) para convergencia completa
+#   - Batch 64 para gradientes más estables
+#   - AdamW con weight_decay + cosine LR schedule + warmup
+#   - cls_loss_weight=2.0 para penalizar confusiones de clase
+#   - label_smoothing=0.1 para reducir sobreconfianza
+#   - Unfreeze 60 capas (vs 40) para mayor adaptación
+#   - Augmentación heavy (vs medium) contra overfitting
+#   - L2 reg más fuerte (5e-4 vs 1e-4)
+#   - Patience 35 para tolerar las épocas largas
+# ─────────────────────────────────────────────────────────────
+
+model:
+  family: MobileNetV3
+  variant: MobileNetV3S_SSDLite
+  version: v2
+  description: >
+    Ciclo 2 — AdamW + cosine LR + label smoothing + cls_loss_weight.
+    Foco en reducir confusión obstacle/stair y mejorar detección de person.
+
+dataset:
+  name: tfrecord
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/tfrecord
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 224
+
+common:
+  batch_size: 64            # v1=32  → gradientes más estables con T4 (16 GB)
+  patience: 35              # v1=15  → tolerar plateau en fases largas
+  seed: 42
+  conf_threshold: 0.30
+  iou_threshold: 0.45
+
+mobilenet:
+  # ── Phase 1 — backbone congelado, entrenar cabezas SSD ──
+  phase1_epochs: 50         # v1=30  → más tiempo para cabezas desde cero
+  phase1_lr: 0.003          # v1=0.001 → LR más agresivo, backbone congelado lo tolera
+
+  # ── Phase 2 — fine-tuning parcial del backbone ──
+  phase2_epochs: 250        # v1=50  → convergencia completa con patience=35
+  phase2_lr: 0.0001         # v1=5e-5 → doble LR para fine-tuning más efectivo
+  phase2_unfreeze_layers: 60 # v1=40  → descongelar más capas del backbone
+
+  # ── Optimizador (NUEVO en v2) ──
+  optimizer: AdamW           # v1=Adam → AdamW con weight decay explícito
+  weight_decay: 0.0005       # regularización vía optimizer (complementa l2_reg)
+  lr_schedule: cosine        # v1=reduce_on_plateau → cosine decay proactivo
+  lr_warmup_epochs: 10       # v1=0  → warmup lineal en Phase 1
+  lr_min: 0.000001           # v1=1e-7 → LR mínimo para cosine/ReduceLR
+
+  # ── Loss (NUEVO en v2) ──
+  label_smoothing: 0.1       # v1=0   → suavizar targets duros, reduce sobreconfianza
+  cls_loss_weight: 2.0       # v1=1.0 → penalizar más los errores de clasificación
+  box_loss_weight: 1.0       # sin cambio
+  obj_loss_weight: 1.0       # sin cambio
+
+  # ── Augmentación ──
+  augmentation_level: heavy  # v1=medium → flip+bright+contrast+saturation+hue
+
+  # ── Arquitectura (sin cambios — misma base para comparar) ──
+  backbone_alpha: 1.0
+  minimalistic: true
+  dropout_rate: 0.2          # sin cambio
+  l2_reg: 0.0005             # v1=1e-4 → regularización más fuerte contra overfitting
+  feature_channels: 128      # sin cambio
+
+  # ── Anclas SSD (más granulares en v2) ──
+  anchor_sizes: [0.05, 0.1, 0.2, 0.35, 0.5, 0.7, 0.9]
+  anchor_ratios: [1.0, 2.0, 0.5, 3.0, 0.33]
+
+  # ── Focal Loss ──
+  focal_alpha: 0.25          # sin cambio — balanceado por clase
+  focal_gamma: 2.0           # sin cambio — penalizar ejemplos fáciles
+  neg_pos_ratio: 3           # sin cambio — ratio negative/positive mining
+
+  # ── Pesos de clase ──
+  use_class_weights: true
+  class_weight_method: effective_samples  # compensa desbalance del dataset

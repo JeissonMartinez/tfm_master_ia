@@ -238,19 +238,64 @@ def main() -> None:
 
     loss_dict = create_ssd_loss(
         num_classes=len(setup.class_names),
+        focal_alpha=mc.get("focal_alpha", 0.25),
+        focal_gamma=mc.get("focal_gamma", 2.0),
+        neg_pos_ratio=mc.get("neg_pos_ratio", 3),
         class_weights=class_weights,
+        label_smoothing=mc.get("label_smoothing", 0.0),
     )
+
+    # ── Loss weights (permite subir el peso de clasificación vs bbox) ──
+    loss_weights = None
+    obj_w = mc.get("obj_loss_weight", 1.0)
+    cls_w = mc.get("cls_loss_weight", 1.0)
+    box_w = mc.get("box_loss_weight", 1.0)
+    if not (obj_w == 1.0 and cls_w == 1.0 and box_w == 1.0):
+        loss_weights = {
+            "objectness": obj_w,
+            "class_out": cls_w,
+            "bbox_out": box_w,
+        }
+        print(f"⚖️  Loss weights: obj={obj_w}, cls={cls_w}, box={box_w}")
+
+    # ── Hiperparámetros del optimizador ──
+    optimizer_name = mc.get("optimizer", "Adam")
+    weight_decay = mc.get("weight_decay", 0.0)
+    lr_schedule = mc.get("lr_schedule", "reduce_on_plateau")
+    lr_min = mc.get("lr_min", 1e-7)
+    lr_warmup_epochs = mc.get("lr_warmup_epochs", 0)
+    use_cosine = lr_schedule == "cosine"
 
     ckpt_dir = os.path.join(exp_dir, "checkpoints")
     log_dir = os.path.join(exp_dir, "logs")
 
+    # ── Estimar steps por época ──
+    import tensorflow as tf
+    steps_per_epoch = tf.data.experimental.cardinality(train_ds).numpy()
+    if steps_per_epoch < 0:  # UNKNOWN o INFINITE
+        steps_per_epoch = 0
+    print(f"📐 Steps per epoch: {steps_per_epoch}")
+
+    # ── Kwargs compartidos del optimizador ──
+    opt_kwargs = dict(
+        optimizer_name=optimizer_name,
+        weight_decay=weight_decay,
+        lr_schedule=lr_schedule,
+        lr_min=lr_min,
+        steps_per_epoch=int(steps_per_epoch),
+    )
+
     t_start = time.time()
 
     # Phase 1 — backbone congelado
+    patience = setup.patience or 30
     cbs_p1 = create_callbacks(
         ckpt_dir, log_dir,
         model_name=f"{setup.experiment_name}_p1",
-        patience_reduce_lr=5, patience_early_stop=15,
+        patience_reduce_lr=max(3, patience // 6),
+        patience_early_stop=max(10, patience // 2),
+        min_lr=lr_min,
+        use_reduce_lr=not use_cosine,
     )
     p1_epochs = mc.get("phase1_epochs", 20)
     h1 = train_mobilenet_phase1(
@@ -258,7 +303,10 @@ def main() -> None:
         epochs=p1_epochs,
         lr=mc.get("phase1_lr", 1e-3),
         loss_dict=loss_dict,
+        loss_weights=loss_weights,
         callbacks=cbs_p1,
+        lr_warmup_epochs=lr_warmup_epochs,
+        **opt_kwargs,
     )
     p1_csv = os.path.join(log_dir, f"{setup.experiment_name}_p1_history.csv")
     save_training_history(h1, p1_csv, phase_label="phase1")
@@ -267,7 +315,10 @@ def main() -> None:
     cbs_p2 = create_callbacks(
         ckpt_dir, log_dir,
         model_name=f"{setup.experiment_name}_p2",
-        patience_reduce_lr=8, patience_early_stop=20,
+        patience_reduce_lr=max(5, patience // 4),
+        patience_early_stop=patience,
+        min_lr=lr_min,
+        use_reduce_lr=not use_cosine,
     )
     h2 = train_mobilenet_phase2(
         model, train_ds, val_ds,
@@ -275,8 +326,11 @@ def main() -> None:
         lr=mc.get("phase2_lr", 1e-4),
         unfreeze_layers=mc.get("phase2_unfreeze_layers", 20),
         loss_dict=loss_dict,
+        loss_weights=loss_weights,
         callbacks=cbs_p2,
         initial_epoch=p1_epochs,
+        lr_warmup_epochs=0,  # warmup solo en phase 1
+        **opt_kwargs,
     )
     p2_csv = os.path.join(log_dir, f"{setup.experiment_name}_p2_history.csv")
     save_training_history(h2, p2_csv, phase_label="phase2")

@@ -334,13 +334,22 @@ def unfreeze_backbone_layers(model, num_layers: int = -1) -> int:
 
 # ── Losses ───────────────────────────────────────────────────────────
 
-def _focal_loss(alpha: float = 0.25, gamma: float = 2.0, class_weights=None):
-    """Focal loss for multi-class classification."""
+def _focal_loss(alpha: float = 0.25, gamma: float = 2.0, class_weights=None,
+                label_smoothing: float = 0.0):
+    """Focal loss for multi-class classification.
+
+    Args:
+        label_smoothing: If > 0, smooth hard labels towards uniform.
+    """
     import tensorflow as tf
 
     def fn(y_true, y_pred):
         eps = tf.keras.backend.epsilon()
         y_pred = tf.clip_by_value(y_pred, eps, 1.0 - eps)
+        # Label smoothing: suavizar targets duros → reduce sobreconfianza
+        if label_smoothing > 0:
+            n_cls = tf.cast(tf.shape(y_true)[-1], tf.float32)
+            y_true = y_true * (1.0 - label_smoothing) + label_smoothing / n_cls
         ce = -y_true * tf.math.log(y_pred) - (1 - y_true) * tf.math.log(1 - y_pred)
         pt = y_true * y_pred + (1 - y_true) * (1 - y_pred)
         fw = tf.pow(1.0 - pt, gamma)
@@ -388,13 +397,74 @@ def create_ssd_loss(
     focal_gamma: float = 2.0,
     neg_pos_ratio: int = 3,
     class_weights=None,
+    label_smoothing: float = 0.0,
 ) -> Dict[str, Any]:
     """Create the SSD-Lite loss dict for ``model.compile(loss=...)``."""
     return {
         "objectness": _binary_focal_loss(focal_alpha, focal_gamma),
-        "class_out": _focal_loss(focal_alpha, focal_gamma, class_weights),
+        "class_out": _focal_loss(focal_alpha, focal_gamma, class_weights,
+                                  label_smoothing),
         "bbox_out": _smooth_l1_loss(1.0),
     }
+
+
+# ── Optimizer builder ────────────────────────────────────────────────
+
+def _build_optimizer(
+    lr: float,
+    optimizer_name: str = "Adam",
+    weight_decay: float = 0.0,
+    lr_schedule: str = "reduce_on_plateau",
+    total_steps: int = 0,
+    warmup_steps: int = 0,
+    lr_min: float = 1e-7,
+):
+    """Build Keras optimizer with optional cosine LR schedule.
+
+    Args:
+        lr: Peak learning rate.
+        optimizer_name: ``"Adam"`` or ``"AdamW"``.
+        weight_decay: Weight decay for AdamW (ignored for Adam).
+        lr_schedule: ``"cosine"`` → CosineDecay, else constant LR
+            (combined with ReduceLROnPlateau callback).
+        total_steps: Total training steps (epochs × steps_per_epoch).
+        warmup_steps: Linear warmup steps for cosine schedule.
+        lr_min: Minimum learning rate.
+    """
+    import tensorflow as tf
+
+    learning_rate = lr
+
+    if lr_schedule == "cosine" and total_steps > 0:
+        decay_steps = max(1, total_steps - warmup_steps)
+        if warmup_steps > 0:
+            learning_rate = tf.keras.optimizers.schedules.CosineDecay(
+                initial_learning_rate=lr_min,
+                decay_steps=total_steps,
+                alpha=1.0,              # decae hasta initial_lr × alpha = lr_min
+                warmup_target=lr,
+                warmup_steps=warmup_steps,
+            )
+        else:
+            learning_rate = tf.keras.optimizers.schedules.CosineDecay(
+                initial_learning_rate=lr,
+                decay_steps=decay_steps,
+                alpha=lr_min / lr if lr > 0 else 0.0,
+            )
+        log(f"📈 LR schedule: cosine (peak={lr}, min={lr_min}, "
+            f"steps={total_steps}, warmup={warmup_steps})")
+
+    opt_name = optimizer_name.lower().strip()
+    if opt_name == "adamw":
+        opt = tf.keras.optimizers.AdamW(
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+        )
+        log(f"⚙️  Optimizer: AdamW (weight_decay={weight_decay})")
+    else:
+        opt = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        log(f"⚙️  Optimizer: Adam")
+    return opt
 
 
 def create_callbacks(
@@ -405,8 +475,14 @@ def create_callbacks(
     patience_early_stop: int = 15,
     reduce_lr_factor: float = 0.2,
     min_lr: float = 1e-7,
+    use_reduce_lr: bool = True,
 ) -> list:
-    """Standard Keras callbacks for MobileNet training."""
+    """Standard Keras callbacks for MobileNet training.
+
+    Args:
+        use_reduce_lr: If False, skip ReduceLROnPlateau (e.g. when using
+            a cosine LR schedule that already manages decay).
+    """
     import tensorflow as tf
 
     safe_mkdir(checkpoint_dir)
@@ -417,10 +493,6 @@ def create_callbacks(
         tf.keras.callbacks.ModelCheckpoint(
             filepath=os.path.join(checkpoint_dir, f"{model_name}_best.keras"),
             monitor="val_loss", save_best_only=True, mode="min", verbose=1,
-        ),
-        tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=reduce_lr_factor,
-            patience=patience_reduce_lr, min_lr=min_lr, verbose=1,
         ),
         tf.keras.callbacks.EarlyStopping(
             monitor="val_loss", patience=patience_early_stop,
@@ -434,7 +506,13 @@ def create_callbacks(
             histogram_freq=0, update_freq="epoch",
         ),
     ]
-    log(f"📋 Callbacks creados ({len(cbs)}): checkpoint, ReduceLR, EarlyStopping, CSV, TB")
+    if use_reduce_lr:
+        cbs.insert(1, tf.keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss", factor=reduce_lr_factor,
+            patience=patience_reduce_lr, min_lr=min_lr, verbose=1,
+        ))
+    sched_label = "ReduceLR, " if use_reduce_lr else ""
+    log(f"📋 Callbacks creados ({len(cbs)}): checkpoint, {sched_label}EarlyStopping, CSV, TB")
     return cbs
 
 
@@ -445,9 +523,19 @@ def train_mobilenet_phase1(
     epochs: int = 30,
     lr: float = 1e-3,
     loss_dict: Optional[Dict] = None,
+    loss_weights: Optional[Dict[str, float]] = None,
     callbacks: Optional[list] = None,
+    optimizer_name: str = "Adam",
+    weight_decay: float = 0.0,
+    lr_schedule: str = "reduce_on_plateau",
+    lr_min: float = 1e-7,
+    lr_warmup_epochs: int = 0,
+    steps_per_epoch: int = 0,
 ) -> Any:
-    """Phase 1: warm-up with frozen backbone."""
+    """Phase 1: warm-up with frozen backbone.
+
+    New in v2: supports AdamW, cosine LR schedule, loss_weights.
+    """
     import tensorflow as tf
 
     freeze_backbone(model)
@@ -455,8 +543,18 @@ def train_mobilenet_phase1(
     if loss_dict is None:
         loss_dict = create_ssd_loss(num_classes=4)
 
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr), loss=loss_dict)
-    log(f"\n🚀 Phase 1: Warm-up ({epochs} épocas, LR={lr})")
+    total_steps = epochs * steps_per_epoch if steps_per_epoch > 0 else 0
+    warmup_steps = lr_warmup_epochs * steps_per_epoch if steps_per_epoch > 0 else 0
+    optimizer = _build_optimizer(
+        lr=lr, optimizer_name=optimizer_name, weight_decay=weight_decay,
+        lr_schedule=lr_schedule, total_steps=total_steps,
+        warmup_steps=warmup_steps, lr_min=lr_min,
+    )
+    compile_kw = dict(optimizer=optimizer, loss=loss_dict)
+    if loss_weights:
+        compile_kw["loss_weights"] = loss_weights
+    model.compile(**compile_kw)
+    log(f"\n🚀 Phase 1: Warm-up ({epochs} épocas, LR={lr}, opt={optimizer_name})")
 
     t0 = time.time()
     history = model.fit(
@@ -476,10 +574,20 @@ def train_mobilenet_phase2(
     lr: float = 5e-5,
     unfreeze_layers: int = 40,
     loss_dict: Optional[Dict] = None,
+    loss_weights: Optional[Dict[str, float]] = None,
     callbacks: Optional[list] = None,
     initial_epoch: int = 0,
+    optimizer_name: str = "Adam",
+    weight_decay: float = 0.0,
+    lr_schedule: str = "reduce_on_plateau",
+    lr_min: float = 1e-7,
+    lr_warmup_epochs: int = 0,
+    steps_per_epoch: int = 0,
 ) -> Any:
-    """Phase 2: fine-tuning with partially unfrozen backbone."""
+    """Phase 2: fine-tuning with partially unfrozen backbone.
+
+    New in v2: supports AdamW, cosine LR schedule, loss_weights.
+    """
     import tensorflow as tf
 
     unfreeze_backbone_layers(model, unfreeze_layers)
@@ -487,8 +595,18 @@ def train_mobilenet_phase2(
     if loss_dict is None:
         loss_dict = create_ssd_loss(num_classes=4)
 
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr), loss=loss_dict)
-    log(f"\n🚀 Phase 2: Fine-tuning ({epochs} épocas, LR={lr})")
+    total_steps = epochs * steps_per_epoch if steps_per_epoch > 0 else 0
+    warmup_steps = lr_warmup_epochs * steps_per_epoch if steps_per_epoch > 0 else 0
+    optimizer = _build_optimizer(
+        lr=lr, optimizer_name=optimizer_name, weight_decay=weight_decay,
+        lr_schedule=lr_schedule, total_steps=total_steps,
+        warmup_steps=warmup_steps, lr_min=lr_min,
+    )
+    compile_kw = dict(optimizer=optimizer, loss=loss_dict)
+    if loss_weights:
+        compile_kw["loss_weights"] = loss_weights
+    model.compile(**compile_kw)
+    log(f"\n🚀 Phase 2: Fine-tuning ({epochs} épocas, LR={lr}, opt={optimizer_name})")
 
     t0 = time.time()
     history = model.fit(

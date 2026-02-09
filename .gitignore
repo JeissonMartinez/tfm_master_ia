@@ -16,9 +16,24 @@ __pycache__/
 02_ING_MODELOS/models/checkpoints/ssd_v2_best.keras
 01_ING_DATOS/Datasets_options/datasets_download
 01_ING_DATOS/Datasets_options/dataset_maestro
-01_ING_DATOS/Datasets_options/Chat_githubCopilot.md
 02_ING_MODELOS/datasets*.gstmp
 *.npy
 *.gstmp
 02_ING_MODELOS/GoogleCloudAI/outputs/yolo26n_v1/train/weights/best_saved_model/tmp_tflite_int8_calibration_images.npy_.gstmp
 02_ING_MODELOS/GoogleCloudAI/outputs/yolo11n_v1/train/weights/best_saved_model/tmp_tflite_int8_calibration_images.npy
+
+# Chats GitHub Copilot
+01_ING_DATOS/Datasets_options/Chat_githubCopilot.md
+01_ING_DATOS/Datasets/Chat_githubCopilot.md
+01_ING_DATOS/Docs/Diagnostico_githubCopilot_ClaudeOpus4-5.md
+
+# Datasets
+01_ING_DATOS/Datasets/dataset_maestro_aug
+01_ING_DATOS/Datasets/TFM_Dataset.v1-v1_2026-02-06_5-48pm.coco
+01_ING_DATOS/Docs/Dataset_Original.zip
+02_ING_MODELOS/datasets/yolo26.zip
+02_ING_MODELOS/datasets/yolo_v11.zip
+02_ING_MODELOS/datasets/TFM_Dataset-coco-mmdetection.zip
+02_ING_MODELOS/datasets/yolo26
+02_ING_MODELOS/datasets/tfrecord
+

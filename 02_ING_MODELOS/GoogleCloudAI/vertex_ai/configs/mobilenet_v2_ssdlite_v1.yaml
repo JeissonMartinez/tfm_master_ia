@@ -1,0 +1,82 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: MobileNetV2 + SSD-Lite — v1
+# ─────────────────────────────────────────────────────────────
+# Primera iteración con MobileNetV2 (backbone_alpha=0.5).
+# Hereda las mejoras validadas de MBNTv3S_v2:
+#   - AdamW + cosine LR schedule + warmup
+#   - cls_loss_weight=2.0 para penalizar confusiones de clase
+#   - label_smoothing=0.1 contra sobreconfianza
+#   - Augmentación heavy
+#   - L2 reg=5e-4
+# Diferencias vs V3-Small:
+#   - backbone_alpha=0.5 (V3S usaba 1.0 del backbone completo)
+#   - minimalistic no tiene efecto en V2 (parámetro ignorado)
+#   - MobileNetV2 usa inverted residuals (~1M params con alpha=0.5)
+# ─────────────────────────────────────────────────────────────
+
+model:
+  family: MobileNetV2
+  variant: MobileNetV2_SSDLite
+  version: v1
+  description: >
+    MobileNetV2 alpha=0.5 con mejoras heredadas de MBNTv3S_v2.
+    Inverted residuals + AdamW + cosine + label smoothing.
+
+dataset:
+  name: tfrecord
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/tfrecord
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 224
+
+common:
+  batch_size: 64            # T4 soporta batch 64 con MBN (modelo ligero)
+  patience: 35              # tolerar plateau en fases largas
+  seed: 42
+  conf_threshold: 0.30
+  iou_threshold: 0.45
+
+mobilenet:
+  # ── Phase 1 — backbone congelado, entrenar cabezas SSD ──
+  phase1_epochs: 50         # misma duración que v3S_v2
+  phase1_lr: 0.003          # LR agresivo, backbone congelado lo tolera
+
+  # ── Phase 2 — fine-tuning parcial del backbone ──
+  phase2_epochs: 250        # convergencia completa con patience=35
+  phase2_lr: 0.0001         # fine-tuning conservador
+  phase2_unfreeze_layers: 60 # descongelar capas del backbone
+
+  # ── Optimizador ──
+  optimizer: AdamW           # AdamW con weight decay explícito
+  weight_decay: 0.0005       # regularización vía optimizer
+  lr_schedule: cosine        # cosine decay proactivo
+  lr_warmup_epochs: 10       # warmup lineal en Phase 1
+  lr_min: 0.000001           # LR mínimo para cosine
+
+  # ── Loss ──
+  label_smoothing: 0.1       # suavizar targets, reduce sobreconfianza
+  cls_loss_weight: 2.0       # penalizar errores de clasificación
+  box_loss_weight: 1.0
+  obj_loss_weight: 1.0
+
+  # ── Augmentación ──
+  augmentation_level: heavy  # flip+bright+contrast+saturation+hue
+
+  # ── Arquitectura ──
+  backbone_alpha: 0.5        # width multiplier → ~1M params (compromiso)
+  minimalistic: false        # no tiene efecto en V2, explícito por claridad
+  dropout_rate: 0.2
+  l2_reg: 0.0005             # regularización L2 complementaria
+  feature_channels: 128      # canales de las cabezas SSD-Lite
+
+  # ── Anclas SSD (mismos que v3S_v2 — más granulares) ──
+  anchor_sizes: [0.05, 0.1, 0.2, 0.35, 0.5, 0.7, 0.9]
+  anchor_ratios: [1.0, 2.0, 0.5, 3.0, 0.33]
+
+  # ── Focal Loss ──
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+  neg_pos_ratio: 3
+
+  # ── Pesos de clase ──
+  use_class_weights: true
+  class_weight_method: effective_samples

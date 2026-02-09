@@ -120,6 +120,17 @@ _MOBILENET_DEFAULTS: Dict[str, Any] = {
     "use_copy_paste": False,
     "use_class_weights": True,
     "class_weight_method": "effective_samples",
+    # ── v2: optimizer & LR schedule ──
+    "optimizer": "Adam",
+    "weight_decay": 0.0,
+    "lr_schedule": "reduce_on_plateau",
+    "lr_warmup_epochs": 0,
+    "lr_min": 1e-7,
+    # ── v2: loss weights & label smoothing ──
+    "label_smoothing": 0.0,
+    "cls_loss_weight": 1.0,
+    "box_loss_weight": 1.0,
+    "obj_loss_weight": 1.0,
 }
 
 
