@@ -20,3 +20,5 @@ __pycache__/
 02_ING_MODELOS/datasets*.gstmp
 *.npy
 *.gstmp
+02_ING_MODELOS/GoogleCloudAI/outputs/yolo26n_v1/train/weights/best_saved_model/tmp_tflite_int8_calibration_images.npy_.gstmp
+02_ING_MODELOS/GoogleCloudAI/outputs/yolo11n_v1/train/weights/best_saved_model/tmp_tflite_int8_calibration_images.npy

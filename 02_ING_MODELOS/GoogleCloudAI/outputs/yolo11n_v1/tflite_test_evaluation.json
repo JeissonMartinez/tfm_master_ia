@@ -1,0 +1,31 @@
+{
+  "model_name": "yolo11n_v1_tflite",
+  "family": "tflite",
+  "split": "test",
+  "mAP50": 0.8063849795133937,
+  "mAP50_95": 0.6011747206072401,
+  "precision": 0.8316206218532427,
+  "recall": 0.7187552423978156,
+  "f1": 0.7710797045101014,
+  "per_class_ap50": {
+    "dog": 0.775765479873844,
+    "door": 0.9020392837314628,
+    "obstacle": 0.7461362378928724,
+    "person": 0.7573627741704494,
+    "stair": 0.8506211218983396
+  },
+  "per_class_precision": {},
+  "per_class_recall": {},
+  "per_class_f1": {},
+  "n_images": 0,
+  "n_detections": 0,
+  "n_ground_truths": 0,
+  "avg_inference_ms": 5.377459370098726,
+  "class_names": [
+    "dog",
+    "door",
+    "obstacle",
+    "person",
+    "stair"
+  ]
+}

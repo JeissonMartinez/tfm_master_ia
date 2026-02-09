@@ -1,14 +1,23 @@
 {
   "model_name": "best",
   "family": "yolo",
-  "tflite_path": "",
-  "size_mb": 0.0,
-  "input_shape": [],
-  "output_shapes": {},
+  "tflite_path": "/Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/GoogleCloudAI/outputs/yolo11n_v1/tflite/best_int8.tflite",
+  "size_mb": 2.682260513305664,
+  "input_shape": [
+    "1",
+    "224",
+    "224",
+    "3"
+  ],
+  "output_shapes": {
+    "Identity": [
+      "1",
+      "9",
+      "1029"
+    ]
+  },
   "quantization": "int8",
-  "export_time_s": 0.0,
-  "esp32_compatible": false,
-  "errors": [
-    "'NoneType' object has no attribute 'shape'"
-  ]
+  "export_time_s": 2300.0949959754944,
+  "esp32_compatible": true,
+  "errors": []
 }

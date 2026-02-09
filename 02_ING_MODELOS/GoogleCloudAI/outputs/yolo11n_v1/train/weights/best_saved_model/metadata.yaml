@@ -1,0 +1,26 @@
+description: Ultralytics YOLO11n model trained on /tmp/training/datasets/yolo26/data.yaml
+author: Ultralytics
+date: '2026-02-08T17:00:57.804479'
+version: 8.4.9
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 224
+- 224
+names:
+  0: dog
+  1: door
+  2: obstacle
+  3: person
+  4: stair
+args:
+  batch: 1
+  fraction: 1.0
+  half: false
+  int8: true
+  nms: false
+channels: 3
+end2end: false

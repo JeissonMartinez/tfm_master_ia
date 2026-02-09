@@ -82,7 +82,8 @@
             "person": 0.07407901955874795,
             "stair": 0.49837924711419496
         },
-        "framework_avg_latency_ms": 0.0
+        "framework_avg_latency_ms": 0.0,
+        "framework_model_size_mb": 5.5
     },
     "notes": ""
 }
