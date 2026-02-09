@@ -35,6 +35,7 @@ def compare_framework_vs_tflite(
     conf: float = 0.25,
     iou_thr: float = 0.45,
     model_path: Optional[str] = None,
+    use_offset_regression: bool = False,
 ) -> TFLiteVerificationResult:
     """Compare framework model to its TFLite counterpart.
 
@@ -67,6 +68,7 @@ def compare_framework_vs_tflite(
             model=framework_model, images=images,
             class_names=class_names, anchors=anchors,
             conf_threshold=conf, iou_threshold=iou_thr,
+            use_offset_regression=use_offset_regression,
         )
 
     # TFLite predictions
@@ -74,6 +76,8 @@ def compare_framework_vs_tflite(
         tflite_path=tflite_path, images=images,
         class_names=class_names, conf_threshold=conf,
         iou_threshold=iou_thr,
+        anchors=anchors,
+        use_offset_regression=use_offset_regression,
     )
 
     # compute agreement

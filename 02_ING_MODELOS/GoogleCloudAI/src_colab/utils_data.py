@@ -654,6 +654,7 @@ def create_mobilenet_pipeline(
     shuffle: bool = True,
     buffer_size: int = 1000,
     max_objects: int = 50,
+    use_offset_regression: bool = False,
 ):
     """Build a complete tf.data pipeline from TFRecord → SSD targets.
 
@@ -667,6 +668,10 @@ def create_mobilenet_pipeline(
         Anchor boxes [A, 4] in [xc, yc, w, h] normalised.
     class_names : list[str]
         Ordered list of class names.
+    use_offset_regression : bool
+        When True, bbox targets are encoded as SSD-standard offsets
+        from the matched anchor.  When False (default), raw absolute
+        GT coordinates are used (legacy behaviour).
     batch_size, imgsz, augment_level, shuffle, buffer_size, max_objects:
         Pipeline configuration.
 
@@ -706,7 +711,8 @@ def create_mobilenet_pipeline(
             gt_boxes = boxes_np[:n]
             gt_cls = class_ids_np[:n]
             obj_t, cls_t, bbox_t = encode_targets(
-                gt_boxes, gt_cls, anchors, num_classes
+                gt_boxes, gt_cls, anchors, num_classes,
+                use_offset_regression=use_offset_regression,
             )
             return (
                 obj_t.astype(np.float32),
@@ -831,14 +837,73 @@ def compute_iou_matrix(
     return np.where(union > 0, inter_area / union, 0).astype(np.float32)
 
 
+def _encode_box_offsets(
+    gt_box: np.ndarray,
+    anchor: np.ndarray,
+    variance: Tuple[float, float] = (0.1, 0.2),
+) -> np.ndarray:
+    """Encode a single GT box as SSD-standard offsets from an anchor.
+
+    Both ``gt_box`` and ``anchor`` are [xc, yc, w, h] normalised.
+
+    Returns [Δcx, Δcy, Δw, Δh] where:
+        Δcx = (gt_cx - a_cx) / (a_w * var[0])
+        Δcy = (gt_cy - a_cy) / (a_h * var[0])
+        Δw  = ln(gt_w / a_w) / var[1]
+        Δh  = ln(gt_h / a_h) / var[1]
+    """
+    eps = 1e-6
+    dx = (gt_box[0] - anchor[0]) / (anchor[2] * variance[0] + eps)
+    dy = (gt_box[1] - anchor[1]) / (anchor[3] * variance[0] + eps)
+    dw = np.log(gt_box[2] / (anchor[2] + eps) + eps) / variance[1]
+    dh = np.log(gt_box[3] / (anchor[3] + eps) + eps) / variance[1]
+    return np.array([dx, dy, dw, dh], dtype=np.float32)
+
+
+def decode_box_offsets(
+    offsets: np.ndarray,
+    anchors: np.ndarray,
+    variance: Tuple[float, float] = (0.1, 0.2),
+) -> np.ndarray:
+    """Decode SSD offset predictions back to absolute [xc, yc, w, h].
+
+    Parameters
+    ----------
+    offsets : (N, 4)  predicted [Δcx, Δcy, Δw, Δh]
+    anchors : (N, 4)  anchor boxes [xc, yc, w, h]
+    variance : center / size variance scalars
+
+    Returns
+    -------
+    (N, 4)  decoded boxes in [xc, yc, w, h] normalised, clipped to [0, 1].
+    """
+    cx = offsets[:, 0] * anchors[:, 2] * variance[0] + anchors[:, 0]
+    cy = offsets[:, 1] * anchors[:, 3] * variance[0] + anchors[:, 1]
+    w = anchors[:, 2] * np.exp(np.clip(offsets[:, 2] * variance[1], -10, 10))
+    h = anchors[:, 3] * np.exp(np.clip(offsets[:, 3] * variance[1], -10, 10))
+    cx = np.clip(cx, 0, 1)
+    cy = np.clip(cy, 0, 1)
+    w = np.clip(w, 0, 1)
+    h = np.clip(h, 0, 1)
+    return np.stack([cx, cy, w, h], axis=-1).astype(np.float32)
+
+
 def encode_targets(
     gt_boxes: np.ndarray,
     gt_classes: np.ndarray,
     anchors: np.ndarray,
     num_classes: int,
     iou_threshold: float = 0.35,
+    use_offset_regression: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Encode GT boxes to SSD anchor targets.
+
+    Parameters
+    ----------
+    use_offset_regression : bool
+        When True, bbox targets are SSD-standard offsets [Δcx,Δcy,Δw,Δh]
+        relative to the matched anchor.  When False (default / legacy), bbox
+        targets are the raw absolute GT coordinates [xc,yc,w,h].
 
     Returns:
         (objectness (A,1), class (A,C), bbox (A,4))
@@ -853,25 +918,27 @@ def encode_targets(
 
     iou_mat = compute_iou_matrix(gt_boxes, anchors)
 
-    # Best anchor per GT
-    best_a = np.argmax(iou_mat, axis=1)
-    for gi, ai in enumerate(best_a):
+    def _assign(ai: int, gi: int):
         c = int(gt_classes[gi])
         obj[ai, 0] = 1.0
         cls[ai] = 0.0
         cls[ai, c] = 1.0
-        bbox[ai] = gt_boxes[gi]
+        if use_offset_regression:
+            bbox[ai] = _encode_box_offsets(gt_boxes[gi], anchors[ai])
+        else:
+            bbox[ai] = gt_boxes[gi]
+
+    # Best anchor per GT
+    best_a = np.argmax(iou_mat, axis=1)
+    for gi, ai in enumerate(best_a):
+        _assign(int(ai), gi)
 
     # All anchors above threshold
     best_gt = np.argmax(iou_mat, axis=0)
     max_iou = np.max(iou_mat, axis=0)
     for ai in np.where(max_iou >= iou_threshold)[0]:
         gi = best_gt[ai]
-        c = int(gt_classes[gi])
-        obj[ai, 0] = 1.0
-        cls[ai] = 0.0
-        cls[ai, c] = 1.0
-        bbox[ai] = gt_boxes[gi]
+        _assign(int(ai), int(gi))
 
     return obj, cls, bbox
 

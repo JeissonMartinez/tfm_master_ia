@@ -222,6 +222,7 @@ def evaluate_mobilenet_model(
     iou_threshold: float = 0.5,
     anchors: Optional[np.ndarray] = None,
     model_name: str = "mobilenet_ssd",
+    use_offset_regression: bool = False,
 ) -> EvaluationResults:
     """Evaluate a MobileNet-SSD model on a tf.data.Dataset.
 
@@ -269,8 +270,12 @@ def evaluate_mobilenet_model(
                 combined_conf = obj_scores[valid_mask] * cls_confs
                 bboxes = bbox_out[b][valid_mask]
 
-                # Modelo predice coordenadas absolutas [xc,yc,w,h] (sigmoid)
-                # Convertir a [x1,y1,x2,y2] para cálculo de IoU
+                # Offset regression: decodificar deltas → coords absolutas
+                if use_offset_regression and anchors is not None:
+                    from .utils_data import decode_box_offsets
+                    bboxes = decode_box_offsets(bboxes, anchors[valid_mask])
+
+                # Convertir [xc,yc,w,h] a [x1,y1,x2,y2] para cálculo de IoU
                 bboxes = _xywh_to_xyxy(bboxes)
 
                 # NMS per-class para eliminar duplicados
@@ -289,7 +294,9 @@ def evaluate_mobilenet_model(
 
             # ground truths — deduplicar desde anchor-encoding
             unique_gts = _extract_unique_gts_from_anchors(
-                gt_obj[b], gt_cls[b], gt_bbox[b]
+                gt_obj[b], gt_cls[b], gt_bbox[b],
+                anchors=anchors,
+                use_offset_regression=use_offset_regression,
             )
             for cls_id, bbox_xyxy in unique_gts:
                 all_ground_truths.append((img_idx, cls_id, bbox_xyxy))
@@ -323,6 +330,9 @@ def evaluate_tflite_model(
     # --- YOLO path ---
     dataset_dir: Optional[str] = None,
     split: str = "test",
+    # --- Offset regression ---
+    anchors: Optional[np.ndarray] = None,
+    use_offset_regression: bool = False,
 ) -> EvaluationResults:
     """Evaluate a TFLite model on a complete dataset split.
 
@@ -361,6 +371,8 @@ def evaluate_tflite_model(
                 class_names=class_names,
                 conf_threshold=conf_threshold,
                 iou_threshold=iou_threshold,
+                anchors=anchors,
+                use_offset_regression=use_offset_regression,
             )
             all_times.append(avg_ms)
 
@@ -379,7 +391,9 @@ def evaluate_tflite_model(
 
                 # Ground truths — deduplicar desde anchor-encoding
                 unique_gts = _extract_unique_gts_from_anchors(
-                    gt_obj[b], gt_cls[b], gt_bbox[b]
+                    gt_obj[b], gt_cls[b], gt_bbox[b],
+                    anchors=anchors,
+                    use_offset_regression=use_offset_regression,
                 )
                 for cls_id, bbox_xyxy in unique_gts:
                     all_ground_truths.append((img_idx, cls_id, bbox_xyxy))
@@ -493,6 +507,8 @@ def _extract_unique_gts_from_anchors(
     gt_obj: np.ndarray,
     gt_cls: np.ndarray,
     gt_bbox: np.ndarray,
+    anchors: Optional[np.ndarray] = None,
+    use_offset_regression: bool = False,
 ) -> List[Tuple[int, Tuple[float, ...]]]: 
     """Extract unique ground-truth boxes from anchor-encoded SSD targets.
 
@@ -504,7 +520,10 @@ def _extract_unique_gts_from_anchors(
     ----------
     gt_obj : (A, 1) objectness targets for one image.
     gt_cls : (A, C) one-hot class targets for one image.
-    gt_bbox : (A, 4) bbox targets [xc,yc,w,h] for one image.
+    gt_bbox : (A, 4) bbox targets [xc,yc,w,h] or offsets for one image.
+    anchors : (A, 4) anchor boxes [xc,yc,w,h] — required when offset mode.
+    use_offset_regression : if True, gt_bbox contains SSD offsets that must
+        be decoded back to absolute [xc,yc,w,h] before deduplication.
 
     Returns
     -------
@@ -515,7 +534,13 @@ def _extract_unique_gts_from_anchors(
         return []
 
     cls_ids = np.argmax(gt_cls[pos_mask], axis=-1)
-    bboxes = gt_bbox[pos_mask]  # [xc, yc, w, h]
+    bboxes = gt_bbox[pos_mask]  # offsets or [xc, yc, w, h]
+
+    # Offset regression: decodificar deltas → coords absolutas
+    if use_offset_regression and anchors is not None:
+        from .utils_data import decode_box_offsets
+        bboxes = decode_box_offsets(bboxes, anchors[pos_mask])
+
     bboxes_xyxy = _xywh_to_xyxy(bboxes)
 
     # Round to 4 decimals to avoid floating-point duplicates

@@ -162,6 +162,9 @@ def main() -> None:
     )
 
     # 4.1 Generar anclas
+    use_offset_regression = mc.get("use_offset_regression", False)
+    if use_offset_regression:
+        print("🔧 Offset regression ACTIVADO (SSD-standard Δcx/Δcy/Δw/Δh)")
     anchor_sizes = mc.get("anchor_sizes", [0.1, 0.2, 0.37, 0.54, 0.71, 0.88])
     anchor_ratios = mc.get("anchor_ratios", [1.0, 2.0, 0.5, 3.0, 0.33])
     anchors = generate_anchors(
@@ -177,11 +180,13 @@ def main() -> None:
         dataset_path, "train", anchors, setup.class_names,
         batch_size=setup.batch_size, imgsz=setup.img_size,
         augment_level=mc.get("augmentation_level", "medium"),
+        use_offset_regression=use_offset_regression,
     )
     val_ds = create_mobilenet_pipeline(
         dataset_path, "val", anchors, setup.class_names,
         batch_size=setup.batch_size, imgsz=setup.img_size,
         augment_level="none",
+        use_offset_regression=use_offset_regression,
     )
     print(f"📊 Pipeline: train={train_ds}, val={val_ds}")
 
@@ -209,6 +214,7 @@ def main() -> None:
         dropout_rate=mc.get("dropout_rate", 0.2),
         feature_channels=mc.get("feature_channels", 128),
         l2_reg=mc.get("l2_reg", 1e-4),
+        use_offset_regression=use_offset_regression,
     )
     print_model_summary(model, family)
     estimate_model_size(model, family)
@@ -388,6 +394,7 @@ def main() -> None:
         imgsz=setup.img_size,
         anchors=anchors,
         model_name=setup.experiment_name,
+        use_offset_regression=use_offset_regression,
     )
 
     cm_val_path = os.path.join(exp_dir, "val_confusion_matrix.png")
@@ -416,6 +423,7 @@ def main() -> None:
         model=model, images=sample_imgs,
         class_names=setup.class_names,
         anchors=anchors,
+        use_offset_regression=use_offset_regression,
     )
     infer_path = os.path.join(exp_dir, "inference_samples.png")
     visualize_predictions(
@@ -438,6 +446,7 @@ def main() -> None:
         dataset_path, "test", anchors, setup.class_names,
         batch_size=setup.batch_size, imgsz=setup.img_size,
         augment_level="none",
+        use_offset_regression=use_offset_regression,
     )
     test_ev = evaluate_mobilenet_model(
         model=model,
@@ -446,6 +455,7 @@ def main() -> None:
         imgsz=setup.img_size,
         anchors=anchors,
         model_name=setup.experiment_name,
+        use_offset_regression=use_offset_regression,
     )
     test_ev.split = "test"
 
@@ -534,6 +544,7 @@ def main() -> None:
             family=family,
             anchors=anchors,
             imgsz=setup.img_size,
+            use_offset_regression=use_offset_regression,
         )
         save_comparison_result(
             comparison, os.path.join(exp_dir, "comparison_result.json")
@@ -549,6 +560,8 @@ def main() -> None:
             iou_threshold=0.5,
             model_name=f"{setup.experiment_name}_tflite",
             test_ds=test_ds,
+            anchors=anchors,
+            use_offset_regression=use_offset_regression,
         )
 
         # 11.3 Gráfica comparativa
@@ -564,6 +577,7 @@ def main() -> None:
             model=model, images=compare_imgs,
             class_names=setup.class_names,
             anchors=anchors,
+            use_offset_regression=use_offset_regression,
         )
         tfl_vis_dets, _ = predict_tflite(
             tflite_path=export_result.tflite_path,
@@ -571,6 +585,8 @@ def main() -> None:
             class_names=setup.class_names,
             conf_threshold=0.25,
             iou_threshold=0.45,
+            anchors=anchors,
+            use_offset_regression=use_offset_regression,
         )
 
         sbs_path = os.path.join(exp_dir, "fw_vs_tflite_samples.png")

@@ -1,0 +1,83 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: MobileNetV2 + SSD-Lite — v2 (Ciclo 2)
+# ─────────────────────────────────────────────────────────────
+# Cambio clave respecto a v1:
+#   - use_offset_regression: true  → bbox head predice deltas SSD-standard
+#     (Δcx, Δcy, Δw, Δh) respecto a cada ancla, en lugar de coordenadas
+#     absolutas [xc,yc,w,h] con sigmoid. Corrige el fallo arquitectónico
+#     fundamental que limitaba la precisión de localización en v1.
+#   - bbox head usa activación linear (en vez de sigmoid).
+#   - Variance = (0.1, 0.2) — estándar en SSD/RetinaNet.
+#   - Sin otros cambios para aislar el efecto del offset regression.
+# ─────────────────────────────────────────────────────────────
+
+model:
+  family: MobileNetV2
+  variant: MobileNetV2_SSDLite
+  version: v2
+  description: >
+    Ciclo 2 — Offset regression SSD-standard (Δcx/Δcy/Δw/Δh).
+    Corrige predicción directa sigmoid → deltas relativas a anclas.
+    Resto de hiperparámetros idénticos a v1 para comparación limpia.
+
+dataset:
+  name: tfrecord
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/tfrecord
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 224
+
+common:
+  batch_size: 64
+  patience: 35
+  seed: 42
+  conf_threshold: 0.30
+  iou_threshold: 0.45
+
+mobilenet:
+  # ── Phase 1 — backbone congelado, entrenar cabezas SSD ──
+  phase1_epochs: 50
+  phase1_lr: 0.003
+
+  # ── Phase 2 — fine-tuning parcial del backbone ──
+  phase2_epochs: 250
+  phase2_lr: 0.0001
+  phase2_unfreeze_layers: 60
+
+  # ── Optimizador ──
+  optimizer: AdamW
+  weight_decay: 0.0005
+  lr_schedule: cosine
+  lr_warmup_epochs: 10
+  lr_min: 0.000001
+
+  # ── Loss ──
+  label_smoothing: 0.1
+  cls_loss_weight: 2.0
+  box_loss_weight: 1.0
+  obj_loss_weight: 1.0
+
+  # ── Augmentación ──
+  augmentation_level: heavy
+
+  # ── Arquitectura ──
+  backbone_alpha: 0.5
+  minimalistic: false
+  dropout_rate: 0.2
+  l2_reg: 0.0005
+  feature_channels: 128
+
+  # ── Anclas SSD ──
+  anchor_sizes: [0.05, 0.1, 0.2, 0.35, 0.5, 0.7, 0.9]
+  anchor_ratios: [1.0, 2.0, 0.5, 3.0, 0.33]
+
+  # ── Focal Loss ──
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+  neg_pos_ratio: 3
+
+  # ── Pesos de clase ──
+  use_class_weights: true
+  class_weight_method: effective_samples
+
+  # ── NUEVO en v2: offset regression ──
+  use_offset_regression: true

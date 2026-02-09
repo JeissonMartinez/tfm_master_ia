@@ -153,7 +153,8 @@ def _ssd_lite_conv_block(x, filters, kernel=3, stride=1, bn=True, name=""):
     return x
 
 
-def _ssd_lite_head(features, num_anchors, num_classes, feat_ch=128, name="ssd"):
+def _ssd_lite_head(features, num_anchors, num_classes, feat_ch=128,
+                   use_offset_regression=False, name="ssd"):
     import tensorflow as tf
     x = _ssd_lite_conv_block(features, feat_ch, name=f"{name}_sh1")
     x = _ssd_lite_conv_block(x, feat_ch, name=f"{name}_sh2")
@@ -170,7 +171,12 @@ def _ssd_lite_head(features, num_anchors, num_classes, feat_ch=128, name="ssd"):
 
     bbox = tf.keras.layers.Conv2D(num_anchors * 4, 1, padding="same", name=f"{name}_bb_c")(x)
     bbox = tf.keras.layers.Reshape((total, 4), name=f"{name}_bb_r")(bbox)
-    bbox = tf.keras.layers.Activation("sigmoid", name="bbox_out")(bbox)
+    if use_offset_regression:
+        # Linear output: predicted offsets [Δcx, Δcy, Δw, Δh] are unbounded
+        bbox = tf.keras.layers.Activation("linear", name="bbox_out")(bbox)
+    else:
+        # Legacy: sigmoid constrains predictions to [0, 1] (absolute coords)
+        bbox = tf.keras.layers.Activation("sigmoid", name="bbox_out")(bbox)
 
     return {"objectness": obj, "class_out": cls, "bbox_out": bbox}
 
@@ -186,12 +192,16 @@ def build_mobilenet_ssd(
     dropout_rate: float = 0.2,
     feature_channels: int = 128,
     l2_reg: float = 0.0,
+    use_offset_regression: bool = False,
 ) -> Any:
     """Build a MobileNet + SSD-Lite detection model.
 
     Args:
         version: ``"V2"`` or ``"V3"``
         variant: ``"Small"`` or ``"Large"`` (only for V3)
+        use_offset_regression: When True, the bbox head uses linear
+            activation (unbounded offsets).  When False (default /
+            legacy), bbox uses sigmoid (absolute-coordinate prediction).
         Other args map directly to Keras builder params.
 
     Returns:
@@ -231,7 +241,9 @@ def build_mobilenet_ssd(
 
     outputs = _ssd_lite_head(
         features, num_anchors_per_cell, num_classes,
-        feat_ch=feature_channels, name="ssd_lite",
+        feat_ch=feature_channels,
+        use_offset_regression=use_offset_regression,
+        name="ssd_lite",
     )
 
     model = tf.keras.Model(inputs=base.input, outputs=outputs, name=model_name)

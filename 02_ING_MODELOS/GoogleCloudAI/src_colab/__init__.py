@@ -65,6 +65,7 @@ from .utils_data import (
     compute_anchor_statistics,
     encode_targets,
     create_mobilenet_pipeline,
+    decode_box_offsets,
 )
 
 # ── model ────────────────────────────────────────────────────────────
@@ -182,7 +183,7 @@ __all__ = [
     "split_yolo_dataset", "delete_yolo_cache",
     "write_tfrecord", "read_tfrecord_dataset",
     "generate_anchors", "compute_anchor_statistics", "encode_targets",
-    "create_mobilenet_pipeline",
+    "create_mobilenet_pipeline", "decode_box_offsets",
     # model
     "YOLO11_SPECS", "YOLO26_SPECS", "MOBILENET_SPECS",
     "load_yolo_model", "build_mobilenet_ssd",

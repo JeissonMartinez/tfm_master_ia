@@ -89,9 +89,19 @@ def predict_mobilenet(
     conf_threshold: float = 0.25,
     iou_threshold: float = 0.45,
     imgsz: int = 224,
+    use_offset_regression: bool = False,
 ) -> List[List[DetectedObject]]:
-    """Run MobileNet-SSD inference on a batch of images [0-1]."""
+    """Run MobileNet-SSD inference on a batch of images [0-1].
+
+    Parameters
+    ----------
+    use_offset_regression : bool
+        When True, ``bbox_out`` is treated as anchor-relative offsets
+        [Δcx, Δcy, Δw, Δh] and decoded using ``anchors``.  When False
+        (default / legacy), ``bbox_out`` is absolute [xc, yc, w, h].
+    """
     import tensorflow as tf
+    from .utils_data import decode_box_offsets
 
     if images.ndim == 3:
         images = np.expand_dims(images, 0)
@@ -115,8 +125,12 @@ def predict_mobilenet(
         combined = obj[mask] * cls_confs
         bboxes = bbox_out[b][mask]
 
-        # El modelo predice coordenadas absolutas [xc, yc, w, h] (sigmoid)
-        # Convertir a [x1, y1, x2, y2] para NMS y visualización
+        if use_offset_regression and anchors is not None:
+            # Decode anchor-relative offsets → absolute [xc, yc, w, h]
+            anchors_masked = anchors[mask]
+            bboxes = decode_box_offsets(bboxes, anchors_masked)
+
+        # Convert [xc, yc, w, h] → [x1, y1, x2, y2] for NMS
         bboxes = _xywh_to_xyxy(bboxes)
 
         # NMS per class
@@ -181,6 +195,8 @@ def predict_tflite(
     class_names: List[str],
     conf_threshold: float = 0.25,
     iou_threshold: float = 0.45,
+    anchors: Optional[np.ndarray] = None,
+    use_offset_regression: bool = False,
 ) -> Tuple[List[List[DetectedObject]], float]:
     """Run TFLite inference. Returns (detections, avg_ms)."""
     import tensorflow as tf
@@ -229,7 +245,8 @@ def predict_tflite(
                     data = (data - qp["zero_points"][0]) * qp["scales"][0]
             out_data[name] = data
 
-        dets = _parse_tflite_outputs(out_data, class_names, conf_threshold, iou_threshold)
+        dets = _parse_tflite_outputs(out_data, class_names, conf_threshold,
+                                     iou_threshold, anchors, use_offset_regression)
         all_dets.append(dets)
 
     avg_ms = float(np.mean(times)) if times else 0.0
@@ -241,8 +258,12 @@ def _parse_tflite_outputs(
     class_names: List[str],
     conf_thr: float,
     iou_thr: float,
+    anchors: Optional[np.ndarray] = None,
+    use_offset_regression: bool = False,
 ) -> List[DetectedObject]:
     """Parse TFLite output tensors into DetectedObject list."""
+    from .utils_data import decode_box_offsets
+
     num_classes = len(class_names)
 
     # --- Identify outputs by shape instead of name ---
@@ -283,6 +304,12 @@ def _parse_tflite_outputs(
     cls_ids = np.argmax(cls_s, axis=-1)
     cls_confs = np.max(cls_s, axis=-1)
     combined = obj_s * cls_confs
+
+    if use_offset_regression and anchors is not None:
+        # Decode anchor-relative offsets → absolute [xc, yc, w, h]
+        # mask was applied to obj_arr; need the same mask applied to anchors
+        anchors_masked = anchors[mask]
+        box_s = decode_box_offsets(box_s, anchors_masked)
 
     # Convertir [xc, yc, w, h] → [x1, y1, x2, y2]
     box_s = _xywh_to_xyxy(box_s)

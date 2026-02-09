@@ -131,6 +131,8 @@ _MOBILENET_DEFAULTS: Dict[str, Any] = {
     "cls_loss_weight": 1.0,
     "box_loss_weight": 1.0,
     "obj_loss_weight": 1.0,
+    # ── v3: offset regression ──
+    "use_offset_regression": False,
 }
 
 
