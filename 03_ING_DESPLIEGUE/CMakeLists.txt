@@ -1,6 +1,12 @@
-# The following five lines of boilerplate have to be in your project's
-# CMakeLists in this exact order for cmake to work correctly
+# ─────────────────────────────────────────────────────────────────────────────
+# TFM — Firmware de detección de objetos para ESP32-S3 (TinyML)
+# ─────────────────────────────────────────────────────────────────────────────
 cmake_minimum_required(VERSION 3.16)
 
+# Componentes extra (esp32-camera, esp-tflite-micro, esp-dl)
+set(EXTRA_COMPONENT_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}/components
+)
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(03_ING_DESPLIEGUE)
+project(tfm_tinyml_detector)

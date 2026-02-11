@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TFM TinyML Detector</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.hdr{background:#1e293b;padding:12px 20px;border-bottom:1px solid #334155;display:flex;align-items:center;gap:12px}
+.hdr h1{font-size:18px;font-weight:600}
+.dot{width:10px;height:10px;border-radius:50%;background:#ef4444;animation:pulse 2s infinite}
+.dot.on{background:#22c55e}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px;max-width:900px;margin:0 auto}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
+.card{background:#1e293b;border-radius:10px;padding:16px;border:1px solid #334155}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:12px}
+.val{font-size:28px;font-weight:700;color:#38bdf8}
+.val.sm{font-size:20px}
+.unit{font-size:13px;color:#64748b;margin-left:4px}
+.row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.row .lbl{color:#94a3b8}
+.row .v{color:#e2e8f0;font-variant-numeric:tabular-nums}
+.bar-wrap{background:#0f172a;border-radius:4px;height:6px;margin-top:6px}
+.bar{height:100%;border-radius:4px;transition:width .3s;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444)}
+.dets{grid-column:1/-1}
+.det-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.det-tag{padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid #334155}
+.det-tag.dog{background:#7c3aed22;border-color:#7c3aed;color:#c4b5fd}
+.det-tag.door{background:#0ea5e922;border-color:#0ea5e9;color:#7dd3fc}
+.det-tag.obstacle{background:#f59e0b22;border-color:#f59e0b;color:#fcd34d}
+.det-tag.person{background:#22c55e22;border-color:#22c55e;color:#86efac}
+.det-tag.stair{background:#ec489922;border-color:#ec4899;color:#f9a8d4}
+#status{font-size:12px;color:#64748b;margin-left:auto}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="dot" id="dot"></div>
+  <h1>TFM TinyML Detector</h1>
+  <span id="status">Conectando…</span>
+</div>
+<div class="grid">
+  <!-- FPS -->
+  <div class="card">
+    <h2>FPS (EMA)</h2>
+    <div class="val" id="fps">--</div>
+    <div class="row"><span class="lbl">Frame</span><span class="v" id="frame">0</span></div>
+    <div class="row"><span class="lbl">Total</span><span class="v" id="total">-- ms</span></div>
+  </div>
+  <!-- Latencia -->
+  <div class="card">
+    <h2>Latencia</h2>
+    <div class="row"><span class="lbl">Preproceso</span><span class="v" id="pre">-- ms</span></div>
+    <div class="row"><span class="lbl">Inferencia</span><span class="v" id="inf">-- ms</span></div>
+    <div class="row"><span class="lbl">Postproceso</span><span class="v" id="post">-- ms</span></div>
+    <div class="row"><span class="lbl">EMA Inferencia</span><span class="v" id="ema_inf">-- ms</span></div>
+  </div>
+  <!-- Memoria -->
+  <div class="card">
+    <h2>Memoria</h2>
+    <div class="row"><span class="lbl">Heap interno</span><span class="v" id="heap">-- KB</span></div>
+    <div class="row"><span class="lbl">PSRAM libre</span><span class="v" id="psram">-- KB</span></div>
+    <div class="row"><span class="lbl">Arena TFLite</span><span class="v" id="arena">-- KB</span></div>
+    <div class="bar-wrap"><div class="bar" id="membar" style="width:0%"></div></div>
+  </div>
+  <!-- Temperatura -->
+  <div class="card">
+    <h2>Sistema</h2>
+    <div class="val sm" id="temp">--°C</div>
+    <div class="row"><span class="lbl">Detecciones</span><span class="v" id="ndets">0</span></div>
+  </div>
+  <!-- Detections -->
+  <div class="card dets">
+    <h2>Detecciones</h2>
+    <div class="det-list" id="detlist"><span style="color:#64748b;font-size:13px">Sin datos</span></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let ws, retry = 0;
+
+function connect() {
+  const host = location.hostname || '192.168.4.1';
+  ws = new WebSocket(`ws://${host}/ws`);
+
+  ws.onopen = () => {
+    $('dot').classList.add('on');
+    $('status').textContent = 'Conectado';
+    retry = 0;
+  };
+
+  ws.onclose = () => {
+    $('dot').classList.remove('on');
+    $('status').textContent = 'Reconectando…';
+    setTimeout(connect, Math.min(1000 * (++retry), 5000));
+  };
+
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      $('fps').textContent = d.ema_fps?.toFixed(1) ?? '--';
+      $('frame').textContent = d.frame ?? 0;
+      $('total').textContent = (d.total_ms?.toFixed(1) ?? '--') + ' ms';
+      $('pre').textContent = (d.pre_ms?.toFixed(1) ?? '--') + ' ms';
+      $('inf').textContent = (d.inf_ms?.toFixed(1) ?? '--') + ' ms';
+      $('post').textContent = (d.post_ms?.toFixed(1) ?? '--') + ' ms';
+      $('ema_inf').textContent = (d.ema_inf_ms?.toFixed(1) ?? '--') + ' ms';
+      $('heap').textContent = (d.heap_int_kb ?? '--') + ' KB';
+      $('psram').textContent = (d.psram_kb ?? '--') + ' KB';
+      $('arena').textContent = (d.arena_kb ?? '--') + ' KB';
+      $('temp').textContent = (d.temp_c?.toFixed(1) ?? '--') + '°C';
+
+      // Memory bar (PSRAM usage %)
+      const totalPsram = 8192; // 8MB approx
+      const used = totalPsram - (d.psram_kb ?? 0);
+      $('membar').style.width = Math.min(100, (used / totalPsram * 100)).toFixed(0) + '%';
+
+      // Detections
+      const dets = d.dets ?? [];
+      $('ndets').textContent = dets.length;
+      const list = $('detlist');
+      if (dets.length === 0) {
+        list.innerHTML = '<span style="color:#64748b;font-size:13px">Ninguna</span>';
+      } else {
+        list.innerHTML = dets.map(det =>
+          `<span class="det-tag ${det.cls}">${det.cls} ${(det.cf*100).toFixed(0)}%</span>`
+        ).join('');
+      }
+    } catch(err) {
+      console.error('Parse error:', err);
+    }
+  };
+}
+
+connect();
+</script>
+</body>
+</html>
