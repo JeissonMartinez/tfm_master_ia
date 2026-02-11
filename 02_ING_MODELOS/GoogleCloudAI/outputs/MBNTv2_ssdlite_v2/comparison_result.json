@@ -1,0 +1,9 @@
+{
+  "tflite_path": "/tmp/training/models/MBNTv2_ssdlite_v2/tflite/MBNTv2_ssdlite_v2_int8.tflite",
+  "n_samples": 20,
+  "agreement_rate": 0.6702127659574468,
+  "avg_iou": 0.7782637302364575,
+  "avg_conf_diff": 0.0511807074385976,
+  "avg_inference_ms": 7.878978450207796,
+  "passed": false
+}
