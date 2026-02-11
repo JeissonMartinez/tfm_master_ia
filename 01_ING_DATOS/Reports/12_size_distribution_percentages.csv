@@ -1,0 +1,6 @@
+Category,Large (>96²),Medium,Small (<32²)
+dog,89.65,9.63,0.72
+door,97.42,2.33,0.25
+obstacle,79.83,18.96,1.22
+person,66.38,30.34,3.27
+stair,96.85,2.98,0.17
