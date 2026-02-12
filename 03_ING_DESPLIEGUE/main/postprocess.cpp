@@ -231,13 +231,14 @@ DetectionResult postprocess_yolo11(
 // ═══════════════════════════════════════════════════════════════════════════
 DetectionResult postprocess_yolo26(
     const float* raw_output,
-    float conf_thr)
+    float conf_thr,
+    bool coords_normalized)
 {
     DetectionResult result;
     result.clear();
 
-    const float inv_w = 1.0f / static_cast<float>(INPUT_WIDTH);
-    const float inv_h = 1.0f / static_cast<float>(INPUT_HEIGHT);
+    const float inv_w = coords_normalized ? 1.0f : (1.0f / static_cast<float>(INPUT_WIDTH));
+    const float inv_h = coords_normalized ? 1.0f : (1.0f / static_cast<float>(INPUT_HEIGHT));
 
     for (int d = 0; d < Y26_MAX_DETS; ++d) {
         const float* row = &raw_output[d * Y26_DET_DIM];

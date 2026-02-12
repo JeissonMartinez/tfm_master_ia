@@ -23,6 +23,9 @@ public:
     void deinit() override;
     const char* runtime_name() const override { return "ESP-DL"; }
     EngineType engine_type() const override { return EngineType::ESP_DL; }
+    bool is_output_int8(int index = 0) const override { return false; }
+    float get_output_scale(int index = 0) const override { return 1.0f; }
+    int32_t get_output_zero_point(int index = 0) const override { return 0; }
 
 private:
     struct Impl;

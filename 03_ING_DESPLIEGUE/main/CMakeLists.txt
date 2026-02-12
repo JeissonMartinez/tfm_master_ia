@@ -28,10 +28,13 @@ idf_component_register(
         esp_psram
         driver
         esp32-camera
-    EMBED_FILES
-        "models/espdl/mobilenetv2_ssdlite_v1.espdl"
-        "models/espdl/yolo11n_v1.espdl"
-        "models/espdl/yolo26n_v1.espdl"
+    PRIV_REQUIRES
+        json
+    # EMBED_FILES para modelos ESP-DL (descomentar cuando estén generados)
+    # EMBED_FILES
+    #     "models/espdl/mobilenetv2_ssdlite_v1.espdl"
+    #     "models/espdl/yolo11n_v1.espdl"
+    #     "models/espdl/yolo26n_v1.espdl"
 )
 
 # C++23

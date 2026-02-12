@@ -4,6 +4,8 @@
 #include "tflite_engine.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
@@ -11,7 +13,8 @@
 
 static const char* TAG = "tflite_engine";
 
-// ─── Número de operadores: 26 (determinado en Conversion_ModelosTFLite.ipynb)
+// ─── Número de operadores: determinado en Conversion_ModelosTFLite.ipynb
+// +1 QUANTIZE + SplitV para modelos full_integer_quant
 static constexpr int NUM_OPS = 26;
 
 struct TFLiteEngine::Impl {
@@ -83,9 +86,9 @@ esp_err_t TFLiteEngine::init(const ModelConfig* config) {
     m_impl->resolver->AddSoftmax();
     m_impl->resolver->AddStridedSlice();
     m_impl->resolver->AddSub();
-    m_impl->resolver->AddTile();
-    m_impl->resolver->AddTopKV2();
     m_impl->resolver->AddTranspose();
+    m_impl->resolver->AddQuantize();   // full_integer_quant models
+    m_impl->resolver->AddSplitV();     // full_integer_quant YOLO11n
     ESP_LOGI(TAG, "OpResolver configurado: %d operadores", NUM_OPS);
 
     // ─── 3. Alojar arena en PSRAM ────────────────────────────────────────
@@ -131,6 +134,11 @@ esp_err_t TFLiteEngine::init(const ModelConfig* config) {
     TfLiteStatus status = m_impl->interpreter->AllocateTensors();
     if (status != kTfLiteOk) {
         ESP_LOGE(TAG, "AllocateTensors() falló — arena demasiado pequeña o ops incompatibles");
+        // Destructor of MicroInterpreter calls FreeSubgraphs() which may
+        // crash if AllocateTensors() left internal state half-initialised.
+        // Leak the interpreter intentionally to avoid Guru Meditation;
+        // the arena free below reclaims most memory.
+        m_impl->interpreter = nullptr;
         deinit();
         return ESP_ERR_NO_MEM;
     }
@@ -142,6 +150,25 @@ esp_err_t TFLiteEngine::init(const ModelConfig* config) {
     ESP_LOGI(TAG, "   Inputs:  %d", m_impl->interpreter->inputs_size());
     ESP_LOGI(TAG, "   Outputs: %d", m_impl->interpreter->outputs_size());
 
+    // Log tensor shapes for diagnostics
+    TfLiteTensor* in0 = m_impl->interpreter->input(0);
+    if (in0 && in0->dims) {
+        ESP_LOGI(TAG, "   Input[0]: type=%d, ndim=%d, shape=[%d,%d,%d,%d]",
+                 in0->type, in0->dims->size,
+                 in0->dims->size > 0 ? in0->dims->data[0] : -1,
+                 in0->dims->size > 1 ? in0->dims->data[1] : -1,
+                 in0->dims->size > 2 ? in0->dims->data[2] : -1,
+                 in0->dims->size > 3 ? in0->dims->data[3] : -1);
+    }
+    TfLiteTensor* out0 = m_impl->interpreter->output(0);
+    if (out0 && out0->dims) {
+        ESP_LOGI(TAG, "   Output[0]: type=%d, ndim=%d, shape=[%d,%d,%d]",
+                 out0->type, out0->dims->size,
+                 out0->dims->size > 0 ? out0->dims->data[0] : -1,
+                 out0->dims->size > 1 ? out0->dims->data[1] : -1,
+                 out0->dims->size > 2 ? out0->dims->data[2] : -1);
+    }
+
     return ESP_OK;
 }
 
@@ -152,9 +179,16 @@ esp_err_t TFLiteEngine::invoke(const int8_t* input) {
     TfLiteTensor* input_tensor = m_impl->interpreter->input(0);
     if (!input_tensor) return ESP_ERR_INVALID_STATE;
 
+    // Diagnóstico pre-invoke
+    ESP_LOGI(TAG, "Input tensor: type=%d dims=%d data=%p",
+             input_tensor->type, input_tensor->dims->size, input_tensor->data.raw);
+    ESP_LOGI(TAG, "Stack libre: %u words",
+             (unsigned)uxTaskGetStackHighWaterMark(nullptr));
+
     memcpy(input_tensor->data.int8, input, INPUT_SIZE);
 
     // Ejecutar inferencia
+    ESP_LOGI(TAG, "Invoke() starting...");
     TfLiteStatus status = m_impl->interpreter->Invoke();
     if (status != kTfLiteOk) {
         ESP_LOGE(TAG, "Invoke() falló");
@@ -223,6 +257,27 @@ int TFLiteEngine::get_output_count() const {
 size_t TFLiteEngine::get_arena_used() const {
     if (!m_impl || !m_impl->interpreter) return 0;
     return m_impl->interpreter->arena_used_bytes();
+}
+
+bool TFLiteEngine::is_output_int8(int index) const {
+    if (!m_impl || !m_impl->interpreter) return false;
+    if (index < 0 || index >= m_impl->interpreter->outputs_size()) return false;
+    TfLiteTensor* tensor = m_impl->interpreter->output(index);
+    return tensor && tensor->type == kTfLiteInt8;
+}
+
+float TFLiteEngine::get_output_scale(int index) const {
+    if (!m_impl || !m_impl->interpreter) return 1.0f;
+    if (index < 0 || index >= m_impl->interpreter->outputs_size()) return 1.0f;
+    TfLiteTensor* tensor = m_impl->interpreter->output(index);
+    return tensor ? tensor->params.scale : 1.0f;
+}
+
+int32_t TFLiteEngine::get_output_zero_point(int index) const {
+    if (!m_impl || !m_impl->interpreter) return 0;
+    if (index < 0 || index >= m_impl->interpreter->outputs_size()) return 0;
+    TfLiteTensor* tensor = m_impl->interpreter->output(index);
+    return tensor ? tensor->params.zero_point : 0;
 }
 
 void TFLiteEngine::deinit() {

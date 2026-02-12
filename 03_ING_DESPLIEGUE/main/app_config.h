@@ -65,7 +65,7 @@ static const char* const CLASS_NAMES[NUM_CLASSES] = {
 // ─── Task priorities & cores ─────────────────────────────────────────────
 #define INFERENCE_TASK_CORE      0
 #define INFERENCE_TASK_PRIORITY  (configMAX_PRIORITIES - 1)
-#define INFERENCE_TASK_STACK     (16 * 1024)
+#define INFERENCE_TASK_STACK     (32 * 1024)
 
 #define WIFI_TASK_CORE           1
 // WiFi/HTTP usan prioridades por defecto de ESP-IDF

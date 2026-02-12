@@ -8,6 +8,7 @@
 #pragma once
 
 #include "app_config.h"
+#include "esp_err.h"
 
 /// Initialise postprocessing (may pre-allocate scratch buffers in PSRAM).
 esp_err_t postprocess_init();
@@ -40,9 +41,11 @@ DetectionResult postprocess_yolo11(
 /// NMS already applied by the model — only confidence filtering needed.
 /// @param raw_output  pointer to 300×6 floats
 /// @param conf_thr    confidence threshold
+/// @param coords_normalized  true if coords are already in [0,1] (fullint8 models)
 DetectionResult postprocess_yolo26(
     const float* raw_output,   // 300 × 6
-    float conf_thr = DEFAULT_CONF_THRESHOLD);
+    float conf_thr = DEFAULT_CONF_THRESHOLD,
+    bool coords_normalized = false);
 
 /// Release scratch buffers.
 void postprocess_deinit();

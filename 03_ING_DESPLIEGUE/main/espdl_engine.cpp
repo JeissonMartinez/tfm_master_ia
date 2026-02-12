@@ -12,6 +12,7 @@
 #include "espdl_engine.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include <new>            // std::nothrow
 
 // ESP-DL headers — condicionalmente incluidos
 #if __has_include("dl_model_base.h")

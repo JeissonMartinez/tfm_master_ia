@@ -10,6 +10,7 @@
 
 #include <cstring>
 #include <algorithm>
+#include <unistd.h>
 
 static const char* TAG = "webserv";
 

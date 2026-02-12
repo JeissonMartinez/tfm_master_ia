@@ -39,6 +39,8 @@ static const char* TAG = "main";
 #include "models/tflite/mobilenetv2_ssdlite_v1_int8.h"
 #include "models/tflite/yolo11n_v1_int8.h"
 #include "models/tflite/yolo26n_v1_int8.h"
+#include "models/tflite/yolo26n_v1_fullint8.h"
+#include "models/tflite/yolo11n_v1_fullint8.h"
 
 // ─── ESP-DL embedded binaries (linked via EMBED_FILES in CMakeLists) ─────
 #if __has_include("espdl_model_list.h")
@@ -76,24 +78,24 @@ static ModelConfig make_model_config(ModelType type, EngineType engine) {
     switch (type) {
     case ModelType::MOBILENET_SSD:
         cfg.name         = "MBNTv2_ssdlite_v1";
-        cfg.tflite_data  = mobilenetv2_ssdlite_v1_int8_tflite;
-        cfg.tflite_size  = mobilenetv2_ssdlite_v1_int8_tflite_len;
+        cfg.tflite_data  = mobilenetv2_ssdlite_v1_int8_data;
+        cfg.tflite_size  = mobilenetv2_ssdlite_v1_int8_data_len;
         cfg.arena_size   = 1260680 * 3;   // ~3.6 MB
         cfg.conf_threshold = 0.30f;       // SSD needs slightly higher
         break;
 
     case ModelType::YOLO11N:
-        cfg.name         = "YOLO11n_v1";
-        cfg.tflite_data  = yolo11n_v1_int8_tflite;
-        cfg.tflite_size  = yolo11n_v1_int8_tflite_len;
-        cfg.arena_size   = 2812554 * 3;   // ~8.0 MB
+        cfg.name         = "YOLO11n_v1_fullint8";
+        cfg.tflite_data  = yolo11n_v1_fullint8_data;
+        cfg.tflite_size  = yolo11n_v1_fullint8_data_len;
+        cfg.arena_size   = 2893824 * 3;   // ~8.3 MB
         break;
 
     case ModelType::YOLO26N:
-        cfg.name         = "YOLO26n_v1";
-        cfg.tflite_data  = yolo26n_v1_int8_tflite;
-        cfg.tflite_size  = yolo26n_v1_int8_tflite_len;
-        cfg.arena_size   = 2677201 * 3;   // ~7.6 MB
+        cfg.name         = "YOLO26n_v1_fullint8";
+        cfg.tflite_data  = yolo26n_v1_fullint8_data;
+        cfg.tflite_size  = yolo26n_v1_fullint8_data_len;
+        cfg.arena_size   = 2768153 * 3;   // ~7.9 MB
         break;
     }
 
@@ -159,13 +161,42 @@ static DetectionResult run_postprocess(const InferenceEngine* engine,
     }
 
     case ModelType::YOLO11N: {
-        const float* raw = static_cast<const float*>(engine->get_output(0));
-        return postprocess_yolo11(raw, cfg.conf_threshold, cfg.iou_threshold);
+        // Handle both float32 (hybrid) and int8 (fullint8) outputs
+        if (engine->is_output_int8(0)) {
+            // Full INT8: dequantize [1,9,1029] int8 → float
+            const int8_t* raw_q = static_cast<const int8_t*>(engine->get_output(0));
+            float scale = engine->get_output_scale(0);
+            int32_t zp   = engine->get_output_zero_point(0);
+
+            static float deq_buf[9 * 1029];  // Y11: 9 × 1029
+            for (int i = 0; i < 9 * 1029; ++i) {
+                deq_buf[i] = (static_cast<float>(raw_q[i]) - static_cast<float>(zp)) * scale;
+            }
+            return postprocess_yolo11(deq_buf, cfg.conf_threshold, cfg.iou_threshold);
+        } else {
+            const float* raw = static_cast<const float*>(engine->get_output(0));
+            return postprocess_yolo11(raw, cfg.conf_threshold, cfg.iou_threshold);
+        }
     }
 
     case ModelType::YOLO26N: {
-        const float* raw = static_cast<const float*>(engine->get_output(0));
-        return postprocess_yolo26(raw, cfg.conf_threshold);
+        // Handle both float32 (hybrid) and int8 (fullint8) outputs
+        if (engine->is_output_int8(0)) {
+            // Full INT8 model: dequantize int8 output to float
+            const int8_t* raw_q = static_cast<const int8_t*>(engine->get_output(0));
+            float scale = engine->get_output_scale(0);
+            int32_t zp   = engine->get_output_zero_point(0);
+
+            static float deq_buf[300 * 6];  // Y26: 300 dets × 6 fields
+            for (int i = 0; i < 300 * 6; ++i) {
+                deq_buf[i] = (static_cast<float>(raw_q[i]) - static_cast<float>(zp)) * scale;
+            }
+            // Fullint8 output has normalised coordinates [0,1]
+            return postprocess_yolo26(deq_buf, cfg.conf_threshold, /*coords_normalized=*/true);
+        } else {
+            const float* raw = static_cast<const float*>(engine->get_output(0));
+            return postprocess_yolo26(raw, cfg.conf_threshold, /*coords_normalized=*/false);
+        }
     }
     }
 
@@ -180,8 +211,9 @@ static void inference_task(void* param) {
     ModelConfig cfg = make_model_config(static_cast<ModelType>(ACTIVE_MODEL_TYPE),
                                         static_cast<EngineType>(ACTIVE_ENGINE_TYPE));
 
-    // Determine if model requires float or int8 input
-    bool needs_float = (cfg.type == ModelType::YOLO11N || cfg.type == ModelType::YOLO26N);
+    // Full INT8 models use int8 input; hybrid models with float32 I/O need float
+    // YOLO26N fullint8 and MOBILENET_SSD use int8 input; hybrid YOLO models need float
+    bool needs_float = false;  // All active models now use INT8 input
 
     ESP_LOGI(TAG, "═══════════════════════════════════════════════");
     ESP_LOGI(TAG, " Inference loop — modelo: %s", cfg.name);
@@ -276,10 +308,10 @@ extern "C" void app_main(void) {
     ESP_LOGI(TAG, "═══════════════════════════════════════════════════════════");
 
     // ─── Print heap info ─────────────────────────────────────────────
-    ESP_LOGI(TAG, "Heap interno libre: %lu KB",
-             heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024);
-    ESP_LOGI(TAG, "PSRAM libre:        %lu KB",
-             heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024);
+    ESP_LOGI(TAG, "Heap interno libre: %u KB",
+             (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024));
+    ESP_LOGI(TAG, "PSRAM libre:        %u KB",
+             (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
 
     // ─── 1. Init metrics ─────────────────────────────────────────────
     ESP_ERROR_CHECK(metrics_init());

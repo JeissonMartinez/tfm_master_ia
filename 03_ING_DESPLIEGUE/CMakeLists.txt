@@ -3,10 +3,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 cmake_minimum_required(VERSION 3.16)
 
-# Componentes extra (esp32-camera, esp-tflite-micro, esp-dl)
-set(EXTRA_COMPONENT_DIRS
-    ${CMAKE_CURRENT_SOURCE_DIR}/components
-)
+# Los componentes externos (esp32-camera, esp-tflite-micro, esp-dl)
+# se gestionan automáticamente via main/idf_component.yml (ESP Component Manager).
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(tfm_tinyml_detector)

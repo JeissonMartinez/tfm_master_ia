@@ -56,4 +56,13 @@ public:
 
     /// Tipo de motor.
     virtual EngineType engine_type() const = 0;
+
+    /// Returns true if the output tensor at `index` is quantized INT8.
+    virtual bool is_output_int8(int index = 0) const = 0;
+
+    /// Quantization scale of the output tensor (valid only for INT8 outputs).
+    virtual float get_output_scale(int index = 0) const = 0;
+
+    /// Quantization zero-point of the output tensor (valid only for INT8 outputs).
+    virtual int32_t get_output_zero_point(int index = 0) const = 0;
 };

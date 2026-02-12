@@ -23,6 +23,9 @@ public:
     void deinit() override;
     const char* runtime_name() const override { return "TFLite Micro"; }
     EngineType engine_type() const override { return EngineType::TFLITE_MICRO; }
+    bool is_output_int8(int index = 0) const override;
+    float get_output_scale(int index = 0) const override;
+    int32_t get_output_zero_point(int index = 0) const override;
 
 private:
     struct Impl;

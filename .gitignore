@@ -10,6 +10,7 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.vscode
 
 # Archivos muy pesados
 02_ING_MODELOS/models/final_export/ssd_v2_model.keras

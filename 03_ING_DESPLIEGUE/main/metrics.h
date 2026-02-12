@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 #pragma once
 
+#include "esp_err.h"
 #include "app_config.h"
 
 /// Initialise metrics (timers, baseline heap snapshot).
