@@ -1,0 +1,7 @@
+# Dependencias gestionadas por el IDF Component Manager
+# Se descargan automáticamente con `idf.py build`
+dependencies:
+  espressif/esp-dl:
+    version: ">=3.0.0"
+  espressif/esp32-camera:
+    version: ">=2.0.0"

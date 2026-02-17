@@ -1,0 +1,6 @@
+path: /Users/admin/Documents/TFM_UNIR/02_ING_MODELOS/datasets/yolo26
+train: train/images
+val: valid/images
+test: test/images
+nc: 5
+names: ['dog', 'door', 'obstacle', 'person', 'stair']

@@ -1,0 +1,33 @@
+{
+  "model_name": "MBNTv2_ssdlite_v2",
+  "family": "mobilenet",
+  "tflite_path": "/tmp/training/models/MBNTv2_ssdlite_v2/tflite/MBNTv2_ssdlite_v2_int8.tflite",
+  "size_mb": 1.2020492553710938,
+  "input_shape": [
+    "1",
+    "224",
+    "224",
+    "3"
+  ],
+  "output_shapes": {
+    "StatefulPartitionedCall_1:2": [
+      "1",
+      "1470",
+      "1"
+    ],
+    "StatefulPartitionedCall_1:1": [
+      "1",
+      "1470",
+      "5"
+    ],
+    "StatefulPartitionedCall_1:0": [
+      "1",
+      "1470",
+      "4"
+    ]
+  },
+  "quantization": "int8",
+  "export_time_s": 18.256439447402954,
+  "esp32_compatible": true,
+  "errors": []
+}

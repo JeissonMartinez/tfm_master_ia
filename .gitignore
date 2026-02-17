@@ -1,15 +1,26 @@
 # Ignorar entornos virtuales en subcarpetas
 01_ING_DATOS/env/
 02_ING_MODELOS/env/
+03_ING_DESPLIEGUE/env
+03_ING_DESPLIEGUE/.venv
+03_ING_DESPLIEGUE/env
+/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/env
+env/
+venv/
+ENV/
+
 
 # Ingorar archivos específicos
 01_ING_DATOS/Docs/Dataset_Original.zip
 02_ING_MODELOS/notebooks/feedback_copilot
+runs
 
 # Ignorar archivos temporales de Python y Jupyter
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.vscode
+.DS_Store
 
 # Archivos muy pesados
 02_ING_MODELOS/models/final_export/ssd_v2_model.keras
@@ -21,6 +32,10 @@ __pycache__/
 *.gstmp
 02_ING_MODELOS/GoogleCloudAI/outputs/yolo26n_v1/train/weights/best_saved_model/tmp_tflite_int8_calibration_images.npy_.gstmp
 02_ING_MODELOS/GoogleCloudAI/outputs/yolo11n_v1/train/weights/best_saved_model/tmp_tflite_int8_calibration_images.npy
+*.pkl
+*.dylib
+*.so
+*.a
 
 # Chats GitHub Copilot
 01_ING_DATOS/Datasets_options/Chat_githubCopilot.md
@@ -37,7 +52,18 @@ __pycache__/
 02_ING_MODELOS/datasets/yolo26
 02_ING_MODELOS/datasets/tfrecord
 01_ING_DATOS/Datasets/dataset_maestro_unificado
+01_ING_DATOS/Datasets/IndoorObjectDetectionCustom-version-original-yolo26.zip
 
 # Documentos privados
 TFE_JeissonMartinezFlorez_Predeposito2.docx
 TFE_JeissonMartinezFlorez_Predeposito2.pdf
+
+# ESP-IDF build artifacts
+**/build/
+**/managed_components/
+**/dependencies.lock
+**/sdkconfig
+**/sdkconfig.old
+
+# Captured images (dataset sessions)
+01_ING_DATOS/Datasets/captured_custom/

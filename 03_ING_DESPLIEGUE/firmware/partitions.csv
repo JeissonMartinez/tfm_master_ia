@@ -1,0 +1,13 @@
+# TFM TinyML - Tabla de particiones para ESP32-S3 (Flash 16 MB)
+# -------------------------------------------------------------------------
+# Partición "models" contiene los 3 .espdl a offsets fijos (4KB-aligned):
+#   MBNTv3S @ 0x000000 (681,088 bytes)
+#   YOLO11n @ 0x0A7000 (2,857,568 bytes)
+#   YOLO26n @ 0x361000 (2,703,184 bytes)
+# Total modelos: ~6 MB
+# -------------------------------------------------------------------------
+# Name,      Type, SubType,  Offset,    Size,       Flags
+nvs,         data, nvs,      0x9000,    0x6000,
+phy_init,    data, phy,      0xF000,    0x1000,
+factory,     app,  factory,  0x10000,   0x400000,
+models,      data, 0x40,     0x410000,  0x700000,

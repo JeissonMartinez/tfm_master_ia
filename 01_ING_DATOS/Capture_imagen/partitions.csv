@@ -1,0 +1,6 @@
+# Capture_imagen — Partition Table (ESP32-S3 Flash 16 MB)
+# Simplificada: sin partición de modelos (solo captura de imágenes)
+# Name,      Type, SubType,  Offset,    Size,       Flags
+nvs,         data, nvs,      0x9000,    0x6000,
+phy_init,    data, phy,      0xF000,    0x1000,
+factory,     app,  factory,  0x10000,   0x400000,
