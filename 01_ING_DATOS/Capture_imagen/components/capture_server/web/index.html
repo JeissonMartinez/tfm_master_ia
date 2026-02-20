@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TFM — Image Capture</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;background:#0d1117;color:#c9d1d9;padding:12px;max-width:900px;margin:0 auto}
+h1{font-size:1.2em;color:#58a6ff;margin-bottom:4px}
+.sub{font-size:.75em;color:#8b949e;margin-bottom:12px}
+.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.status{font-size:.85em;padding:3px 8px;border-radius:4px;background:#da3633;color:#fff}
+.status.ok{background:#238636}
+
+/* Layout: preview + controls side by side on desktop */
+.main{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px}
+@media(min-width:700px){.main{grid-template-columns:400px 1fr}}
+
+.preview{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px;text-align:center}
+.preview img{width:400px;height:300px;object-fit:contain;border-radius:4px;background:#000;display:block;margin:0 auto}
+.preview .lbl{font-size:.7em;color:#8b949e;margin-top:4px}
+
+.controls{display:flex;flex-direction:column;gap:8px}
+.section{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px}
+.section h2{font-size:.9em;color:#58a6ff;margin-bottom:6px}
+
+btn,button,.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:8px 16px;border:1px solid #30363d;border-radius:6px;
+  background:#21262d;color:#c9d1d9;font-family:inherit;font-size:.85em;
+  cursor:pointer;transition:background .15s;gap:6px
+}
+button:hover,.btn:hover{background:#30363d}
+button:active,.btn:active{background:#3a414a}
+button:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:#238636;border-color:#238636;color:#fff}
+.btn-primary:hover{background:#2ea043}
+.btn-danger{background:#da3633;border-color:#da3633;color:#fff}
+.btn-danger:hover{background:#e5534b}
+
+.btn-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+input[type=number]{
+  width:60px;padding:6px 8px;background:#0d1117;border:1px solid #30363d;
+  border-radius:4px;color:#c9d1d9;font-family:inherit;font-size:.85em;text-align:center
+}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:12px}
+.stat{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px;text-align:center}
+.stat .val{font-size:1.3em;color:#f0883e;font-weight:bold}
+.stat .lbl{font-size:.7em;color:#8b949e;margin-top:2px}
+
+.gallery{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;margin-bottom:12px}
+.gallery h2{font-size:.9em;color:#58a6ff;margin-bottom:8px}
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
+.photo-card{
+  background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:4px;
+  text-align:center;position:relative;cursor:pointer;transition:border-color .15s
+}
+.photo-card:hover{border-color:#58a6ff}
+.photo-card.selected{border-color:#f0883e;border-width:2px}
+.photo-card img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:2px;background:#161b22}
+.photo-card .name{font-size:.65em;color:#8b949e;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.photo-card .size{font-size:.6em;color:#484f58}
+
+.gallery-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center}
+.page-info{font-size:.75em;color:#8b949e}
+.pagination{display:flex;gap:4px;align-items:center}
+
+.toast{
+  position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:6px;
+  background:#238636;color:#fff;font-size:.85em;z-index:999;
+  transform:translateY(80px);opacity:0;transition:all .3s
+}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.error{background:#da3633}
+
+.foot{font-size:.7em;color:#484f58;text-align:center;margin-top:12px}
+
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid #484f58;
+  border-top-color:#58a6ff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.msg{font-size:.8em;color:#8b949e;padding:8px;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div>
+    <h1>📷 TFM Image Capture</h1>
+    <div class="sub">ESP32-S3 + OV5640 → SD Card | Dataset Collection</div>
+  </div>
+  <div>
+    <span id="ip">-</span> &nbsp;
+    <span class="status" id="st">Offline</span>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat"><div class="val" id="s-photos">-</div><div class="lbl">Photos</div></div>
+  <div class="stat"><div class="val" id="s-sd">-</div><div class="lbl">SD Free</div></div>
+  <div class="stat"><div class="val" id="s-rssi">-</div><div class="lbl">WiFi dBm</div></div>
+  <div class="stat"><div class="val" id="s-psram">-</div><div class="lbl">PSRAM KB</div></div>
+</div>
+
+<!-- Main: Preview + Controls -->
+<div class="main">
+  <div class="preview">
+    <img id="stream" src="/api/frame" alt="Live preview">
+    <div class="lbl">Live Preview (polling ~5 fps)</div>
+  </div>
+
+  <div class="controls">
+    <div class="section">
+      <h2>Capture</h2>
+      <div class="btn-row" style="margin-bottom:8px">
+        <button class="btn-primary" id="btn-capture" onclick="doCapture()">📸 Capture 1</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn-primary" id="btn-burst" onclick="doBurst()">⚡ Burst</button>
+        <input type="number" id="burst-count" value="10" min="1" max="50" title="Photos per burst">
+        <span style="font-size:.75em;color:#8b949e">photos</span>
+      </div>
+      <div id="capture-status" style="font-size:.8em;color:#8b949e;margin-top:6px"></div>
+    </div>
+
+    <div class="section">
+      <h2>Last Capture</h2>
+      <div id="last-capture" class="msg">No captures yet</div>
+    </div>
+  </div>
+</div>
+
+<!-- Gallery (collapsed by default — click to expand) -->
+<div class="gallery">
+  <h2 onclick="toggleGallery()">▶ Gallery <span id="gallery-count" style="color:#8b949e;font-weight:normal"></span></h2>
+  <div class="gallery-body" id="gallery-body">
+    <div class="gallery-grid" id="gallery"></div>
+    <div class="gallery-actions">
+      <div class="pagination">
+        <button id="btn-prev" onclick="prevPage()" disabled>◀ Prev</button>
+        <span class="page-info" id="page-info">-</span>
+        <button id="btn-next" onclick="nextPage()">Next ▶</button>
+      </div>
+      <div style="flex:1"></div>
+      <button onclick="downloadSelected()">⬇ Download Selected</button>
+      <button onclick="downloadAll()">⬇ Download All</button>
+      <button class="btn-danger" onclick="deleteAll()">🗑 Delete All</button>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  TFM UNIR — Dataset Capture Tool | ESP32-S3 WROOM N16R8 + OV5640 + SD Card
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ---- State ----
+let currentPage = 1;
+const PAGE_LIMIT = 20;
+let selectedFiles = new Set();
+let totalPhotos = 0;
+let galleryOpen = false;
+
+// ---- Toast ----
+function toast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ---- API helpers ----
+async function api(url, method='GET', body=null) {
+  try {
+    const opts = { method };
+    if (body) { opts.body = JSON.stringify(body); opts.headers = {'Content-Type':'application/json'}; }
+    const r = await fetch(url, opts);
+    return await r.json();
+  } catch(e) {
+    console.error('API error:', e);
+    toast('Connection error', true);
+    return null;
+  }
+}
+
+// ---- Status polling ----
+async function refreshStatus() {
+  const d = await api('/api/status');
+  if (!d) {
+    document.getElementById('st').textContent = 'Offline';
+    document.getElementById('st').className = 'status';
+    return;
+  }
+  document.getElementById('st').textContent = 'Online';
+  document.getElementById('st').className = 'status ok';
+  document.getElementById('ip').textContent = d.ip || '-';
+  document.getElementById('s-photos').textContent = d.photo_count || 0;
+  document.getElementById('s-sd').textContent = (d.sd_free_mb || 0) + ' MB';
+  document.getElementById('s-rssi').textContent = d.wifi_rssi || '-';
+  document.getElementById('s-psram').textContent = d.free_psram_kb || '-';
+  totalPhotos = d.photo_count || 0;
+}
+
+// ---- Capture ----
+async function doCapture() {
+  const btn = document.getElementById('btn-capture');
+  const stat = document.getElementById('capture-status');
+  btn.disabled = true;
+  stat.innerHTML = '<span class="spinner"></span> Capturing...';
+
+  const d = await api('/api/capture', 'POST');
+  btn.disabled = false;
+
+  if (d && d.ok) {
+    stat.textContent = '✓ ' + d.filename + ' (' + formatSize(d.size) + ')';
+    document.getElementById('last-capture').innerHTML =
+      '<img src="/api/photos/' + d.filename + '?t=' + Date.now() + '" ' +
+      'style="max-width:160px;border-radius:4px">' +
+      '<div style="margin-top:4px;font-size:.75em">' + d.filename + '</div>';
+    toast('Captured: ' + d.filename);
+    refreshStatus();
+    loadGallery();
+  } else {
+    stat.textContent = '✗ Capture failed';
+    toast('Capture failed', true);
+  }
+}
+
+async function doBurst() {
+  const btn = document.getElementById('btn-burst');
+  const stat = document.getElementById('capture-status');
+  const count = parseInt(document.getElementById('burst-count').value) || 10;
+  btn.disabled = true;
+  stat.innerHTML = '<span class="spinner"></span> Capturing ' + count + ' photos...';
+
+  const d = await api('/api/capture/burst?count=' + count, 'POST');
+  btn.disabled = false;
+
+  if (d && d.ok) {
+    stat.textContent = '✓ Burst: ' + d.saved + '/' + count + ' saved';
+    toast('Burst: ' + d.saved + ' photos saved');
+    refreshStatus();
+    loadGallery();
+  } else {
+    stat.textContent = '✗ Burst failed';
+    toast('Burst capture failed', true);
+  }
+}
+
+// ---- Gallery toggle ----
+function toggleGallery() {
+  const body = document.getElementById('gallery-body');
+  const h2 = body.parentElement.querySelector('h2');
+  galleryOpen = !galleryOpen;
+  if (galleryOpen) {
+    body.classList.add('open');
+    h2.innerHTML = '▼ Gallery <span id="gallery-count" style="color:#8b949e;font-weight:normal">(' + totalPhotos + ' total)</span>';
+    loadGallery();
+  } else {
+    body.classList.remove('open');
+    h2.innerHTML = '▶ Gallery <span id="gallery-count" style="color:#8b949e;font-weight:normal">(' + totalPhotos + ' total)</span>';
+  }
+}
+
+// ---- Gallery ----
+async function loadGallery() {
+  if (!galleryOpen) return; // Don't load thumbnails if collapsed
+  const d = await api('/api/photos?page=' + currentPage + '&limit=' + PAGE_LIMIT);
+  const grid = document.getElementById('gallery');
+  const info = document.getElementById('page-info');
+  const countEl = document.getElementById('gallery-count');
+
+  if (!d || !d.files) {
+    grid.innerHTML = '<div class="msg">Cannot load gallery</div>';
+    return;
+  }
+
+  totalPhotos = d.total;
+  const totalPages = Math.max(1, Math.ceil(d.total / PAGE_LIMIT));
+  countEl.textContent = '(' + d.total + ' total)';
+  info.textContent = 'Page ' + currentPage + ' / ' + totalPages;
+
+  document.getElementById('btn-prev').disabled = currentPage <= 1;
+  document.getElementById('btn-next').disabled = currentPage >= totalPages;
+
+  if (d.files.length === 0) {
+    grid.innerHTML = '<div class="msg">No photos yet. Start capturing!</div>';
+    return;
+  }
+
+  let html = '';
+  d.files.forEach(f => {
+    const sel = selectedFiles.has(f.name) ? ' selected' : '';
+    html += '<div class="photo-card' + sel + '" onclick="toggleSelect(this,\'' + f.name + '\')">' +
+      '<img src="/api/photos/' + f.name + '" loading="lazy" alt="' + f.name + '">' +
+      '<div class="name">' + f.name + '</div>' +
+      '<div class="size">' + formatSize(f.size) + '</div>' +
+      '</div>';
+  });
+  grid.innerHTML = html;
+}
+
+function toggleSelect(el, name) {
+  if (selectedFiles.has(name)) {
+    selectedFiles.delete(name);
+    el.classList.remove('selected');
+  } else {
+    selectedFiles.add(name);
+    el.classList.add('selected');
+  }
+}
+
+function prevPage() { if (currentPage > 1) { currentPage--; loadGallery(); } }
+function nextPage() { currentPage++; loadGallery(); }
+
+// ---- Download ----
+function downloadFile(name) {
+  const a = document.createElement('a');
+  a.href = '/api/photos/' + name + '?dl=1';
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function downloadSelected() {
+  if (selectedFiles.size === 0) {
+    toast('Select photos first (click to select)', true);
+    return;
+  }
+  toast('Downloading ' + selectedFiles.size + ' photos...');
+  for (const name of selectedFiles) {
+    downloadFile(name);
+    await new Promise(r => setTimeout(r, 300)); // Small delay between downloads
+  }
+}
+
+async function downloadAll() {
+  if (totalPhotos === 0) { toast('No photos to download', true); return; }
+  if (!confirm('Download all ' + totalPhotos + ' photos?\n(For 100+ photos, the Python script is faster)')) return;
+
+  toast('Fetching file list...');
+  // Fetch ALL filenames across all pages
+  let allFiles = [];
+  let page = 1;
+  const batchSize = 100;
+  while (true) {
+    const d = await api('/api/photos?page=' + page + '&limit=' + batchSize);
+    if (!d || !d.files || d.files.length === 0) break;
+    d.files.forEach(f => allFiles.push(f.name));
+    if (allFiles.length >= d.total) break;
+    page++;
+  }
+
+  toast('Downloading ' + allFiles.length + ' photos...');
+  let done = 0;
+  for (const name of allFiles) {
+    downloadFile(name);
+    done++;
+    if (done % 10 === 0) toast('Downloaded ' + done + '/' + allFiles.length + '...');
+    await new Promise(r => setTimeout(r, 350));
+  }
+  toast('✓ Downloaded all ' + allFiles.length + ' photos');
+}
+
+async function deleteAll() {
+  if (!confirm('Delete ALL photos from SD card? This cannot be undone.')) return;
+  const d = await api('/api/delete_all', 'POST');
+  if (d && d.ok) {
+    toast('All photos deleted');
+    selectedFiles.clear();
+    currentPage = 1;
+    refreshStatus();
+    loadGallery();
+  } else {
+    toast('Delete failed', true);
+  }
+}
+
+// ---- Utils ----
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+// ---- Preview polling (non-blocking, ~5 fps) ----
+const streamImg = document.getElementById('stream');
+let previewBusy = false;
+function refreshFrame() {
+  if (previewBusy) return; // Skip if previous frame still loading
+  previewBusy = true;
+  const img = new Image();
+  img.onload = () => { streamImg.src = img.src; previewBusy = false; };
+  img.onerror = () => { previewBusy = false; };
+  img.src = '/api/frame?t=' + Date.now();
+}
+setInterval(refreshFrame, 100);  // Request frame every 100ms (~10fps max)
+
+// ---- Init ----
+refreshStatus();
+setInterval(refreshStatus, 5000);
+</script>
+</body>
+</html>

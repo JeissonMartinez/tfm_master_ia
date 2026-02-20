@@ -11,6 +11,8 @@ los artefactos generados (PNG para figuras, CSV para tablas) en el directorio es
 
 import os
 import json
+import csv
+import shutil
 import hashlib
 import numpy as np
 import pandas as pd
@@ -21,10 +23,509 @@ import random
 import yaml
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
-from collections import Counter
+from collections import Counter, OrderedDict
 from pycocotools.coco import COCO
 from sklearn.cluster import KMeans
 from scipy.stats import chi2_contingency
+from pathlib import Path
+import zipfile
+
+
+# ============================================================================
+# FASE 0: DESCOMPRIMIT ARCHIVO ZIP
+# ============================================================================
+
+def unzip_datasets(source_dir=None):
+    """
+    Descomprime todos los archivos .zip en el directorio especificado.
+    
+    Args:
+        source_dir: Directorio donde se encuentran los archivos .zip.
+                   Si es None, usa el directorio actual del script.
+    """
+    # Si no se especifica directorio, usar el directorio del script
+    if source_dir is None:
+        source_dir = Path(__file__).parent
+    else:
+        source_dir = Path(source_dir)
+    
+    # Buscar todos los archivos .zip
+    zip_files = list(source_dir.glob("*.zip"))
+    
+    if not zip_files:
+        print(f"No se encontraron archivos .zip en {source_dir}")
+        return
+    
+    print(f"Se encontraron {len(zip_files)} archivos .zip")
+    print("-" * 50)
+    
+    # Descomprimir cada archivo
+    for zip_path in zip_files:
+        # Crear nombre de carpeta de destino (sin la extensión .zip)
+        output_dir = source_dir / zip_path.stem
+        
+        print(f"\nDescomprimiendo: {zip_path.name}")
+        print(f"Destino: {output_dir.name}/")
+        
+        try:
+            # Crear carpeta si no existe
+            output_dir.mkdir(exist_ok=True)
+            
+            # Descomprimir
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(output_dir)
+            
+            # Obtener número de archivos extraídos
+            num_files = sum(1 for _ in output_dir.rglob('*') if _.is_file())
+            print(f"✓ Completado - {num_files} archivos extraídos")
+            
+        except zipfile.BadZipFile:
+            print(f"✗ Error: {zip_path.name} no es un archivo .zip válido")
+        except PermissionError:
+            print(f"✗ Error: Sin permisos para escribir en {output_dir}")
+        except Exception as e:
+            print(f"✗ Error inesperado: {str(e)}")
+    
+    print("\n" + "=" * 50)
+    print("Proceso completado")
+
+
+# ============================================================================
+# FASE 0B: PROCESAMIENTO DE DATASET YOLO (NORMALIZACIÓN + REESTRUCTURACIÓN)
+# ============================================================================
+
+# Extensiones de imagen válidas para procesamiento YOLO
+_VALID_IMG_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+
+def normalize_class_name(name: str, overrides: Optional[Dict[str, str]] = None) -> str:
+    """
+    Normaliza un nombre de clase YOLO:
+      1. Convierte a minúsculas.
+      2. Aplica excepciones del diccionario de overrides (case-insensitive).
+      3. Elimina 's' final para pasar a singular (regla simple, solo si len > 3).
+
+    Args:
+        name: Nombre de clase original (e.g. 'Obstacles', 'escalator').
+        overrides: Diccionario de excepciones de normalización.
+                   Formato: {"nombre_lowercase": "nombre_destino"}.
+                   Ejemplo: {"escalator": "stair"}.
+
+    Returns:
+        Nombre de clase normalizado.
+
+    Examples:
+        >>> normalize_class_name('Door')
+        'door'
+        >>> normalize_class_name('obstacles')
+        'obstacle'
+        >>> normalize_class_name('escalator', overrides={'escalator': 'stair'})
+        'stair'
+    """
+    lower = name.lower().strip()
+
+    # 1. Override exacto (case-insensitive)
+    if overrides and lower in overrides:
+        return overrides[lower]
+
+    # 2. Singular: quitar 's' final solo si tiene más de 3 caracteres
+    #    (evita romper palabras como 'bus', 'gas', etc.)
+    if lower.endswith("s") and len(lower) > 3:
+        lower = lower[:-1]
+
+    return lower
+
+
+def parse_data_yaml(yaml_path) -> list:
+    """
+    Lee un archivo data.yaml de un dataset YOLO y retorna la lista de
+    nombres de clases en orden (index = class_id local).
+
+    Args:
+        yaml_path: Ruta al archivo data.yaml (str o Path).
+
+    Returns:
+        Lista de nombres de clases ['dog', 'door', 'obstacle', ...].
+
+    Raises:
+        ValueError: Si el archivo no contiene la clave 'names'.
+    """
+    yaml_path = Path(yaml_path)
+    with open(yaml_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    names = data.get("names", [])
+    if not names:
+        raise ValueError(f"No se encontró 'names' en {yaml_path}")
+    return names
+
+
+def discover_splits(dataset_path) -> list:
+    """
+    Descubre qué splits (train, valid, test) existen en un dataset YOLO.
+
+    Args:
+        dataset_path: Ruta raíz del dataset (str o Path).
+
+    Returns:
+        Lista de Paths a las carpetas de splits que existen.
+    """
+    dataset_path = Path(dataset_path)
+    splits = []
+    for split_name in ["train", "valid", "test"]:
+        split_dir = dataset_path / split_name
+        if split_dir.is_dir():
+            splits.append(split_dir)
+    return splits
+
+
+def remap_label_line(line: str, translation: Dict[int, int]) -> Optional[str]:
+    """
+    Toma una línea de un archivo label YOLO y remapea el class_id
+    según una tabla de traducción.
+
+    Args:
+        line: Línea del archivo .txt en formato 'class_id x_center y_center width height'.
+        translation: Diccionario {local_class_id: global_class_id}.
+
+    Returns:
+        Línea con el class_id remapeado, o None si la línea es inválida.
+    """
+    parts = line.strip().split()
+    if len(parts) < 5:
+        return None
+
+    try:
+        local_id = int(parts[0])
+    except ValueError:
+        return None
+
+    if local_id not in translation:
+        return None
+
+    parts[0] = str(translation[local_id])
+    return " ".join(parts)
+
+
+def build_class_map(
+    dataset_path,
+    class_overrides: Optional[Dict[str, str]] = None,
+) -> Tuple[Dict[str, int], Dict[int, int]]:
+    """
+    Lee el data.yaml de un dataset YOLO, normaliza los nombres de clases
+    y construye el mapeo global unificado.
+
+    Args:
+        dataset_path: Ruta raíz del dataset que contiene data.yaml.
+        class_overrides: Diccionario de excepciones de normalización.
+                         Ejemplo: {"escalator": "stair"}.
+
+    Returns:
+        Tupla (global_map, translation):
+          - global_map: Dict[str, int]  →  {nombre_normalizado: global_class_id}
+          - translation: Dict[int, int] →  {local_class_id: global_class_id}
+    """
+    dataset_path = Path(dataset_path)
+    yaml_path = dataset_path / "data.yaml"
+
+    local_names = parse_data_yaml(yaml_path)
+    normalized = [normalize_class_name(n, overrides=class_overrides) for n in local_names]
+
+    # Construir mapeo global preservando orden de aparición
+    all_normalized: OrderedDict = OrderedDict()
+    for n in normalized:
+        all_normalized[n] = None
+
+    global_map = {name: idx for idx, name in enumerate(all_normalized)}
+
+    # Tabla de traducción local_id → global_id
+    translation = {}
+    for local_id, norm_name in enumerate(normalized):
+        translation[local_id] = global_map[norm_name]
+
+    return global_map, translation
+
+
+def process_yolo_dataset(
+    dataset_path,
+    output_dir,
+    class_overrides: Optional[Dict[str, str]] = None,
+    output_dir_reports: Optional[str] = None,
+) -> Dict:
+    """
+    Procesa un dataset YOLO: normaliza clases, reestructura archivos y genera
+    la estructura unificada data/images + data/labels + data.yaml compatible
+    con load_yolo_as_coco().
+
+    Flujo:
+      1. Lee data.yaml → extrae clases locales.
+      2. Normaliza nombres de clases (lowercase + singular + excepciones).
+      3. Construye mapeo global unificado de clases.
+      4. Mueve imágenes y reescribe labels con el nuevo class_id.
+      5. Genera data.yaml unificado + log de trazabilidad + distribución.
+
+    Args:
+        dataset_path: Ruta al dataset YOLO descomprimido (con data.yaml,
+                      train/images, train/labels, etc.).
+        output_dir:   Ruta de destino donde se creará la estructura
+                      data/images + data/labels + data.yaml.
+        class_overrides: Diccionario de excepciones de normalización.
+                         Ejemplo: {"escalator": "stair"}.
+        output_dir_reports: Directorio para guardar gráficas de distribución.
+                            Si es None, se guarda en output_dir.
+
+    Returns:
+        Diccionario con estadísticas del procesamiento:
+          - total_images: int
+          - total_annotations: int
+          - class_distribution: Counter
+          - global_map: Dict[str, int]
+          - warnings: list[str]
+          - errors: list[str]
+    """
+    dataset_path = Path(dataset_path)
+    output_dir = Path(output_dir)
+    report_dir = Path(output_dir_reports) if output_dir_reports else output_dir
+
+    print("🔧 Procesamiento de Dataset YOLO")
+    print("=" * 60)
+    print(f"   📂 Origen:  {dataset_path}")
+    print(f"   📂 Destino: {output_dir}")
+
+    # ── Fase 1: Descubrimiento y mapeo de clases ──────────────────
+    print("\n📂 Fase 1: Descubrimiento de clases...")
+    global_map, translation = build_class_map(dataset_path, class_overrides)
+
+    # Imprimir resumen del mapeo
+    print("\n   📋 Mapeo global unificado:")
+    for name, idx in global_map.items():
+        print(f"      {idx}: {name}")
+    print(f"\n   Total de clases únicas: {len(global_map)}")
+
+    # Mostrar traducción detallada
+    original_names = parse_data_yaml(dataset_path / "data.yaml")
+    print("\n   📊 Traducción de clases:")
+    for local_id, name in enumerate(original_names):
+        global_id = translation[local_id]
+        norm = normalize_class_name(name, overrides=class_overrides)
+        arrow = " (sin cambio)" if name.lower() == norm and local_id == global_id else ""
+        print(f"      {local_id}:'{name}' → {global_id}:'{norm}'{arrow}")
+
+    # ── Fase 2: Crear estructura de destino ───────────────────────
+    print("\n📁 Fase 2: Creando estructura de destino...")
+    images_dir = output_dir / "data" / "images"
+    labels_dir = output_dir / "data" / "labels"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    labels_dir.mkdir(parents=True, exist_ok=True)
+    print(f"   ✅ {images_dir}")
+    print(f"   ✅ {labels_dir}")
+
+    # ── Fase 3: Mover imágenes y reescribir labels ────────────────
+    print("\n🚚 Fase 3: Procesando imágenes y labels...")
+    counter = 0
+    log_entries = []
+    class_counter = Counter()
+    warnings = []
+    errors = []
+
+    splits = discover_splits(dataset_path)
+    if not splits:
+        msg = f"No se encontraron splits (train/valid/test) en {dataset_path}"
+        print(f"   ⚠️ {msg}")
+        warnings.append(msg)
+    else:
+        print(f"   Splits encontrados: {[s.name for s in splits]}")
+
+    for split_dir in splits:
+        img_dir = split_dir / "images"
+        lbl_dir = split_dir / "labels"
+
+        if not img_dir.is_dir():
+            msg = f"{split_dir.name}: No existe carpeta 'images/'"
+            warnings.append(msg)
+            continue
+
+        # Obtener lista de imágenes ordenada (para reproducibilidad)
+        img_files = sorted(
+            [f for f in img_dir.iterdir() if f.suffix.lower() in _VALID_IMG_EXTENSIONS]
+        )
+
+        ds_img_count = 0
+        for img_file in img_files:
+            counter += 1
+            new_basename = f"img_{counter:06d}"
+            new_img_ext = img_file.suffix.lower()
+            new_img_name = f"{new_basename}{new_img_ext}"
+            new_lbl_name = f"{new_basename}.txt"
+
+            # ── Mover imagen ──
+            dst_img = images_dir / new_img_name
+            try:
+                shutil.move(str(img_file), str(dst_img))
+            except Exception as e:
+                errors.append(f"Error moviendo {img_file.name}: {e}")
+                counter -= 1
+                continue
+
+            # ── Procesar label ──
+            has_label = False
+            original_lbl = lbl_dir / (img_file.stem + ".txt") if lbl_dir.is_dir() else None
+
+            if original_lbl and original_lbl.exists():
+                try:
+                    with open(original_lbl, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+
+                    new_lines = []
+                    for line in lines:
+                        if not line.strip():
+                            continue
+                        remapped = remap_label_line(line, translation)
+                        if remapped is not None:
+                            new_lines.append(remapped)
+                            cls_id = int(remapped.split()[0])
+                            class_counter[cls_id] += 1
+                        else:
+                            errors.append(
+                                f"Línea inválida en {original_lbl.name}: '{line.strip()}'"
+                            )
+
+                    # Escribir label remapeado
+                    dst_lbl = labels_dir / new_lbl_name
+                    with open(dst_lbl, "w", encoding="utf-8") as f:
+                        f.write("\n".join(new_lines))
+                        if new_lines:
+                            f.write("\n")
+                    has_label = True
+
+                    # Eliminar label original
+                    original_lbl.unlink()
+
+                except Exception as e:
+                    errors.append(f"Error procesando label {original_lbl.name}: {e}")
+            else:
+                # Imagen sin label → crear label vacío
+                dst_lbl = labels_dir / new_lbl_name
+                dst_lbl.touch()
+                warnings.append(
+                    f"{split_dir.name}/{img_file.name}: Sin label → creado vacío"
+                )
+
+            # ── Registrar en log ──
+            log_entries.append({
+                "new_name": new_img_name,
+                "original_name": img_file.name,
+                "split": split_dir.name,
+                "has_label": has_label,
+            })
+            ds_img_count += 1
+
+        print(f"   ✅ {split_dir.name}: {ds_img_count} imágenes procesadas")
+
+    print(f"\n   📊 Total de imágenes procesadas: {counter}")
+
+    # ── Fase 4: Generar data.yaml unificado ───────────────────────
+    print("\n📝 Fase 4: Generando data.yaml unificado...")
+    names_list = [name for name, _ in sorted(global_map.items(), key=lambda x: x[1])]
+    data_yaml = {
+        "path": "./data",
+        "train": "images",
+        "val": "images",
+        "nc": len(names_list),
+        "names": names_list,
+    }
+    yaml_out = output_dir / "data.yaml"
+    with open(yaml_out, "w", encoding="utf-8") as f:
+        yaml.dump(data_yaml, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    print(f"   ✅ {yaml_out}")
+    print(f"   Clases ({len(names_list)}): {names_list}")
+
+    # ── Fase 5: Generar log de trazabilidad ───────────────────────
+    print("\n📋 Fase 5: Generando log de trazabilidad...")
+    log_path = output_dir / "process_log.csv"
+    with open(log_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["new_name", "original_name", "split", "has_label"]
+        )
+        writer.writeheader()
+        writer.writerows(log_entries)
+    print(f"   ✅ {log_path} ({len(log_entries)} registros)")
+
+    # ── Fase 6: Análisis de distribución de clases ────────────────
+    print("\n📊 Fase 6: Distribución de clases...")
+    total_instances = sum(class_counter.values())
+
+    print(f"\n   {'Clase':<20} {'ID':>4} {'Instancias':>12} {'Porcentaje':>10}")
+    print("   " + "-" * 50)
+    for name in names_list:
+        cls_id = global_map[name]
+        count = class_counter.get(cls_id, 0)
+        pct = (count / total_instances * 100) if total_instances > 0 else 0
+        print(f"   {name:<20} {cls_id:>4} {count:>12,} {pct:>9.1f}%")
+    print("   " + "-" * 50)
+    print(f"   {'TOTAL':<20} {'':>4} {total_instances:>12,} {'100.0':>9}%")
+
+    # Generar gráfica de distribución
+    fig, ax = plt.subplots(figsize=(10, 6))
+    class_counts = [class_counter.get(global_map[n], 0) for n in names_list]
+    colors = sns.color_palette("magma", n_colors=len(names_list))
+
+    bars = ax.bar(names_list, class_counts, color=colors, edgecolor="black", linewidth=0.5)
+    for bar, count in zip(bars, class_counts):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            bar.get_height() + max(class_counts) * 0.01,
+            f"{count:,}",
+            ha="center", va="bottom", fontsize=9, fontweight="bold",
+        )
+
+    ax.set_xlabel("Clase", fontsize=12)
+    ax.set_ylabel("Número de Instancias (Bounding Boxes)", fontsize=12)
+    ax.set_title("Distribución de Clases - Dataset Procesado", fontsize=14)
+    ax.grid(axis="y", alpha=0.3, linestyle="--")
+    plt.xticks(rotation=30, ha="right")
+    plt.tight_layout()
+
+    os.makedirs(str(report_dir), exist_ok=True)
+    chart_path = report_dir / "class_distribution.png"
+    plt.savefig(str(chart_path), dpi=150)
+    plt.show()
+    plt.close()
+    print(f"\n   💾 Gráfica guardada: {chart_path}")
+
+    # ── Resumen final ─────────────────────────────────────────────
+    print("\n" + "=" * 60)
+    print("✅ PROCESAMIENTO COMPLETADO")
+    print("=" * 60)
+    print(f"   📂 Directorio: {output_dir}")
+    print(f"   🖼  Imágenes:  {counter:,}")
+    print(f"   🏷  Clases:    {len(names_list)} → {names_list}")
+    print(f"   📦 BB totales: {total_instances:,}")
+
+    if warnings:
+        print(f"\n   ⚠️ Advertencias: {len(warnings)}")
+        for w in warnings[:10]:
+            print(f"      - {w}")
+        if len(warnings) > 10:
+            print(f"      ... y {len(warnings) - 10} más")
+
+    if errors:
+        print(f"\n   ❌ Errores: {len(errors)}")
+        for e in errors[:10]:
+            print(f"      - {e}")
+        if len(errors) > 10:
+            print(f"      ... y {len(errors) - 10} más")
+
+    print()
+
+    return {
+        "total_images": counter,
+        "total_annotations": total_instances,
+        "class_distribution": class_counter,
+        "global_map": global_map,
+        "warnings": warnings,
+        "errors": errors,
+    }
 
 
 def ensure_dir(directory: str) -> None:
@@ -517,7 +1018,7 @@ def plot_aspect_ratio(df_geo: pd.DataFrame,
     sns.boxplot(data=df_geo, x='Category', y='Ratio', palette=palette)
     plt.title(title)
     plt.axhline(1, color='r', linestyle='--', label='Cuadrado (1:1)')
-    plt.ylim(0, 15)
+    plt.ylim(0, 5)
     plt.legend()
     plt.grid(alpha=0.3)
     plt.xticks(rotation=45)
@@ -636,6 +1137,7 @@ def calculate_density_and_iou(coco, target_cat_ids: List[int]) -> Tuple[List[int
 
 def plot_density_histogram(density_counts: List[int],
                            color: str = 'orange',
+                           yscale: str = 'linear',
                            figsize: Tuple[int, int] = (10, 6),
                            output_dir: Optional[str] = None,
                            filename: str = 'density_histogram',
@@ -646,6 +1148,7 @@ def plot_density_histogram(density_counts: List[int],
     Args:
         density_counts: Lista con conteo de objetos por imagen
         color: Color de las barras
+        yscale: Escala del eje Y ('linear' o 'log')
         figsize: Tamaño de la figura
         output_dir: Directorio donde guardar los archivos (None = no guardar)
         filename: Nombre base del archivo (sin extensión)
@@ -661,7 +1164,7 @@ def plot_density_histogram(density_counts: List[int],
     plt.legend()
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.yscale('log')
+    plt.yscale(yscale)
     
     if output_dir:
         ensure_dir(output_dir)
@@ -674,6 +1177,7 @@ def plot_density_histogram(density_counts: List[int],
 
 def plot_iou_histogram(ious: List[float],
                        color: str = 'purple',
+                       yscale: str = 'linear',
                        figsize: Tuple[int, int] = (10, 6),
                        output_dir: Optional[str] = None,
                        filename: str = 'iou_histogram',
@@ -684,6 +1188,7 @@ def plot_iou_histogram(ious: List[float],
     Args:
         ious: Lista de valores de IoU
         color: Color de las barras
+        yscale: Escala del eje Y ('linear' o 'log')
         figsize: Tamaño de la figura
         output_dir: Directorio donde guardar los archivos (None = no guardar)
         filename: Nombre base del archivo (sin extensión)
@@ -700,7 +1205,7 @@ def plot_iou_histogram(ious: List[float],
     plt.legend()
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.yscale('log')
+    plt.yscale(yscale)
     
     if output_dir:
         ensure_dir(output_dir)

@@ -1,0 +1,56 @@
+# =============================================================================
+# sdkconfig.defaults — Configuración probada ESP32-S3 Freenove CAM
+# Fuente: docs/Configuracion_ESP32-S3.md (validada en piloto)
+# =============================================================================
+
+# ===== Target =====
+CONFIG_IDF_TARGET="esp32s3"
+
+# ===== CPU 240 MHz =====
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# ===== Flash: 16 MB, DIO =====
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# ===== Partition Table Custom =====
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# ===== PSRAM: Octal 80 MHz (crítico para buffers de cámara + tensores) =====
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_BOOT_INIT=y
+
+# ===== Data Cache: 64 KB + 64B line (reduce PSRAM stalls durante inferencia) =====
+CONFIG_ESP32S3_DATA_CACHE_64KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+
+# ===== Compiler: -O2 (vs default -Og). ~15-30% más rápido en inferencia =====
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# ===== Stack sizes =====
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+CONFIG_FREERTOS_IDLE_TASK_STACKSIZE=4096
+
+# ===== WiFi IRAM optimization (mitigación R3: WiFi no interfiere inferencia) =====
+CONFIG_ESP_WIFI_IRAM_OPT=y
+CONFIG_ESP_WIFI_RX_IRAM_OPT=y
+
+# ===== LWIP =====
+CONFIG_LWIP_MAX_SOCKETS=10
+
+# ===== HTTP Server (WebSocket soporte requerido para dashboard) =====
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# ===== Task Watchdog: IDLE0 no puede hacer reset durante inferencia (3+ seg) =====
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n
+
+# ===== Logging =====
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+
+# ===== Camera XCLK (configurado en código, no en sdkconfig) =====

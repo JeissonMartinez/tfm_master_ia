@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TFM TinyML - ESP32-S3</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;background:#0d1117;color:#c9d1d9;padding:12px}
+h1{font-size:1.1em;color:#58a6ff;margin-bottom:8px}
+.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.status{font-size:.85em;padding:3px 8px;border-radius:4px;background:#da3633;color:#fff}
+.status.ok{background:#238636}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px}
+.card .val{font-size:1.6em;color:#f0883e;font-weight:bold}
+.card .lbl{font-size:.75em;color:#8b949e;margin-top:2px}
+.section{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;margin-bottom:10px}
+.section h2{font-size:.9em;color:#58a6ff;margin-bottom:6px}
+.bar{display:flex;height:18px;border-radius:3px;overflow:hidden;margin:4px 0;font-size:.7em}
+.bar div{display:flex;align-items:center;justify-content:center;color:#fff;white-space:nowrap}
+.b-cap{background:#1f6feb}.b-pre{background:#8957e5}
+.b-inf{background:#da3633}.b-post{background:#238636}
+.det{border-left:3px solid #f0883e;padding:2px 8px;margin:3px 0;font-size:.85em}
+.det .cls{color:#f0883e;font-weight:bold}
+.det .scr{color:#8b949e}
+.dbg{text-align:center;margin-top:8px}
+.dbg img{max-width:224px;image-rendering:pixelated;border:1px solid #30363d;border-radius:4px}
+.foot{font-size:.7em;color:#484f58;text-align:center;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="hdr">
+ <h1>TFM TinyML Dashboard</h1>
+ <div><span id="model">-</span> &nbsp; <span class="status" id="st">Offline</span></div>
+</div>
+
+<div class="grid">
+ <div class="card"><div class="val" id="fps">-</div><div class="lbl">FPS</div></div>
+ <div class="card"><div class="val" id="inf">-</div><div class="lbl">Inference ms</div></div>
+ <div class="card"><div class="val" id="tot">-</div><div class="lbl">Total ms</div></div>
+ <div class="card"><div class="val" id="tmp">-</div><div class="lbl">Temp &deg;C</div></div>
+ <div class="card"><div class="val" id="det">0</div><div class="lbl">Detections</div></div>
+ <div class="card"><div class="val" id="frm">0</div><div class="lbl">Frames</div></div>
+</div>
+
+<div class="section">
+ <h2>Latency Breakdown</h2>
+ <div class="bar" id="bar"></div>
+ <div id="lat" style="font-size:.8em;color:#8b949e">-</div>
+</div>
+
+<div class="section">
+ <h2>Memory</h2>
+ <div id="mem" style="font-size:.85em">-</div>
+</div>
+
+<div class="section">
+ <h2>Detections</h2>
+ <div id="dets">Waiting for data...</div>
+</div>
+
+<div class="section dbg">
+ <h2>Preprocessed Input (224&times;224)</h2>
+ <img id="dimg" src="/debug/image" alt="debug" loading="lazy">
+</div>
+
+<div class="foot">
+ TFM UNIR &mdash; TinyML Object Detection on ESP32-S3
+</div>
+
+<script>
+let ws,retry=0;
+function connect(){
+ ws=new WebSocket('ws://'+location.host+'/ws');
+ ws.onopen=()=>{
+  document.getElementById('st').textContent='Online';
+  document.getElementById('st').className='status ok';
+  retry=0;
+ };
+ ws.onclose=()=>{
+  document.getElementById('st').textContent='Offline';
+  document.getElementById('st').className='status';
+  setTimeout(connect,Math.min(2000*(++retry),10000));
+ };
+ ws.onmessage=(e)=>{
+  try{const d=JSON.parse(e.data);update(d);}catch(ex){}
+ };
+}
+function update(d){
+ document.getElementById('model').textContent=d.model||'-';
+ document.getElementById('fps').textContent=(d.fps||0).toFixed(1);
+ document.getElementById('inf').textContent=(d.inference_ms||0).toFixed(0);
+ document.getElementById('tot').textContent=(d.total_ms||0).toFixed(0);
+ document.getElementById('tmp').textContent=(d.temperature_c||0).toFixed(1);
+ document.getElementById('frm').textContent=d.frame||0;
+ const ds=d.detections||[];
+ document.getElementById('det').textContent=ds.length;
+
+ // Latency bar
+ const c=d.capture_ms||0,p=d.preprocess_ms||0,i=d.inference_ms||0,pp=d.postprocess_ms||0;
+ const t=c+p+i+pp||1;
+ document.getElementById('bar').innerHTML=
+  '<div class="b-cap" style="width:'+(c/t*100)+'%">'+c.toFixed(0)+'</div>'+
+  '<div class="b-pre" style="width:'+(p/t*100)+'%">'+p.toFixed(0)+'</div>'+
+  '<div class="b-inf" style="width:'+(i/t*100)+'%">'+i.toFixed(0)+'</div>'+
+  '<div class="b-post" style="width:'+(pp/t*100)+'%">'+pp.toFixed(0)+'</div>';
+ document.getElementById('lat').textContent=
+  'Cap: '+c.toFixed(0)+'ms | Pre: '+p.toFixed(0)+'ms | Inf: '+i.toFixed(0)+'ms | Post: '+pp.toFixed(0)+'ms';
+
+ // Memory
+ document.getElementById('mem').innerHTML=
+  'PSRAM free: <b>'+d.free_psram_kb+'</b> KB &nbsp;|&nbsp; Internal free: <b>'+d.free_internal_kb+'</b> KB';
+
+ // Detections
+ let html='';
+ if(ds.length===0)html='<div style="color:#484f58">No detections</div>';
+ else ds.forEach(det=>{
+  const pct=(det.score*100).toFixed(0);
+  const b=det.bbox.map(v=>(v*224).toFixed(0));
+  html+='<div class="det"><span class="cls">'+det.class+'</span> '+
+   '<span class="scr">'+pct+'%</span> ['+b.join(', ')+']</div>';
+ });
+ document.getElementById('dets').innerHTML=html;
+
+ // Refresh debug image every 2s
+ if((d.frame||0)%5===0){
+  document.getElementById('dimg').src='/debug/image?t='+Date.now();
+ }
+}
+connect();
+</script>
+</body>
+</html>

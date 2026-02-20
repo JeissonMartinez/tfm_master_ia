@@ -1,0 +1,4 @@
+split,dog,door,person,obstacle,stair,background,total_annotations,total_images
+train,277,245,309,545,295,87,1671,874
+valid,150,160,182,164,106,19,762,188
+test,58,136,101,173,108,19,576,187

@@ -1,0 +1,6 @@
+Category,Count_before,Count_after,Delta
+dog,277,545,268
+door,245,545,300
+obstacle,545,561,16
+person,309,545,236
+stair,295,548,253
