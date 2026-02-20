@@ -1,0 +1,6 @@
+Category,Images_before,Objects_before,Images_after,Objects_after,Delta_images,Delta_objects
+dog,243,277,472,545,229,268
+door,197,245,446,545,249,300
+obstacle,386,545,402,561,16,16
+person,283,309,512,545,229,236
+stair,285,295,530,548,245,253

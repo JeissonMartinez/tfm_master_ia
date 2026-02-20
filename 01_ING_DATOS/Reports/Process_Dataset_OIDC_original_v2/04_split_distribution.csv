@@ -1,0 +1,4 @@
+Split,Images,Annotations,Annotations/Image
+train,874,1671,1.91
+valid,188,762,4.05
+test,187,576,3.08
