@@ -320,6 +320,11 @@ def main() -> None:
         build_fcos_loss,
     )
 
+    # Build augmentation config from YAML fcos section
+    aug_config = {
+        k: v for k, v in fc.items() if k.startswith("aug_")
+    }
+
     # Build dataloaders
     train_ds = IODCDataset(
         dataset_dir=dataset_path,
@@ -327,6 +332,7 @@ def main() -> None:
         class_names=setup.class_names,
         img_size=fc.get("resize_schedule", {0: 640}).get(0, 640),
         augment=True,
+        aug_config=aug_config,
     )
     val_ds = IODCDataset(
         dataset_dir=dataset_path,
@@ -374,6 +380,7 @@ def main() -> None:
         cls_weight=fc.get("cls_weight", 1.0),
         reg_weight=fc.get("reg_weight", 1.5),
         ctr_weight=fc.get("centerness_weight", 1.0),
+        reg_warmup_epochs=fc.get("reg_warmup_epochs", 0),
     )
 
     checkpoint_dir = os.path.join(LOCAL_WORK_DIR, "checkpoints")

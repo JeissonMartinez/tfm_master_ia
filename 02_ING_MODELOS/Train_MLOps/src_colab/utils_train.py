@@ -201,24 +201,48 @@ def _giou_loss_ltrb(
     return (1 - giou).mean()
 
 
+def _smooth_l1_ltrb(
+    pred_ltrb: torch.Tensor,
+    target_ltrb: torch.Tensor,
+    beta: float = 1.0,
+) -> torch.Tensor:
+    """Smooth L1 loss for l,t,r,b encoded predictions.
+
+    Both inputs are (N, 4).  Returns scalar mean loss.
+    """
+    pred_ltrb = pred_ltrb.clamp(min=0)
+    return nn.functional.smooth_l1_loss(pred_ltrb, target_ltrb, beta=beta)
+
+
 def build_fcos_loss(
     cls_weight: float = 1.0,
     reg_weight: float = 1.0,
     ctr_weight: float = 1.0,
+    reg_warmup_epochs: int = 0,
 ) -> Callable:
     """Build a combined FCOS loss function (cls + reg + centerness).
 
     This is a simplified version that expects pre-encoded targets.
     The actual encoding (strides, distances) is handled in the
     task_fcos entry-point.
+
+    If ``reg_warmup_epochs > 0``, Smooth L1 is used for regression during
+    the first *reg_warmup_epochs* global epochs, then switches to GIoU.
+    This avoids the initial GIoU plateau observed in previous trains.
+    Use ``fcos_loss.set_epoch(e)`` to update the current epoch.
     """
     cls_loss_fn = nn.BCEWithLogitsLoss(reduction="none")
+    # Mutable state so the training loop can set the current epoch
+    _state = {"epoch": 0}
 
     def fcos_loss(preds: Dict, targets: Dict) -> Dict[str, torch.Tensor]:
         total_cls = torch.tensor(0.0, device=preds["cls"][0].device)
         total_reg = torch.tensor(0.0, device=preds["cls"][0].device)
         total_ctr = torch.tensor(0.0, device=preds["cls"][0].device)
         n_pos = 0
+
+        use_smooth_l1 = (reg_warmup_epochs > 0
+                         and _state["epoch"] < reg_warmup_epochs)
 
         for lvl_idx, (cls_pred, reg_pred, ctr_pred) in enumerate(
             zip(preds["cls"], preds["reg"], preds["centerness"])
@@ -238,10 +262,12 @@ def build_fcos_loss(
             # Regression + centerness (positive only)
             if pos_mask.any():
                 n_pos += pos_mask.sum().item()
-                reg_loss = _giou_loss_ltrb(
-                    reg_pred.permute(0, 2, 3, 1)[pos_mask],
-                    reg_target[pos_mask],
-                )
+                pred_pos = reg_pred.permute(0, 2, 3, 1)[pos_mask]
+                tgt_pos = reg_target[pos_mask]
+                if use_smooth_l1:
+                    reg_loss = _smooth_l1_ltrb(pred_pos, tgt_pos)
+                else:
+                    reg_loss = _giou_loss_ltrb(pred_pos, tgt_pos)
                 ctr_loss = nn.functional.binary_cross_entropy_with_logits(
                     ctr_pred.permute(0, 2, 3, 1)[pos_mask].squeeze(-1),
                     ctr_target[pos_mask],
@@ -257,6 +283,18 @@ def build_fcos_loss(
         }
         loss_dict["total"] = sum(loss_dict.values())
         return loss_dict
+
+    def set_epoch(epoch: int) -> None:
+        prev_sl1 = (reg_warmup_epochs > 0
+                    and _state["epoch"] < reg_warmup_epochs)
+        _state["epoch"] = epoch
+        new_sl1 = (reg_warmup_epochs > 0
+                   and _state["epoch"] < reg_warmup_epochs)
+        if prev_sl1 and not new_sl1:
+            log(f"🔄 reg_loss warmup complete at epoch {epoch}: "
+                f"Smooth L1 → GIoU")
+
+    fcos_loss.set_epoch = set_epoch
 
     return fcos_loss
 
@@ -505,6 +543,10 @@ def _run_phase(
 
     for epoch_rel in range(epochs):
         epoch_abs = initial_epoch + epoch_rel
+
+        # Notify loss_fn of current epoch (for hybrid warmup)
+        if hasattr(loss_fn, "set_epoch"):
+            loss_fn.set_epoch(epoch_abs)
 
         # Progressive resizing
         new_size = _get_current_img_size(epoch_abs, config.resize_schedule)

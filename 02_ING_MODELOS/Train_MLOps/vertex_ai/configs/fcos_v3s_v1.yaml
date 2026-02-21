@@ -1,6 +1,7 @@
 # ─────────────────────────────────────────────────────────────
-# Configuración: FCOS — MobileNetV3-Small + FPN — v1 (Baseline)
+# Configuración: FCOS — MobileNetV3-Small + FPN — v1
 # ─────────────────────────────────────────────────────────────
+# Train 5: Revert T3 scoring + Hybrid loss warmup + Aggressive aug
 # Custom Job de Vertex AI · Ciclo 2
 # Leído por trainer/config_loader.py → ExperimentSetup
 
@@ -20,7 +21,7 @@ common:
   batch_size: 16
   patience: 20
   seed: 42
-  conf_threshold: 0.15
+  conf_threshold: 0.25              # ← reverted from T4's 0.15 to T3 value
   iou_threshold: 0.45
 
 fcos:
@@ -53,20 +54,42 @@ fcos:
     30: 224
 
   # ── Scoring (inferencia) ──────────────────────────────────
-  ctr_power: 0.5                  # centerness^ctr_power (< 1 = menos agresivo)
-  iou_aware_scoring: true          # usar calidad geométrica del box predicho
+  # REVERTED to T3 standard scoring (ctr^1.0, no iou_aware)
+  # ctr_power / iou_aware_scoring omitted → defaults: 1.0 / false
 
   # ── Loss weights ──────────────────────────────────────────
   cls_weight: 1.0
   reg_weight: 1.5
   centerness_weight: 1.0
 
+  # ── Hybrid loss warmup (NEW for Train 5) ──────────────────
+  # Use Smooth L1 for regression during first N epochs, then GIoU.
+  # Eliminates the ~13 epoch GIoU plateau observed in T3/T4.
+  reg_warmup_epochs: 10
+
   # ── Augmentation (Albumentations) ─────────────────────────
-  aug_horizontal_flip: 0.5
-  aug_brightness_contrast: 0.3
-  aug_gaussian_noise: 0.2
-  aug_rotation_limit: 15
-  aug_hue_sat_val: true
+  # Base augmentations (same as T3/T4)
+  aug_hflip_prob: 0.5
+  aug_brightness_limit: 0.3
+  aug_contrast_limit: 0.3
+  aug_hue_shift_limit: 20
+  aug_sat_shift_limit: 30
+  aug_val_shift_limit: 20
+  aug_shift_limit: 0.1
+  aug_scale_limit: 0.2
+  aug_rotate_limit: 15
+  # Aggressive augmentations (NEW for Train 5)
+  aug_gaussian_noise: 0.3           # p=0.3 GaussNoise
+  aug_gaussian_noise_limit: 0.05    # std upper bound
+  aug_coarse_dropout: 0.4           # p=0.4 CoarseDropout (cutout)
+  aug_coarse_dropout_min_holes: 2
+  aug_coarse_dropout_max_holes: 8
+  aug_coarse_dropout_min_h: 8
+  aug_coarse_dropout_max_h: 32
+  aug_coarse_dropout_min_w: 8
+  aug_coarse_dropout_max_w: 32
+  aug_blur: 0.2                     # p=0.2 GaussianBlur
+  aug_blur_limit: [3, 7]
 
   # ── Entrenamiento ─────────────────────────────────────────
   amp: true

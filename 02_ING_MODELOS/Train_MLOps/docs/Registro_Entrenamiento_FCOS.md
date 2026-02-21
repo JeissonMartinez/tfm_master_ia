@@ -17,8 +17,9 @@
 3. [Train 2 — Stride Normalization + Bug Fixes](#3-train-2--stride-normalization--bug-fixes)
 4. [Train 3 — GIoU Loss + Más Épocas](#4-train-3--giou-loss--más-épocas)
 5. [Train 4 — Scoring Refinements (conf, centerness, IoU-aware)](#5-train-4--scoring-refinements-conf-centerness-iou-aware)
-6. [Comparativa Global](#6-comparativa-global)
-7. [Conclusiones Generales](#7-conclusiones-generales)
+6. [Threshold Sweep — Análisis Post-NMS del Modelo T4](#6-threshold-sweep--análisis-post-nms-del-modelo-t4)
+7. [Comparativa Global](#7-comparativa-global)
+8. [Conclusiones Generales](#8-conclusiones-generales)
 
 ---
 
@@ -525,9 +526,67 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 
 ---
 
-## 6. Comparativa Global
+## 6. Threshold Sweep — Análisis Post-NMS del Modelo T4
 
-### 6.1 Evolución Total Loss
+Tras los resultados de T4 (mAP@50 = 0.5936 pero F1 = 0.4607 con `conf_threshold=0.15`), se realizó un barrido offline de umbral de confianza post-NMS para buscar el punto operativo óptimo del modelo T4 sin reentrenar.
+
+Se utilizó el script `scripts/fcos_threshold_sweep.py` con los pesos del modelo T4 (`outputs/fcos_v3s_v1-1771695807/best_model.pt`).
+
+### 6.1 Sweep v1 — Rango [0.10 – 0.30]
+
+**Artefactos**: `outputs/fcos_v3s_v1-1771695807/threshold_sweep_v1/`
+
+| Threshold | mAP@50 | Precision | Recall | F1 | Dets | TP | FP | FN |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.10 | 0.6074 | 0.2746 | 0.7274 | 0.3987 | 1512 | 424 | 1088 | 152 |
+| 0.15 | 0.6021 | 0.3038 | 0.7107 | 0.4256 | 1329 | 412 | 917 | 164 |
+| 0.20 | 0.5994 | 0.3269 | 0.7025 | 0.4462 | 1215 | 406 | 809 | 170 |
+| 0.25 | 0.5936 | 0.3462 | 0.6886 | 0.4607 | 1120 | 395 | 725 | 181 |
+| 0.30 | 0.5896 | 0.3611 | 0.6789 | 0.4715 | 1056 | 388 | 668 | 188 |
+
+> **Observación**: F1 crece monotónicamente de 0.10 a 0.30, sugiriendo que el óptimo está más arriba. Se extiende el barrido.
+
+### 6.2 Sweep v2 — Rango [0.30 – 0.50]
+
+**Artefactos**: `outputs/fcos_v3s_v1-1771695807/threshold_sweep_v2/`
+
+| Threshold | mAP@50 | Precision | Recall | F1 | Dets | TP | FP | FN |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.30 | 0.5896 | 0.3611 | 0.6789 | 0.4715 | 1056 | 388 | 668 | 188 |
+| 0.35 | 0.5857 | 0.3767 | 0.6686 | 0.4819 | 996 | 382 | 614 | 194 |
+| 0.40 | 0.5800 | 0.3919 | 0.6530 | 0.4898 | 936 | 375 | 561 | 201 |
+| 0.45 | 0.5782 | 0.4130 | 0.6478 | 0.5044 | 877 | 371 | 506 | 205 |
+| 0.50 | 0.5773 | 0.4375 | 0.6463 | 0.5218 | 827 | 370 | 457 | 206 |
+
+### 6.3 Per-class AP@50 (Test) — Mejores puntos por clase
+
+| Clase | Mejor AP@50 | Threshold | AP@50 T3 |
+|---|:---:|:---:|:---:|
+| dog | 0.5025 | 0.30 | **0.496** |
+| door | 0.5348 | 0.10 | 0.503 |
+| obstacle | 0.5593 | 0.10 | **0.458** |
+| person | 0.6945 | 0.10 | **0.636** |
+| stair | 0.7466 | 0.10 | 0.745 |
+
+> Las AP@50 más altas se obtienen a thresholds bajos (maximizan recall para la curva P-R), pero el punto operativo con mejor F1 está en thr ≥ 0.50.
+
+### 6.4 Análisis y Conclusiones del Sweep
+
+1. **F1 monotónicamente creciente hasta 0.50**: Incluso a `conf_threshold=0.50`, el F1 test del modelo T4 es **0.5218**, todavía **19% inferior** al F1 de T3 (0.6438 a conf=0.25).
+
+2. **Trade-off irreconciliable**: A thr=0.50, T4 tiene P=0.44, R=0.65. T3 a thr=0.25 tiene P=0.66, R=0.63. T3 domina en Precision sin sacrificar Recall.
+
+3. **FP siguen elevados**: A thr=0.50, T4 aún produce 457 FP (vs 177 de T3). La diferencia es estructural: el scoring de T4 (`ctr^0.5` + `iou_aware`) infla scores de detecciones de baja calidad.
+
+4. **mAP@50 ≈ estable**: Baja marginalmente de 0.607 a 0.577 en todo el rango, lo cual confirma que mAP no es sensible al threshold (mide area completa de la curva P-R).
+
+5. **Decisión**: El scoring de T4 queda **descartado** para producción. T3 sigue siendo el mejor modelo operativo. Las mejoras futuras deben enfocarse en el entrenamiento (augmentación, loss), no en ingeniería de scoring.
+
+---
+
+## 7. Comparativa Global
+
+### 7.1 Evolución Total Loss
 
 | Fase | Train 1 | Train 2 | Train 3 | Train 4 |
 |---|:---:|:---:|:---:|:---:|
@@ -537,14 +596,14 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 
 > Nota: val_loss no es directamente comparable entre T2 (Smooth L1) y T3/T4 (GIoU) por cambio de función de loss. T3 y T4 comparten la misma función de loss; la diferencia en best val_loss (28.12 vs 36.46) refleja varianza del val set pequeño y diferente momento de early stop.
 
-### 6.2 Evolución reg_loss (Train)
+### 7.2 Evolución reg_loss (Train)
 
 | Resolución | Train 1 | Train 2 | Train 3 | Train 4 |
 |---|:---:|:---:|:---:|:---:|
 | 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) | ~3.96 (meseta) |
 | 224px (final) | ~41 | ~1.3 | ~1.1 | ~1.1 |
 
-### 6.3 Per-class AP@50 — Test (Evolución)
+### 7.3 Per-class AP@50 — Test (Evolución)
 
 | Clase | T1 | T2 | T3 | T4 | Δ T1→T4 |
 |---|:---:|:---:|:---:|:---:|:---:|
@@ -555,7 +614,7 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 | stair | 0.584 | **0.777** | 0.745 | 0.739 | +26.5% |
 | **Media** | **0.430** | **0.560** | **0.568** | **0.594** | **+38.0%** |
 
-### 6.4 Confusion Matrix (Test) — Evolución de TP
+### 7.4 Confusion Matrix (Test) — Evolución de TP
 
 | Clase (Test GT) | T1 TP | T2 TP | T3 TP | T4 TP | T1 FN | T2 FN | T3 FN | T4 FN |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -566,7 +625,7 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 | stair (108) | 66 | 87 | 84 | **85** | 42 | 21 | 24 | **23** |
 | **Total** | **296** | **355** | **356** | **395** | **280** | **221** | **220** | **181** |
 
-### 6.5 Falsos Positivos (Test)
+### 7.5 Falsos Positivos (Test)
 
 | Clase | T1 FP | T2 FP | T3 FP | T4 FP |
 |---|:---:|:---:|:---:|:---:|
@@ -581,9 +640,9 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 
 ---
 
-## 7. Conclusiones Generales
+## 8. Conclusiones Generales
 
-### 7.1 Impacto por Cambio
+### 8.1 Impacto por Cambio
 
 | Cambio | Métrica más afectada | Impacto |
 |---|---|---|
@@ -592,7 +651,7 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 | **Más épocas** (T2→T3) | Convergencia | Best en epoch 80 vs 58. Presupuesto extra utilizado efectivamente. |
 | **Scoring permisivo** (T3→T4) | Recall, mAP@50, FP | +9.7% Recall, +4.6% mAP@50, pero Precision -47.6% y FP +309%. Trade-off negativo. |
 
-### 7.2 Fortalezas del Modelo
+### 8.2 Fortalezas del Modelo
 
 - **Clasificación perfecta**: Zero confusión inter-clase en los 4 entrenamientos. La cabeza cls discrimina las 5 clases impecablemente.
 - **Modelo ligero**: 1.2M params, 4.71 MB FP32, <6ms inferencia en T4 GPU.
@@ -600,7 +659,7 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 - **Alto potencial de recall**: T4 demuestra que el modelo *ve* ~69% de los objetos; el reto es rankear bien las detecciones.
 - **mAP@50 mejora sostenidamente**: 0.43 → 0.56 → 0.57 → 0.59 a lo largo de la serie.
 
-### 7.3 Debilidades / Cuellos de Botella
+### 8.3 Debilidades / Cuellos de Botella
 
 - **Trade-off Precision-Recall no resuelto**: T3 es conservador (P=0.66, R=0.63), T4 es permisivo (P=0.35, R=0.69). Ninguno logra ambos simultáneamente.
 - **FP dominan en T4**: 725 FP para 395 TP. Ratio FP/TP = 1.84, inaceptable para producción.
@@ -608,7 +667,7 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 - **Val loss ruidosa**: Con 188 imágenes, oscila enormemente (36→70+ entre epochs), dificultando checkpoint selection.
 - **Meseta GIoU en Phase 1**: ~13 epochs sin aprendizaje de localización en cada entrenamiento.
 
-### 7.4 Mejor Configuración Operativa
+### 8.4 Mejor Configuración Operativa
 
 | Objetivo | Mejor Train | Justificación |
 |---|---|---|
@@ -619,13 +678,13 @@ El resultado neto es una **explosión de falsos positivos**. El modelo tiene cap
 
 > **Recomendación**: T3 es el mejor modelo operativo actual. Los pesos de T4 son idénticos (mismo entrenamiento); solo cambia el scoring en inferencia. Se puede usar el checkpoint de T3/T4 con un conf_threshold intermedio (0.20) para buscar un punto de operación óptimo.
 
-### 7.5 Oportunidades de Mejora (Candidatas para Train 5+)
+### 8.5 Oportunidades de Mejora (Candidatas para Train 5+)
 
-1. **Threshold sweep post-NMS**: Con el modelo actual, barrer conf_threshold [0.10, 0.15, 0.20, 0.25, 0.30] offline y graficar la curva P-R para encontrar el punto operativo óptimo (F1 máximo).
-2. **Max detections per image**: Limitar a 50-100 detecciones post-NMS para acotar FP sin necesidad de subir threshold.
-3. **Revertir a ctr_power=1.0, conf=0.20**: Punto intermedio entre T3 y T4 — centerness original pero threshold más bajo.
+1. ~~**Threshold sweep post-NMS** — COMPLETADO (§6)~~: Barrido [0.10–0.50] en 2 corridas. F1 máximo T4 = 0.5218 (thr=0.50), todavía 19% inferior a T3 (0.6438). Scoring T4 **descartado** para producción.
+2. ~~**Max detections per image** — DESCARTADO~~: El sweep demostró que el problema es estructural (scoring infla calidad de FP), no de cantidad bruta. Limitar detecciones no resolvería.
+3. ~~**Revertir a ctr_power=1.0, conf=0.20** — DESCARTADO~~: El sweep mostró que incluso a thr=0.50 con scoring T4 no se alcanza T3. La línea de scoring queda cerrada.
 4. **Warmup de loss híbrido**: Iniciar con Smooth L1 durante primeros 10 epochs → transición a GIoU, evitando la meseta de 13 epochs.
-5. **Augmentación más agresiva**: MixUp, Mosaic para mayor regularización con 1470 imgs.
+5. **Augmentación más agresiva**: GaussNoise, CoarseDropout, GaussianBlur para mayor regularización con 1470 imgs.
 6. **Resolución final mayor**: Evaluar a 320px en vez de 224px para mejorar localización de objetos pequeños.
 7. **Focal Loss tuning**: Ajustar gamma (2→3) para la cabeza de clasificación, ayudando con clases difíciles.
 

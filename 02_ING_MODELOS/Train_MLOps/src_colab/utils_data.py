@@ -421,6 +421,43 @@ class IODCDataset(Dataset):
                 ),
             ])
 
+            # ── Aggressive augmentation (optional) ───────────────
+            if cfg.get("aug_gaussian_noise", 0) > 0:
+                transforms.append(
+                    A.GaussNoise(
+                        std_range=(0.01, cfg.get("aug_gaussian_noise_limit", 0.05)),
+                        p=cfg.get("aug_gaussian_noise", 0.2),
+                    )
+                )
+            if cfg.get("aug_coarse_dropout", 0) > 0:
+                # Albumentations 2.0: hole dims are fractions of image size
+                _sz = max(self.img_size, 1)
+                transforms.append(
+                    A.CoarseDropout(
+                        num_holes_range=(
+                            cfg.get("aug_coarse_dropout_min_holes", 2),
+                            cfg.get("aug_coarse_dropout_max_holes", 8),
+                        ),
+                        hole_height_range=(
+                            cfg.get("aug_coarse_dropout_min_h", 8) / _sz,
+                            cfg.get("aug_coarse_dropout_max_h", 32) / _sz,
+                        ),
+                        hole_width_range=(
+                            cfg.get("aug_coarse_dropout_min_w", 8) / _sz,
+                            cfg.get("aug_coarse_dropout_max_w", 32) / _sz,
+                        ),
+                        fill=0,
+                        p=cfg.get("aug_coarse_dropout", 0.3),
+                    )
+                )
+            if cfg.get("aug_blur", 0) > 0:
+                transforms.append(
+                    A.GaussianBlur(
+                        blur_limit=cfg.get("aug_blur_limit", (3, 7)),
+                        p=cfg.get("aug_blur", 0.2),
+                    )
+                )
+
         # Always resize + normalize + convert to tensor
         transforms.extend([
             A.Resize(self.img_size, self.img_size),

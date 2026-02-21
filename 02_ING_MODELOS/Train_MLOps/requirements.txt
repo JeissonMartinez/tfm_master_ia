@@ -14,7 +14,7 @@
 
 # === Core ML ===
 ultralytics>=8.4
-albumentations>=1.4
+albumentations>=2.0.0
 torchvision>=0.19
 
 # === Data / Viz ===
