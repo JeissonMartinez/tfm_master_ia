@@ -1,0 +1,101 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: FCOS — MobileNetV3-Small + FPN — v1
+# ─────────────────────────────────────────────────────────────
+# Train 5: Revert T3 scoring + Hybrid loss warmup + Aggressive aug
+# Custom Job de Vertex AI · Ciclo 2
+# Leído por trainer/config_loader.py → ExperimentSetup
+
+model:
+  family: FCOS
+  variant: fcos_v3s
+  version: v1
+  description: "FCOS con MobileNetV3-Small backbone + SimpleFPN + FCOS head"
+
+dataset:
+  name: iodc_yolo
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/iodc_yolo.zip
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 224
+
+common:
+  batch_size: 16
+  patience: 20
+  seed: 42
+  conf_threshold: 0.25              # ← reverted from T4's 0.15 to T3 value
+  iou_threshold: 0.45
+
+fcos:
+  # ── Arquitectura ──────────────────────────────────────────
+  backbone: mobilenet_v3_small
+  pretrained_backbone: true
+  fpn_channels: 64
+  strides: [8, 16, 32]
+  num_head_convs: 2
+
+  # ── Fase 1 — Backbone congelado ──────────────────────────
+  phase1_epochs: 30
+  phase1_lr: 1.0e-3
+  phase1_wd: 1.0e-4
+  phase1_optimizer: adamw
+  phase1_scheduler: cosine
+
+  # ── Fase 2 — Todo descongelado ───────────────────────────
+  phase2_epochs: 80
+  phase2_lr: 1.0e-4
+  phase2_wd: 1.0e-5
+  phase2_optimizer: adamw
+  phase2_scheduler: cosine
+
+  # ── Redimensionado progresivo ─────────────────────────────
+  resize_schedule:
+    0: 640
+    10: 416
+    20: 320
+    30: 224
+
+  # ── Scoring (inferencia) ──────────────────────────────────
+  # REVERTED to T3 standard scoring (ctr^1.0, no iou_aware)
+  # ctr_power / iou_aware_scoring omitted → defaults: 1.0 / false
+
+  # ── Loss weights ──────────────────────────────────────────
+  cls_weight: 1.0
+  reg_weight: 1.5
+  centerness_weight: 1.0
+
+  # ── Hybrid loss warmup (NEW for Train 5) ──────────────────
+  # Use Smooth L1 for regression during first N epochs, then GIoU.
+  # Eliminates the ~13 epoch GIoU plateau observed in T3/T4.
+  reg_warmup_epochs: 10
+
+  # ── Augmentation (Albumentations) ─────────────────────────
+  # Base augmentations (same as T3/T4)
+  aug_hflip_prob: 0.5
+  aug_brightness_limit: 0.3
+  aug_contrast_limit: 0.3
+  aug_hue_shift_limit: 20
+  aug_sat_shift_limit: 30
+  aug_val_shift_limit: 20
+  aug_shift_limit: 0.1
+  aug_scale_limit: 0.2
+  aug_rotate_limit: 15
+  # Aggressive augmentations (NEW for Train 5)
+  aug_gaussian_noise: 0.3           # p=0.3 GaussNoise
+  aug_gaussian_noise_limit: 0.05    # std upper bound
+  aug_coarse_dropout: 0.4           # p=0.4 CoarseDropout (cutout)
+  aug_coarse_dropout_min_holes: 2
+  aug_coarse_dropout_max_holes: 8
+  aug_coarse_dropout_min_h: 8
+  aug_coarse_dropout_max_h: 32
+  aug_coarse_dropout_min_w: 8
+  aug_coarse_dropout_max_w: 32
+  aug_blur: 0.2                     # p=0.2 GaussianBlur
+  aug_blur_limit: [3, 7]
+
+  # ── Entrenamiento ─────────────────────────────────────────
+  amp: true
+  grad_clip: 10.0
+  workers: 4
+
+  # ── Export ────────────────────────────────────────────────
+  export_imgsz: 224
+  export_opset: 13
