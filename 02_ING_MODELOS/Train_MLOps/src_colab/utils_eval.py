@@ -367,6 +367,16 @@ def _compute_map(
     )
     ev.f1 = 2 * ev.precision * ev.recall / (ev.precision + ev.recall + 1e-8)
 
+    # mAP@50-95: average AP across IoU thresholds [0.50, 0.55, ..., 0.95]
+    iou_thresholds = np.arange(0.5, 1.0, 0.05)
+    maps_per_iou = []
+    for iou_t in iou_thresholds:
+        aps_t = _compute_aps_at_iou(
+            detections, ground_truths, num_classes, float(iou_t),
+        )
+        maps_per_iou.append(float(np.mean(aps_t)) if aps_t else 0.0)
+    ev.mAP50_95 = float(np.mean(maps_per_iou)) if maps_per_iou else 0.0
+
     # Confusion matrix
     cm = np.zeros((num_classes + 1, num_classes + 1), dtype=np.float64)
     for key in gt_by_img_cls:
@@ -395,6 +405,55 @@ def _compute_map(
                 cm[gt_cls, num_classes] += 1  # FN
 
     ev.confusion_matrix = cm
+
+
+def _compute_aps_at_iou(
+    detections: list,
+    ground_truths: list,
+    num_classes: int,
+    iou_threshold: float,
+) -> List[float]:
+    """Compute per-class AP at a given IoU threshold (no side effects)."""
+    gt_by_img_cls: Dict[tuple, list] = defaultdict(list)
+    for img_idx, cls_id, bbox in ground_truths:
+        gt_by_img_cls[(img_idx, cls_id)].append({"bbox": bbox, "matched": False})
+
+    aps = []
+    for c in range(num_classes):
+        dets_c = [(d[0], d[2], d[3]) for d in detections if d[1] == c]
+        dets_c.sort(key=lambda x: x[1], reverse=True)
+
+        tp = np.zeros(len(dets_c))
+        fp = np.zeros(len(dets_c))
+        n_gt_c = sum(1 for gt in ground_truths if gt[1] == c)
+
+        # Reset matched flags
+        for key in gt_by_img_cls:
+            for gt in gt_by_img_cls[key]:
+                gt["matched"] = False
+
+        for i, (img_idx, conf, bbox) in enumerate(dets_c):
+            gts = gt_by_img_cls.get((img_idx, c), [])
+            best_iou = 0.0
+            best_gt_idx = -1
+            for g_idx, gt in enumerate(gts):
+                iou = _compute_iou(bbox, gt["bbox"])
+                if iou > best_iou:
+                    best_iou = iou
+                    best_gt_idx = g_idx
+            if (best_iou >= iou_threshold and best_gt_idx >= 0
+                    and not gts[best_gt_idx]["matched"]):
+                tp[i] = 1
+                gts[best_gt_idx]["matched"] = True
+            else:
+                fp[i] = 1
+
+        tp_cum = np.cumsum(tp)
+        fp_cum = np.cumsum(fp)
+        rec = tp_cum / (n_gt_c + 1e-8)
+        prec = tp_cum / (tp_cum + fp_cum + 1e-8)
+        aps.append(_ap_interp(rec, prec))
+    return aps
 
 
 def _ap_interp(recall: np.ndarray, precision: np.ndarray) -> float:

@@ -148,6 +148,59 @@ class TwoPhaseHistory:
 #  Loss functions
 # =====================================================================
 
+def _giou_loss_ltrb(
+    pred_ltrb: torch.Tensor,
+    target_ltrb: torch.Tensor,
+) -> torch.Tensor:
+    """Compute GIoU loss for l,t,r,b encoded predictions.
+
+    Both inputs are (N, 4) with columns [l, t, r, b] representing
+    distances from the cell center to the box edges (stride-normalised).
+
+    Returns:
+        Scalar mean(1 - GIoU).  Range [0, 2].
+    """
+    # Clamp predictions to avoid degenerate boxes
+    pred_ltrb = pred_ltrb.clamp(min=0)
+
+    # Areas
+    pred_area = (pred_ltrb[:, 0] + pred_ltrb[:, 2]) * (
+        pred_ltrb[:, 1] + pred_ltrb[:, 3]
+    )
+    target_area = (target_ltrb[:, 0] + target_ltrb[:, 2]) * (
+        target_ltrb[:, 1] + target_ltrb[:, 3]
+    )
+
+    # Intersection (both share same cell center)
+    inter_w = (
+        torch.min(pred_ltrb[:, 0], target_ltrb[:, 0])
+        + torch.min(pred_ltrb[:, 2], target_ltrb[:, 2])
+    )
+    inter_h = (
+        torch.min(pred_ltrb[:, 1], target_ltrb[:, 1])
+        + torch.min(pred_ltrb[:, 3], target_ltrb[:, 3])
+    )
+    inter_area = inter_w * inter_h
+
+    # Union
+    union_area = pred_area + target_area - inter_area
+    iou = inter_area / (union_area + 1e-7)
+
+    # Enclosing box
+    enclosing_w = (
+        torch.max(pred_ltrb[:, 0], target_ltrb[:, 0])
+        + torch.max(pred_ltrb[:, 2], target_ltrb[:, 2])
+    )
+    enclosing_h = (
+        torch.max(pred_ltrb[:, 1], target_ltrb[:, 1])
+        + torch.max(pred_ltrb[:, 3], target_ltrb[:, 3])
+    )
+    enclosing_area = enclosing_w * enclosing_h
+
+    giou = iou - (enclosing_area - union_area) / (enclosing_area + 1e-7)
+    return (1 - giou).mean()
+
+
 def build_fcos_loss(
     cls_weight: float = 1.0,
     reg_weight: float = 1.0,
@@ -185,10 +238,9 @@ def build_fcos_loss(
             # Regression + centerness (positive only)
             if pos_mask.any():
                 n_pos += pos_mask.sum().item()
-                reg_loss = nn.functional.smooth_l1_loss(
+                reg_loss = _giou_loss_ltrb(
                     reg_pred.permute(0, 2, 3, 1)[pos_mask],
                     reg_target[pos_mask],
-                    beta=1.0,
                 )
                 ctr_loss = nn.functional.binary_cross_entropy_with_logits(
                     ctr_pred.permute(0, 2, 3, 1)[pos_mask].squeeze(-1),
@@ -236,10 +288,9 @@ def build_espdet_loss(
 
             if pos_mask.any():
                 n_pos += pos_mask.sum().item()
-                reg_loss = nn.functional.smooth_l1_loss(
+                reg_loss = _giou_loss_ltrb(
                     reg_pred.permute(0, 2, 3, 1)[pos_mask],
                     reg_target[pos_mask],
-                    beta=1.0,
                 )
                 total_reg = total_reg + reg_loss
 

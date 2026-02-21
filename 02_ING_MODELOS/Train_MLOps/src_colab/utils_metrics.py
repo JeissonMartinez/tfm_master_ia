@@ -26,6 +26,8 @@ class TrainingHistory:
     train_cls_loss: List[float] = field(default_factory=list)
     val_box_loss: List[float] = field(default_factory=list)
     val_cls_loss: List[float] = field(default_factory=list)
+    train_ctr_loss: List[float] = field(default_factory=list)
+    val_ctr_loss: List[float] = field(default_factory=list)
     # --- metrics (YOLO CSV) ---
     precision: List[float] = field(default_factory=list)
     recall: List[float] = field(default_factory=list)
@@ -83,6 +85,10 @@ def extract_two_phase_history(csv_path: str) -> TrainingHistory:
         h.val_cls_loss = df["val_cls_loss"].tolist()
     if "val_reg_loss" in df.columns:
         h.val_box_loss = df["val_reg_loss"].tolist()
+    if "train_ctr_loss" in df.columns:
+        h.train_ctr_loss = df["train_ctr_loss"].tolist()
+    if "val_ctr_loss" in df.columns:
+        h.val_ctr_loss = df["val_ctr_loss"].tolist()
     return h
 
 
@@ -225,21 +231,39 @@ def plot_training_curves(
     ax_lr.set_title("LR Schedule")
     ax_lr.grid(True, alpha=0.3)
 
-    # Metrics (YOLO)
+    # Panel 6: Metrics (YOLO) or Centerness Loss (PyTorch FCOS/ESPDet)
     ax_m = axes[1, 2]
     _maybe_phase_bg(ax_m)
-    for vals, label, color in [
-        (history.precision, "Precision", "tab:blue"),
-        (history.recall, "Recall", "tab:orange"),
-        (history.mAP50, "mAP@50", "tab:green"),
-        (history.mAP50_95, "mAP@50-95", "tab:red"),
-    ]:
-        if vals:
-            ax_m.plot(epochs[:len(vals)], vals, label=label, color=color,
-                      marker="o", markersize=3)
-    ax_m.set_xlabel("Epoch")
-    ax_m.set_ylabel("Score")
-    ax_m.set_title("Métricas Val")
+    has_yolo_metrics = any([
+        history.precision, history.recall, history.mAP50, history.mAP50_95,
+    ])
+    if has_yolo_metrics:
+        for vals, label, color in [
+            (history.precision, "Precision", "tab:blue"),
+            (history.recall, "Recall", "tab:orange"),
+            (history.mAP50, "mAP@50", "tab:green"),
+            (history.mAP50_95, "mAP@50-95", "tab:red"),
+        ]:
+            if vals:
+                ax_m.plot(epochs[:len(vals)], vals, label=label, color=color,
+                          marker="o", markersize=3)
+        ax_m.set_xlabel("Epoch")
+        ax_m.set_ylabel("Score")
+        ax_m.set_title("Métricas Val")
+    else:
+        # PyTorch FCOS/ESPDet: show centerness loss
+        if history.train_ctr_loss:
+            ax_m.plot(epochs[:len(history.train_ctr_loss)],
+                      history.train_ctr_loss, label="Train Ctr",
+                      marker="o", markersize=3, color="tab:blue")
+        if history.val_ctr_loss:
+            ax_m.plot(epochs[:len(history.val_ctr_loss)],
+                      history.val_ctr_loss, label="Val Ctr",
+                      linestyle="--", marker="s", markersize=3,
+                      color="tab:orange")
+        ax_m.set_xlabel("Epoch")
+        ax_m.set_ylabel("Centerness Loss")
+        ax_m.set_title("Centerness Loss")
     ax_m.legend(fontsize=8)
     ax_m.grid(True, alpha=0.3)
 

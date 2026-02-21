@@ -18,7 +18,7 @@ dataset:
 
 common:
   batch_size: 16
-  patience: 20
+  patience: 15
   seed: 42
   conf_threshold: 0.25
   iou_threshold: 0.45
@@ -39,7 +39,7 @@ fcos:
   phase1_scheduler: cosine
 
   # ── Fase 2 — Todo descongelado ───────────────────────────
-  phase2_epochs: 80
+  phase2_epochs: 60
   phase2_lr: 1.0e-4
   phase2_wd: 1.0e-5
   phase2_optimizer: adamw
