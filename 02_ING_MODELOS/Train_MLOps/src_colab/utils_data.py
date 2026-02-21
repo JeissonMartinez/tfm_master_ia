@@ -112,7 +112,7 @@ def generate_data_yaml(
         "nc": len(class_names),
         "names": {i: name for i, name in enumerate(class_names)},
     }
-    write_yaml(data, str(output_path))
+    write_yaml(str(output_path), data)
     log(f"📄 data.yaml generado: {output_path}")
     return str(output_path)
 
@@ -411,12 +411,12 @@ class IODCDataset(Dataset):
                     val_shift_limit=cfg.get("aug_val_shift_limit", 20),
                     p=0.5,
                 ),
-                A.ShiftScaleRotate(
-                    shift_limit=cfg.get("aug_shift_limit", 0.1),
-                    scale_limit=cfg.get("aug_scale_limit", 0.2),
-                    rotate_limit=cfg.get("aug_rotate_limit", 15),
+                A.Affine(
+                    translate_percent=cfg.get("aug_shift_limit", 0.1),
+                    scale=(1 - cfg.get("aug_scale_limit", 0.2), 1 + cfg.get("aug_scale_limit", 0.2)),
+                    rotate=(-cfg.get("aug_rotate_limit", 15), cfg.get("aug_rotate_limit", 15)),
                     border_mode=cv2.BORDER_CONSTANT,
-                    value=0,
+                    fill=0,
                     p=0.5,
                 ),
             ])
@@ -466,11 +466,11 @@ class IODCDataset(Dataset):
                         cls_id = int(parts[0])
                         cx, cy, w, h = float(parts[1]), float(parts[2]), \
                             float(parts[3]), float(parts[4])
-                        # Clamp to [0, 1] for safety
-                        cx = max(0.0, min(1.0, cx))
-                        cy = max(0.0, min(1.0, cy))
+                        # Clamp derived edges to [0, 1] for albumentations
                         w = max(0.001, min(1.0, w))
                         h = max(0.001, min(1.0, h))
+                        cx = max(w / 2, min(1.0 - w / 2, cx))
+                        cy = max(h / 2, min(1.0 - h / 2, cy))
                         bboxes.append([cx, cy, w, h])
                         class_labels.append(cls_id)
 

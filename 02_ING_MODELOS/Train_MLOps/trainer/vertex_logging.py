@@ -96,6 +96,36 @@ class VertexExperimentLogger:
     # ── Hiperparámetros ──────────────────────────────────────────────
 
     @_safe_call
+    def log_params(self, params: Dict[str, Any]) -> None:
+        """Registra un diccionario arbitrario de parámetros."""
+        safe_params: Dict[str, Any] = {}
+        for k, v in params.items():
+            if isinstance(v, (list, dict)):
+                safe_params[k] = json.dumps(v)
+            elif isinstance(v, bool):
+                safe_params[k] = int(v)
+            else:
+                safe_params[k] = v
+        aiplatform.log_params(safe_params)
+        print(f"  📝 Registrados {len(safe_params)} parámetros adicionales")
+
+    @_safe_call
+    def log_metrics(self, metrics: Dict[str, Any]) -> None:
+        """Registra métricas arbitrarias en Vertex AI Experiments."""
+        safe: Dict[str, Any] = {}
+        for k, v in metrics.items():
+            if isinstance(v, bool):
+                safe[k] = int(v)
+            elif isinstance(v, (int, float)):
+                safe[k] = v
+            elif isinstance(v, str):
+                safe[k] = v
+            else:
+                safe[k] = str(v)
+        aiplatform.log_metrics(safe)
+        print(f"  📈 Registradas {len(safe)} métricas")
+
+    @_safe_call
     def log_config(self, setup) -> None:
         """Registra todos los hiperparámetros del ``ExperimentSetup``.
 
@@ -119,7 +149,7 @@ class VertexExperimentLogger:
         }
 
         # Añadir config específica de la familia
-        family_cfg = setup.yolo_config or setup.mobilenet_config
+        family_cfg = setup.family_config
         if family_cfg:
             for k, v in family_cfg.items():
                 if isinstance(v, (list, dict)):

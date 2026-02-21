@@ -80,6 +80,14 @@ class PhaseHistory:
     epoch: List[int] = field(default_factory=list)
     train_loss: List[float] = field(default_factory=list)
     val_loss: List[float] = field(default_factory=list)
+    # --- loss components (model-agnostic names) ---
+    train_cls_loss: List[float] = field(default_factory=list)
+    train_reg_loss: List[float] = field(default_factory=list)
+    train_ctr_loss: List[float] = field(default_factory=list)
+    val_cls_loss: List[float] = field(default_factory=list)
+    val_reg_loss: List[float] = field(default_factory=list)
+    val_ctr_loss: List[float] = field(default_factory=list)
+    # --- meta ---
     lr: List[float] = field(default_factory=list)
     img_size: List[int] = field(default_factory=list)
     phase_label: str = ""
@@ -102,6 +110,30 @@ class TwoPhaseHistory:
     @property
     def all_val_loss(self) -> List[float]:
         return self.phase1.val_loss + self.phase2.val_loss
+
+    @property
+    def all_train_cls_loss(self) -> List[float]:
+        return self.phase1.train_cls_loss + self.phase2.train_cls_loss
+
+    @property
+    def all_train_reg_loss(self) -> List[float]:
+        return self.phase1.train_reg_loss + self.phase2.train_reg_loss
+
+    @property
+    def all_train_ctr_loss(self) -> List[float]:
+        return self.phase1.train_ctr_loss + self.phase2.train_ctr_loss
+
+    @property
+    def all_val_cls_loss(self) -> List[float]:
+        return self.phase1.val_cls_loss + self.phase2.val_cls_loss
+
+    @property
+    def all_val_reg_loss(self) -> List[float]:
+        return self.phase1.val_reg_loss + self.phase2.val_reg_loss
+
+    @property
+    def all_val_ctr_loss(self) -> List[float]:
+        return self.phase1.val_ctr_loss + self.phase2.val_ctr_loss
 
     @property
     def all_lr(self) -> List[float]:
@@ -298,10 +330,14 @@ def train_one_epoch(
     scaler: Optional[torch.amp.GradScaler] = None,
     grad_clip: float = 10.0,
     encode_targets_fn: Optional[Callable] = None,
-) -> float:
-    """Train for one epoch. Returns average loss."""
+) -> Dict[str, float]:
+    """Train for one epoch.
+
+    Returns:
+        Dict with averaged loss components (always includes ``"total"``).
+    """
     model.train()
-    total_loss = 0.0
+    accum: Dict[str, float] = {}
     n_batches = 0
 
     for images, targets in dataloader:
@@ -333,10 +369,12 @@ def train_one_epoch(
             nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
 
-        total_loss += loss.item()
+        for k, v in loss_dict.items():
+            accum[k] = accum.get(k, 0.0) + (v.item() if hasattr(v, 'item') else float(v))
         n_batches += 1
 
-    return total_loss / max(n_batches, 1)
+    denom = max(n_batches, 1)
+    return {k: v / denom for k, v in accum.items()}
 
 
 @torch.no_grad()
@@ -346,10 +384,14 @@ def validate_one_epoch(
     loss_fn: Callable,
     device: str,
     encode_targets_fn: Optional[Callable] = None,
-) -> float:
-    """Validate for one epoch. Returns average loss."""
+) -> Dict[str, float]:
+    """Validate for one epoch.
+
+    Returns:
+        Dict with averaged loss components (always includes ``"total"``).
+    """
     model.eval()
-    total_loss = 0.0
+    accum: Dict[str, float] = {}
     n_batches = 0
 
     for images, targets in dataloader:
@@ -361,10 +403,12 @@ def validate_one_epoch(
 
         preds = model(images)
         loss_dict = loss_fn(preds, encoded_targets)
-        total_loss += loss_dict["total"].item()
+        for k, v in loss_dict.items():
+            accum[k] = accum.get(k, 0.0) + (v.item() if hasattr(v, 'item') else float(v))
         n_batches += 1
 
-    return total_loss / max(n_batches, 1)
+    denom = max(n_batches, 1)
+    return {k: v / denom for k, v in accum.items()}
 
 
 def _run_phase(
@@ -439,15 +483,17 @@ def _run_phase(
             for pg in optimizer.param_groups:
                 pg["lr"] = warmup_lr
 
-        train_loss = train_one_epoch(
+        train_result = train_one_epoch(
             model, train_loader, loss_fn, optimizer,
             config.device, scaler, config.grad_clip_max_norm,
             encode_targets_fn,
         )
-        val_loss = validate_one_epoch(
+        val_result = validate_one_epoch(
             model, val_loader, loss_fn, config.device, encode_targets_fn,
         )
 
+        train_loss = train_result["total"]
+        val_loss = val_result["total"]
         current_lr = optimizer.param_groups[0]["lr"]
 
         # Scheduler step
@@ -457,12 +503,20 @@ def _run_phase(
             else:
                 scheduler.step()
 
-        # Record
+        # Record totals
         history.epoch.append(epoch_abs)
         history.train_loss.append(train_loss)
         history.val_loss.append(val_loss)
         history.lr.append(current_lr)
         history.img_size.append(new_size)
+
+        # Record loss components (keys depend on loss_fn)
+        history.train_cls_loss.append(train_result.get("cls_loss", 0.0))
+        history.train_reg_loss.append(train_result.get("reg_loss", 0.0))
+        history.train_ctr_loss.append(train_result.get("ctr_loss", 0.0))
+        history.val_cls_loss.append(val_result.get("cls_loss", 0.0))
+        history.val_reg_loss.append(val_result.get("reg_loss", 0.0))
+        history.val_ctr_loss.append(val_result.get("ctr_loss", 0.0))
 
         # Checkpoint
         if val_loss < best_val_loss:
@@ -474,9 +528,17 @@ def _run_phase(
         else:
             patience_counter += 1
 
-        # Log
+        # Log (with component breakdown)
+        comp_parts = []
+        for key in ["cls_loss", "reg_loss", "ctr_loss"]:
+            tv = train_result.get(key, 0.0)
+            if tv > 0:
+                comp_parts.append(f"{key.replace('_loss','')}={tv:.4f}")
+        comp_str = f" [{' | '.join(comp_parts)}]" if comp_parts else ""
+
         log(f"  Epoch {epoch_abs:>3d} | "
-            f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | "
+            f"train={train_loss:.4f}{comp_str} | "
+            f"val={val_loss:.4f} | "
             f"lr={current_lr:.2e} | img={new_size} | "
             f"{'★ best' if patience_counter == 0 else ''}")
 
@@ -549,7 +611,7 @@ def train_two_phase(
     # Reload best checkpoint from phase 1
     best_ckpt = os.path.join(save_dir, f"best_{family.lower()}.pt")
     if os.path.exists(best_ckpt):
-        model.load_state_dict(torch.load(best_ckpt, map_location=config.device))
+        model.load_state_dict(torch.load(best_ckpt, map_location=config.device, weights_only=True))
         log(f"🔄 Mejor checkpoint de Phase 1 recargado")
 
     unfreeze_all(model)
@@ -722,7 +784,7 @@ def save_two_phase_history(
     history: TwoPhaseHistory,
     output_path: str,
 ) -> None:
-    """Save TwoPhaseHistory to CSV."""
+    """Save TwoPhaseHistory to CSV (with loss component breakdown)."""
     import pandas as pd
 
     rows = []
@@ -731,7 +793,13 @@ def save_two_phase_history(
             rows.append({
                 "epoch": ph.epoch[i],
                 "train_loss": ph.train_loss[i],
+                "train_cls_loss": ph.train_cls_loss[i] if i < len(ph.train_cls_loss) else 0.0,
+                "train_reg_loss": ph.train_reg_loss[i] if i < len(ph.train_reg_loss) else 0.0,
+                "train_ctr_loss": ph.train_ctr_loss[i] if i < len(ph.train_ctr_loss) else 0.0,
                 "val_loss": ph.val_loss[i],
+                "val_cls_loss": ph.val_cls_loss[i] if i < len(ph.val_cls_loss) else 0.0,
+                "val_reg_loss": ph.val_reg_loss[i] if i < len(ph.val_reg_loss) else 0.0,
+                "val_ctr_loss": ph.val_ctr_loss[i] if i < len(ph.val_ctr_loss) else 0.0,
                 "lr": ph.lr[i],
                 "img_size": ph.img_size[i] if i < len(ph.img_size) else 0,
                 "phase": ph.phase_label,

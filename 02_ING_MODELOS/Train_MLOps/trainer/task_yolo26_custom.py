@@ -157,7 +157,8 @@ def main() -> None:
     )
 
     pretrained = fc.get("pretrained_weights", "yolo11n.pt")
-    model = build_yolo26_custom_model(pretrained_weights=pretrained)
+    variant = pretrained.replace(".pt", "")
+    model = build_yolo26_custom_model(variant=variant)
     print(f"✅ YOLO26 cargado desde: {pretrained}")
     print(f"📐 Specs: {YOLO26_CUSTOM_SPECS}")
 
@@ -174,41 +175,101 @@ def main() -> None:
 
     project_dir = os.path.join(LOCAL_WORK_DIR, "yolo_project")
 
-    yolo_cfg = Yolo26CustomConfig(
-        data_yaml=data_yaml_path,
-        project_dir=project_dir,
-        experiment_name=setup.experiment_name,
-        imgsz=fc.get("imgsz", setup.common_config.get("img_size", 640)),
-        batch=fc.get("batch", setup.common_config.get("batch_size", 16)),
-        pretrained_weights=pretrained,
-        # Phase 1
-        phase1_epochs=fc.get("phase1_epochs", 30),
-        phase1_freeze=fc.get("phase1_freeze_layers", 10),
-        phase1_lr0=fc.get("phase1_lr0", 0.01),
-        phase1_lrf=fc.get("phase1_lrf", 0.01),
-        # Phase 2
-        phase2_epochs=fc.get("phase2_epochs", 70),
-        phase2_freeze=fc.get("phase2_freeze_layers", 0),
-        phase2_lr0=fc.get("phase2_lr0", 0.001),
-        phase2_lrf=fc.get("phase2_lrf", 0.001),
-        # Aug
+    # ── Phase 1 — frozen backbone layers ──
+    phase1_freeze = fc.get("phase1_freeze_layers", 10)
+    phase1_cfg = Yolo26CustomConfig(
+        model=pretrained,
+        imgsz=fc.get("imgsz", setup.img_size),
+        epochs=fc.get("phase1_epochs", 30),
+        batch=fc.get("batch", setup.batch_size),
+        lr0=fc.get("phase1_lr0", 0.01),
+        lrf=fc.get("phase1_lrf", 0.01),
+        freeze=list(range(phase1_freeze)) if phase1_freeze else None,
         mosaic=fc.get("mosaic", 1.0),
         mixup=fc.get("mixup", 0.1),
         close_mosaic=fc.get("close_mosaic", 10),
-        # Other
-        patience=setup.common_config.get("patience", 30),
+        patience=setup.patience,
         amp=fc.get("amp", True),
         workers=fc.get("workers", 4),
-        seed=setup.common_config.get("seed", 42),
+        project=project_dir,
+        name="phase1",
     )
 
     t0 = time.time()
-    results, best_weights = train_yolo26_custom(model, yolo_cfg)
+    print("🔒 Phase 1 — Backbone congelado")
+    train_yolo26_custom(data_yaml_path, phase1_cfg)
+
+    phase1_best = os.path.join(project_dir, "phase1", "weights", "best.pt")
+    if not os.path.exists(phase1_best):
+        phase1_best = os.path.join(project_dir, "phase1", "weights", "last.pt")
+
+    # ── Phase 2 — all layers unfrozen ──
+    phase2_cfg = Yolo26CustomConfig(
+        model=phase1_best,
+        imgsz=fc.get("imgsz", setup.img_size),
+        epochs=fc.get("phase2_epochs", 70),
+        batch=fc.get("batch", setup.batch_size),
+        lr0=fc.get("phase2_lr0", 0.001),
+        lrf=fc.get("phase2_lrf", 0.001),
+        freeze=None,
+        mosaic=fc.get("mosaic", 1.0),
+        mixup=fc.get("mixup", 0.1),
+        close_mosaic=fc.get("close_mosaic", 10),
+        patience=setup.patience,
+        amp=fc.get("amp", True),
+        workers=fc.get("workers", 4),
+        project=project_dir,
+        name="phase2",
+    )
+
+    print("🔓 Phase 2 — Fine-tuning completo")
+    train_yolo26_custom(data_yaml_path, phase2_cfg)
+
+    best_weights = os.path.join(project_dir, "phase2", "weights", "best.pt")
+    if not os.path.exists(best_weights):
+        best_weights = os.path.join(project_dir, "phase2", "weights", "last.pt")
+
     train_time = time.time() - t0
     print(f"⏱️  Entrenamiento completado en {train_time / 60:.1f} min")
     print(f"📦 Best weights: {best_weights}")
 
-    logger.log_metrics({"train_time_min": train_time / 60})
+    # Log richer training metrics from Ultralytics results.csv
+    import glob
+    _results_csvs = glob.glob(os.path.join(project_dir, "**", "results.csv"),
+                              recursive=True)
+    _training_metrics: dict = {"train_time_min": train_time / 60}
+    if _results_csvs:
+        try:
+            import pandas as _pd
+            _rdf = _pd.read_csv(_results_csvs[-1])
+            _rdf.columns = [c.strip() for c in _rdf.columns]
+            # Find best mAP50 epoch
+            _map_col = [c for c in _rdf.columns if "map50(b)" in c.lower()
+                        or ("map50" in c.lower() and "95" not in c.lower())]
+            if _map_col:
+                _best_row = _rdf[_map_col[0]].idxmax()
+                _training_metrics["best_mAP50"] = float(_rdf[_map_col[0]].iloc[_best_row])
+                _training_metrics["best_mAP50_epoch"] = int(_best_row)
+            # Precision / Recall at best
+            for _pat, _mname in [("precision", "best_precision"),
+                                  ("recall", "best_recall"),
+                                  ("map50-95", "best_mAP50_95")]:
+                _cols = [c for c in _rdf.columns if _pat in c.lower()]
+                if _cols:
+                    _training_metrics[_mname] = float(_rdf[_cols[0]].iloc[_best_row])
+            # Final losses
+            for _pat, _mname in [("train/box", "final_train_box_loss"),
+                                  ("train/cls", "final_train_cls_loss"),
+                                  ("val/box", "final_val_box_loss"),
+                                  ("val/cls", "final_val_cls_loss")]:
+                _cols = [c for c in _rdf.columns if _pat in c.lower()]
+                if _cols:
+                    _training_metrics[_mname] = float(_rdf[_cols[0]].iloc[-1])
+            _training_metrics["total_epochs"] = len(_rdf)
+        except Exception as _exc:
+            print(f"⚠️ Error leyendo results.csv para métricas: {_exc}")
+
+    logger.log_metrics(_training_metrics)
 
     # ================================================================
     # Bloque 5 — Curvas de Entrenamiento
@@ -231,7 +292,7 @@ def main() -> None:
         th = extract_yolo26_history(history_csv)
         curves_path = os.path.join(LOCAL_WORK_DIR, "training_curves.png")
         plot_training_curves(th, save_path=curves_path,
-                             title=f"YOLO26 Custom — {setup.experiment_name}")
+                             title_prefix=f"YOLO26 Custom — {setup.experiment_name}")
         logger.log_figure(curves_path, "training_curves")
         print_training_summary(th)
     else:
@@ -256,13 +317,13 @@ def main() -> None:
         model_path=best_weights,
         data_yaml=data_yaml_path,
         imgsz=fc.get("export_imgsz", fc.get("imgsz", 224)),
-        conf=setup.common_config.get("conf_threshold", 0.25),
-        iou=setup.common_config.get("iou_threshold", 0.45),
+        conf=setup.conf_threshold,
+        iou=setup.iou_threshold,
         split="val",
         class_names=setup.class_names,
     )
 
-    print(f"📊 Val mAP@50: {val_results.map50:.4f}")
+    print(f"📊 Val mAP@50: {val_results.mAP50:.4f}")
 
     cm_path = os.path.join(LOCAL_WORK_DIR, "val_confusion_matrix.png")
     plot_confusion_matrix(val_results, save_path=cm_path)
@@ -272,8 +333,8 @@ def main() -> None:
     save_evaluation(val_results, val_json)
 
     logger.log_metrics({
-        "val_map50": val_results.map50,
-        **{f"val_ap_{cn}": ap for cn, ap in val_results.per_class_ap.items()},
+        "val_map50": val_results.mAP50,
+        **{f"val_ap_{cn}": ap for cn, ap in val_results.per_class_ap50.items()},
     })
 
     # ================================================================
@@ -287,13 +348,13 @@ def main() -> None:
         model_path=best_weights,
         data_yaml=data_yaml_path,
         imgsz=fc.get("export_imgsz", fc.get("imgsz", 224)),
-        conf=setup.common_config.get("conf_threshold", 0.25),
-        iou=setup.common_config.get("iou_threshold", 0.45),
+        conf=setup.conf_threshold,
+        iou=setup.iou_threshold,
         split="test",
         class_names=setup.class_names,
     )
 
-    print(f"📊 Test mAP@50: {test_results.map50:.4f}")
+    print(f"📊 Test mAP@50: {test_results.mAP50:.4f}")
 
     test_cm_path = os.path.join(LOCAL_WORK_DIR, "test_confusion_matrix.png")
     plot_confusion_matrix(test_results, save_path=test_cm_path)
@@ -303,8 +364,8 @@ def main() -> None:
     save_evaluation(test_results, test_json)
 
     logger.log_metrics({
-        "test_map50": test_results.map50,
-        **{f"test_ap_{cn}": ap for cn, ap in test_results.per_class_ap.items()},
+        "test_map50": test_results.mAP50,
+        **{f"test_ap_{cn}": ap for cn, ap in test_results.per_class_ap50.items()},
     })
 
     # ================================================================
@@ -339,8 +400,8 @@ def main() -> None:
 
     # Save experiment
     experiment = create_experiment_from_setup(setup)
-    experiment.val_map50 = val_results.map50
-    experiment.test_map50 = test_results.map50
+    experiment.val_map50 = val_results.mAP50
+    experiment.test_map50 = test_results.mAP50
     experiment.onnx_size_mb = export_result.file_size_mb
     experiment.onnx_latency_ms = onnx_verify.inference_time_ms
     experiment.model_path = best_weights

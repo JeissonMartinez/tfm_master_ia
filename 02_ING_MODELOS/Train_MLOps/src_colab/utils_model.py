@@ -340,7 +340,7 @@ def build_espdet_pico(
     """Build an ESPDet-Pico model."""
     model = ESPDetPico(num_classes, width_mult, reg_max)
     if pretrained_weights:
-        state = torch.load(pretrained_weights, map_location="cpu")
+        state = torch.load(pretrained_weights, map_location="cpu", weights_only=True)
         model.load_state_dict(state, strict=False)
         log(f"✅ Pesos pre-entrenados cargados: {pretrained_weights}")
     model = model.to(device)

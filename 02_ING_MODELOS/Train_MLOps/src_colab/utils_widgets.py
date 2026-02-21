@@ -381,3 +381,19 @@ def create_model_selector(
 
     display(panel)
     return setup
+
+
+# ── Aliases for __init__.py re-exports ──────────────────────────────
+
+def build_experiment_setup(**kwargs: Any) -> ExperimentSetup:
+    """Alias for ``create_manual_setup`` (used by __init__.py re-export)."""
+    return create_manual_setup(**kwargs)
+
+
+def build_experiment_setup_from_yaml(yaml_path: str) -> "ExperimentSetup":
+    """Convenience: load a YAML file and return an ExperimentSetup.
+
+    Delegates to ``trainer.config_loader.load_config_from_yaml``.
+    """
+    from trainer.config_loader import load_config_from_yaml
+    return load_config_from_yaml(yaml_path)

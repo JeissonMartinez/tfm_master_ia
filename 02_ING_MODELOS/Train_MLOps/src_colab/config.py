@@ -43,6 +43,18 @@ MODEL_FAMILIES = {
 }
 
 
+# ── Derived convenience constants ───────────────────────────────────
+MODEL_VARIANTS: Dict[str, List[str]] = {
+    family: info["variants"] for family, info in MODEL_FAMILIES.items()
+}
+
+TRAINING_FRAMEWORKS: Dict[str, str] = {
+    family: info["framework"] for family, info in MODEL_FAMILIES.items()
+}
+
+BASE_IMG_SIZE: int = 224  # Target resolution for ESP32-S3
+
+
 # ── Dataset master class definitions ────────────────────────────────
 DATASET_MASTER_CLASSES = {
     "iodc_yolo": ["dog", "door", "obstacle", "person", "stair"],

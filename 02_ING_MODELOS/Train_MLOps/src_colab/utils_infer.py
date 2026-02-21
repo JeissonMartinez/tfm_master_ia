@@ -116,11 +116,11 @@ def predict_fcos(
             cx_sel = cx[mask]
             cy_sel = cy[mask]
 
-            # Decode boxes: FCOS predicts (l, t, r, b) distances
-            x1 = (cx_sel - reg_sel[:, 0]) / img_w
-            y1 = (cy_sel - reg_sel[:, 1]) / img_h
-            x2 = (cx_sel + reg_sel[:, 2]) / img_w
-            y2 = (cy_sel + reg_sel[:, 3]) / img_h
+            # Decode boxes: FCOS predicts (l, t, r, b) in stride-normalized units
+            x1 = (cx_sel - reg_sel[:, 0] * stride) / img_w
+            y1 = (cy_sel - reg_sel[:, 1] * stride) / img_h
+            x2 = (cx_sel + reg_sel[:, 2] * stride) / img_w
+            y2 = (cy_sel + reg_sel[:, 3] * stride) / img_h
 
             boxes = torch.stack([x1, y1, x2, y2], dim=1)
             boxes = boxes.clamp(0, 1)
@@ -250,10 +250,11 @@ def predict_espdet(
             reg_sel = torch.relu(reg_flat[mask])  # distances must be positive
             cx_sel, cy_sel = cx[mask], cy[mask]
 
-            x1 = (cx_sel - reg_sel[:, 0]) / img_w
-            y1 = (cy_sel - reg_sel[:, 1]) / img_h
-            x2 = (cx_sel + reg_sel[:, 2]) / img_w
-            y2 = (cy_sel + reg_sel[:, 3]) / img_h
+            # Decode boxes: ESPDet predicts (l, t, r, b) in stride-normalized units
+            x1 = (cx_sel - reg_sel[:, 0] * stride) / img_w
+            y1 = (cy_sel - reg_sel[:, 1] * stride) / img_h
+            x2 = (cx_sel + reg_sel[:, 2] * stride) / img_w
+            y2 = (cy_sel + reg_sel[:, 3] * stride) / img_h
 
             boxes = torch.stack([x1, y1, x2, y2], dim=1).clamp(0, 1)
             boxes_all.append(boxes)

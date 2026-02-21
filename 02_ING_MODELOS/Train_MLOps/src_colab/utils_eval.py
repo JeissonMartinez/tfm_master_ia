@@ -116,6 +116,7 @@ def evaluate_pytorch_model(
     iou_threshold: float = 0.5,
     model_name: str = "pytorch_model",
     family: str = "fcos",
+    split: str = "val",
 ) -> EvaluationResults:
     """Evaluate a PyTorch detection model using a custom predict_fn.
 
@@ -130,6 +131,7 @@ def evaluate_pytorch_model(
         iou_threshold: IoU threshold for matching.
         model_name: Label for the evaluation.
         family: Model family label.
+        split: Dataset split being evaluated ("val" or "test").
 
     Returns:
         EvaluationResults with mAP, P, R, F1, per-class, confusion matrix.
@@ -137,7 +139,7 @@ def evaluate_pytorch_model(
     ev = EvaluationResults()
     ev.model_name = model_name
     ev.family = family
-    ev.split = "val"
+    ev.split = split
     ev.class_names = class_names
 
     all_detections: List[Tuple] = []   # (img_idx, cls, conf, bbox)

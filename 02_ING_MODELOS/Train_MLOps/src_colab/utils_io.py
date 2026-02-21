@@ -1,11 +1,13 @@
-"""Safe I/O utilities: logging, directory creation, JSON/text read-write."""
+"""Safe I/O utilities: logging, directory creation, JSON/text read-write,
+and thin GCS wrappers that delegate to ``trainer.gcs_utils``.
+"""
 from __future__ import annotations
 
 import json
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 def log(msg: str) -> None:
@@ -114,3 +116,39 @@ def write_yaml(path: str | Path, data: Dict[str, Any]) -> bool:
     except Exception as exc:
         log(f"⚠️ Error escribiendo YAML: {path} → {exc}")
         return False
+
+
+# ── GCS helpers (delegate to trainer.gcs_utils) ─────────────────────
+
+def download_from_gcs(gcs_uri: str, local_path: str) -> str:
+    """Download a single file from GCS.
+
+    Thin wrapper that delegates to ``trainer.gcs_utils.download_from_gcs``.
+    """
+    from trainer.gcs_utils import download_from_gcs as _download
+    return _download(gcs_uri, local_path)
+
+
+def upload_to_gcs(local_path: str, gcs_uri: str) -> str:
+    """Upload a single file to GCS.
+
+    Thin wrapper that delegates to ``trainer.gcs_utils.upload_file_to_gcs``.
+    """
+    from trainer.gcs_utils import upload_file_to_gcs
+    return upload_file_to_gcs(local_path, gcs_uri)
+
+
+def setup_experiment_dirs(base_dir: str, run_name: str) -> Dict[str, str]:
+    """Create standard experiment sub-directories and return their paths.
+
+    Returns a dict with keys: root, checkpoints, export, plots.
+    """
+    dirs: Dict[str, str] = {}
+    dirs["root"] = os.path.join(base_dir, run_name)
+    dirs["checkpoints"] = os.path.join(dirs["root"], "checkpoints")
+    dirs["export"] = os.path.join(dirs["root"], "export")
+    dirs["plots"] = os.path.join(dirs["root"], "plots")
+    for d in dirs.values():
+        safe_mkdir(d)
+    log(f"📂 Directorios de experimento creados en {dirs['root']}")
+    return dirs

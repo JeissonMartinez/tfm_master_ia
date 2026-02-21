@@ -74,6 +74,15 @@ def extract_two_phase_history(csv_path: str) -> TrainingHistory:
         h.img_size = df["img_size"].astype(int).tolist()
     if "phase" in df.columns:
         h.phase = df["phase"].tolist()
+    # Loss component breakdown (reg → box for TrainingHistory naming)
+    if "train_cls_loss" in df.columns:
+        h.train_cls_loss = df["train_cls_loss"].tolist()
+    if "train_reg_loss" in df.columns:
+        h.train_box_loss = df["train_reg_loss"].tolist()
+    if "val_cls_loss" in df.columns:
+        h.val_cls_loss = df["val_cls_loss"].tolist()
+    if "val_reg_loss" in df.columns:
+        h.val_box_loss = df["val_reg_loss"].tolist()
     return h
 
 

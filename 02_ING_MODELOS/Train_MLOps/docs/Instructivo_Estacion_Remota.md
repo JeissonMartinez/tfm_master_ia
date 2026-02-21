@@ -219,8 +219,7 @@ bash vertex_ai/build_and_launch.sh \
 
 ```bash
 python vertex_ai/launch_job.py \
-  --family FCOS \
-  --config-name fcos_v3s_v1.yaml \
+  --config vertex_ai/configs/fcos_v3s_v1.yaml \
   --run-name fcos_v3s_v1-$(date +%Y%m%d%H%M) \
   --machine-type n1-standard-8 \
   --accelerator-type NVIDIA_TESLA_T4 \
@@ -231,16 +230,16 @@ python vertex_ai/launch_job.py \
 
 ```bash
 # FCOS
-python vertex_ai/launch_job.py --family FCOS \
-  --config-name fcos_v3s_v1.yaml --run-name fcos_v3s_v1-run1
+python vertex_ai/launch_job.py \
+  --config vertex_ai/configs/fcos_v3s_v1.yaml --run-name fcos_v3s_v1-run1
 
 # YOLO26 Custom
-python vertex_ai/launch_job.py --family YOLO26_CUSTOM \
-  --config-name yolo26n_custom_v1.yaml --run-name yolo26n_custom_v1-run1
+python vertex_ai/launch_job.py \
+  --config vertex_ai/configs/yolo26n_custom_v1.yaml --run-name yolo26n_custom_v1-run1
 
 # ESPDet-Pico
-python vertex_ai/launch_job.py --family ESPDet \
-  --config-name espdet_pico_v1.yaml --run-name espdet_pico_v1-run1
+python vertex_ai/launch_job.py \
+  --config vertex_ai/configs/espdet_pico_v1.yaml --run-name espdet_pico_v1-run1
 ```
 
 ---
@@ -312,13 +311,10 @@ output/<run-name>/
 El job de exportación convierte ONNX → formato de despliegue (INT8, ESPDL):
 
 ```bash
-python vertex_ai/launch_job.py --family EXPORT \
-  --config-name fcos_v3s_v1.yaml \
+python vertex_ai/launch_job.py \
+  --config vertex_ai/configs/fcos_v3s_v1.yaml \
   --run-name fcos-export-$(date +%Y%m%d) \
-  --extra-args \
-    "--onnx-uri gs://...-tfm-data/output/fcos_v3s_v1-run1/export/fcos_v3s.onnx" \
-    "--imgsz 224" \
-    "--quantize int8"
+  --accelerator-count 0
 ```
 
 > **Nota:** El Export Job puede ejecutarse en CPU (sin GPU), lo que reduce costes.

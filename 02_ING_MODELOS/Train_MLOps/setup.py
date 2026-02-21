@@ -41,6 +41,8 @@ setup(
         "torchvision>=0.19",
         "google-cloud-storage>=2.14",
         "google-cloud-aiplatform>=1.40",
+        "onnx>=1.14",
+        "onnxruntime>=1.16",
     ],
     python_requires=">=3.10",
 )
