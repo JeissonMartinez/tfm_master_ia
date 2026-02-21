@@ -1,0 +1,32 @@
+# ---------------------------------------------------------
+# Dependencias adicionales para el contenedor PyTorch
+# pre-built de Vertex AI (pytorch-gpu.2-4.py310 ya incluye
+# PyTorch + CUDA + torchvision).
+#
+# Estas dependencias se instalan con:
+#   pip install -r requirements.txt
+#
+# dentro del contenedor antes de ejecutar el entry-point.
+# Sin embargo, la mayoría se incluyen en setup.py para
+# empaquetado automático. Este archivo es para referencia
+# y para instalación local de desarrollo.
+# ---------------------------------------------------------
+
+# === Core ML ===
+ultralytics>=8.4
+albumentations>=1.4
+torchvision>=0.19
+
+# === Data / Viz ===
+numpy>=1.26,<2.0
+pandas>=2.0
+matplotlib>=3.8
+opencv-python-headless>=4.9
+scikit-learn>=1.4
+
+# === Config ===
+pyyaml>=6.0
+
+# === GCP ===
+google-cloud-storage>=2.14
+google-cloud-aiplatform>=1.40

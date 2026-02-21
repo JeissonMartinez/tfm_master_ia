@@ -1,0 +1,83 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: YOLO26 Custom — v1 (Baseline)
+# ─────────────────────────────────────────────────────────────
+# Custom Job de Vertex AI · Ciclo 2
+# Leído por trainer/config_loader.py → ExperimentSetup
+#
+# YOLO26 Custom usa Ultralytics para gestión de entrenamiento
+# pero con un bucle manual de 2 fases (freeze → unfreeze).
+
+model:
+  family: YOLO26_CUSTOM
+  variant: yolo26n_custom
+  version: v1
+  description: "YOLO26n con entrenamiento custom de 2 fases via Ultralytics"
+
+dataset:
+  name: iodc_yolo
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/iodc_yolo.zip
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 640
+
+common:
+  batch_size: 16
+  patience: 30
+  seed: 42
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+
+yolo26_custom:
+  # ── Modelo base ───────────────────────────────────────────
+  pretrained_weights: yolo11n.pt
+
+  # ── Fase 1 — Backbone congelado (Ultralytics) ────────────
+  phase1_epochs: 30
+  phase1_freeze_layers: 10
+  phase1_lr0: 0.01
+  phase1_lrf: 0.01
+  phase1_cos_lr: true
+
+  # ── Fase 2 — Todo descongelado ───────────────────────────
+  phase2_epochs: 70
+  phase2_freeze_layers: 0
+  phase2_lr0: 0.001
+  phase2_lrf: 0.001
+  phase2_cos_lr: true
+
+  # ── Optimización ──────────────────────────────────────────
+  optimizer: auto
+  momentum: 0.937
+  weight_decay: 0.0005
+  warmup_epochs: 3.0
+  warmup_momentum: 0.8
+  warmup_bias_lr: 0.1
+
+  # ── Augmentación ──────────────────────────────────────────
+  mosaic: 1.0
+  mixup: 0.1
+  close_mosaic: 10
+  copy_paste: 0.0
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  degrees: 0.0
+  translate: 0.1
+  scale: 0.5
+  shear: 0.0
+  perspective: 0.0
+  flipud: 0.0
+  fliplr: 0.5
+  erasing: 0.0
+
+  # ── Loss weights ──────────────────────────────────────────
+  box: 7.5
+  cls: 0.5
+
+  # ── Otros ─────────────────────────────────────────────────
+  amp: true
+  workers: 4
+  max_det: 300
+
+  # ── Export ────────────────────────────────────────────────
+  export_imgsz: 224
+  export_opset: 13
