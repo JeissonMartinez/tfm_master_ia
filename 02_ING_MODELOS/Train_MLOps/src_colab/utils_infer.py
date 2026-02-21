@@ -44,10 +44,12 @@ class DetectedObject:
 def predict_fcos(
     model: torch.nn.Module,
     images: torch.Tensor,
-    conf_threshold: float = 0.25,
+    conf_threshold: float = 0.15,
     nms_threshold: float = 0.45,
     class_names: Optional[List[str]] = None,
     strides: List[int] = [8, 16, 32],
+    ctr_power: float = 1.0,
+    iou_aware: bool = False,
 ) -> List[List[DetectedObject]]:
     """Run FCOS inference on a batch of images.
 
@@ -58,6 +60,12 @@ def predict_fcos(
         nms_threshold: IoU threshold for NMS.
         class_names: List of class names.
         strides: Feature map strides for each FPN level.
+        ctr_power: Exponent for centerness in scoring. Values < 1
+            (e.g. 0.5) soften the suppressive effect of low centerness,
+            recovering detections near object edges.
+        iou_aware: If True, compute a geometric quality factor from
+            predicted (l, t, r, b) and multiply it into the score.
+            This acts as an IoU-aware localization quality signal.
 
     Returns:
         List of DetectedObject lists (one per image).
@@ -86,12 +94,10 @@ def predict_fcos(
             centerness = ctr_pred[b].sigmoid()        # (1, H, W)
             reg_vals = reg_pred[b]                    # (4, H, W)
 
-            # Combine cls * centerness
-            combined = cls_scores * centerness        # (C, H, W)
-
             # Flatten
             num_classes = cls_scores.shape[0]
-            combined_flat = combined.permute(1, 2, 0).reshape(-1, num_classes)
+            cls_flat = cls_scores.permute(1, 2, 0).reshape(-1, num_classes)
+            ctr_flat = centerness.reshape(-1)  # (1,H,W) → (H*W,)
             reg_flat = reg_vals.permute(1, 2, 0).reshape(-1, 4)
 
             # Grid coordinates
@@ -103,18 +109,32 @@ def predict_fcos(
             cx = (x_grid.flatten().float() + 0.5) * stride
             cy = (y_grid.flatten().float() + 0.5) * stride
 
-            # Filter by confidence
-            max_scores, max_labels = combined_flat.max(dim=-1)
-            mask = max_scores > conf_threshold
+            # Filter by cls score only (not multiplied by centerness)
+            max_cls, max_labels = cls_flat.max(dim=-1)
+            mask = max_cls > conf_threshold
 
             if mask.sum() == 0:
                 continue
 
-            scores_sel = max_scores[mask]
+            cls_sel = max_cls[mask]
             labels_sel = max_labels[mask]
+            ctr_sel = ctr_flat[mask]
             reg_sel = reg_flat[mask]
             cx_sel = cx[mask]
             cy_sel = cy[mask]
+
+            # --- Scoring: softened centerness + IoU-aware quality ---
+            quality = ctr_sel ** ctr_power  # ctr^0.5 is less aggressive
+
+            if iou_aware:
+                # Geometric quality from predicted l,t,r,b
+                l, t, r, b_val = reg_sel[:, 0], reg_sel[:, 1], reg_sel[:, 2], reg_sel[:, 3]
+                lr = torch.min(l, r) / (torch.max(l, r) + 1e-6)
+                tb = torch.min(t, b_val) / (torch.max(t, b_val) + 1e-6)
+                geo_quality = torch.sqrt(torch.clamp(lr * tb, min=0, max=1))
+                quality = quality * geo_quality
+
+            scores_sel = cls_sel * quality
 
             # Decode boxes: FCOS predicts (l, t, r, b) in stride-normalized units
             x1 = (cx_sel - reg_sel[:, 0] * stride) / img_w

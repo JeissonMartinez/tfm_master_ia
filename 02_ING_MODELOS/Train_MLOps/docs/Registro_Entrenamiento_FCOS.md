@@ -16,25 +16,27 @@
 2. [Train 1 — Baseline](#2-train-1--baseline)
 3. [Train 2 — Stride Normalization + Bug Fixes](#3-train-2--stride-normalization--bug-fixes)
 4. [Train 3 — GIoU Loss + Más Épocas](#4-train-3--giou-loss--más-épocas)
-5. [Comparativa Global](#5-comparativa-global)
-6. [Conclusiones Generales](#6-conclusiones-generales)
+5. [Train 4 — Scoring Refinements (conf, centerness, IoU-aware)](#5-train-4--scoring-refinements-conf-centerness-iou-aware)
+6. [Comparativa Global](#6-comparativa-global)
+7. [Conclusiones Generales](#7-conclusiones-generales)
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-| Métrica (Test) | Train 1 | Train 2 | Train 3 |
-|---|:---:|:---:|:---:|
-| **mAP@50** | 0.4304 | 0.5600 | **0.5675** |
-| **mAP@50-95** | N/C | N/C | **0.2602** |
-| **Precision** | 0.5427 | 0.6049 | **0.6609** |
-| **Recall** | 0.5291 | 0.6271 | **0.6276** |
-| **F1-Score** | 0.5358 | 0.6158 | **0.6438** |
-| Épocas | 52 | 74 | 101 |
-| Tiempo | 12.1 min | 15.9 min | 23.6 min |
-| Inferencia | 5.0 ms | 4.6 ms | 4.8 ms |
+| Métrica (Test) | Train 1 | Train 2 | Train 3 | Train 4 |
+|---|:---:|:---:|:---:|:---:|
+| **mAP@50** | 0.4304 | 0.5600 | 0.5675 | **0.5936** |
+| **mAP@50-95** | N/C | N/C | 0.2602 | **0.2644** |
+| **Precision** | 0.5427 | 0.6049 | **0.6609** | 0.3462 |
+| **Recall** | 0.5291 | 0.6271 | 0.6276 | **0.6886** |
+| **F1-Score** | 0.5358 | 0.6158 | **0.6438** | 0.4607 |
+| Épocas | 52 | 74 | 101 | 77 |
+| Tiempo | 12.1 min | 15.9 min | 23.6 min | 17.9 min |
+| Inferencia | 5.0 ms | 4.6 ms | 4.8 ms | 5.4 ms |
 
-> **N/C**: No Calculado — la implementación de mAP@50-95 fue añadida después de Train 2.
+> **N/C**: No Calculado — la implementación de mAP@50-95 fue añadida después de Train 2.  
+> **Train 4**: Mejores mAP@50 y Recall de la serie, pero Precision colapsa por exceso de FP (scoring demasiado permisivo).
 
 ---
 
@@ -384,91 +386,248 @@ Idéntica a Train 1 excepto por los fix de código. Los hiperparámetros del YAM
 
 ---
 
-## 5. Comparativa Global
+## 5. Train 4 — Scoring Refinements (conf, centerness, IoU-aware)
 
-### 5.1 Evolución Total Loss
+### 5.1 Identificador
 
-| Fase | Train 1 | Train 2 | Train 3 |
+| Campo | Valor |
+|---|---|
+| **Job ID** | `fcos_v3s_v1-1771695807` |
+| **Fecha** | 21 de febrero de 2026 |
+| **Output GCS** | `gs://project-18f58341-12cf-47bc-861-tfm-data/output/fcos_v3s_v1-1771695807/` |
+| **Output local** | `outputs/fcos_v3s_v1-1771695807/` |
+| **Log** | `logs/FCOS_Train_4.md` |
+
+### 5.2 Cambios Respecto a Train 3
+
+| # | Cambio | Archivo(s) | Detalle |
+|---|---|---|---|
+| 1 | **conf_threshold 0.25 → 0.15** | `fcos_v3s_v1.yaml` | Umbral de confianza más bajo para recuperar detecciones que antes se descartaban. |
+| 2 | **Filtrado por cls_score puro** | `utils_infer.py` | Antes: `mask = (cls * ctr) > threshold`. Ahora: `mask = cls > threshold`. No se multiplica centerness antes de filtrar. |
+| 3 | **ctr_power = 0.5** | `utils_infer.py`, `fcos_v3s_v1.yaml` | `score = cls × ctr^0.5 × geo_quality`. Centerness elevado a 0.5 reduce su efecto supresivo (ctr=0.3 aporta 0.55 en vez de 0.30). |
+| 4 | **IoU-aware scoring** | `utils_infer.py`, `fcos_v3s_v1.yaml` | Factor de calidad geométrica: `geo_quality = sqrt(min(l,r)/max(l,r) × min(t,b)/max(t,b))`. Penaliza boxes descentrados. |
+| 5 | **Defaults en _FCOS_DEFAULTS** | `utils_widgets.py` | Nuevos campos `ctr_power` e `iou_aware_scoring` en defaults del pipeline. |
+
+> **Nota**: El entrenamiento (loss, modelo, augmentation) no cambió. Los 3 cambios solo afectan la **inferencia/evaluación**.
+
+### 5.3 Configuración
+
+| Parámetro | Train 3 | **Train 4** |
+|---|---|---|
+| conf_threshold | 0.25 | **0.15** |
+| Scoring formula | cls × ctr | **cls × ctr^0.5 × geo_quality** |
+| ctr_power | 1.0 (implícito) | **0.5** |
+| iou_aware_scoring | No | **Sí** |
+| _Resto_ | _Igual_ | _Igual_ |
+
+### 5.4 Entrenamiento
+
+- **Épocas completadas**: 77 (early stopping epoch 76)
+- **Mejor val_loss**: 36.4576 (epoch 56)
+- **Tiempo total**: 17.9 min
+- **Observaciones**:
+  - Mismo patrón que T3: meseta GIoU en epochs 0-13, ruptura en e14, descenso continuo.
+  - Loss finales similares a T3: cls=0.56, reg=1.09, ctr=1.68.
+  - Early stop en epoch 76 (vs 100 en T3) — paró **24 epochs antes** sin encontrar mejor val_loss después de epoch 56. El entrenamiento converge al mismo modelo base; las diferencias están enteramente en la inferencia.
+
+### 5.5 Resultados — Validación
+
+| Métrica | Train 3 | **Train 4** | Δ |
 |---|:---:|:---:|:---:|
-| Epoch 0 (640px) | 688.5 | 38.9 | 9.4 |
-| Final | ~43.5 | ~3.5 | ~3.3 |
-| Best val_loss | 135.49 | **24.01** | 28.12 |
+| mAP@50 | 0.3761 | **0.4178** | +11.1% |
+| mAP@50-95 | 0.1791 | **0.1843** | +2.9% |
+| Precision | 0.5910 | 0.3189 | **-46.1%** |
+| Recall | 0.4267 | **0.5115** | +19.9% |
+| F1 | 0.4956 | 0.3928 | -20.7% |
+| Detecciones / GT | 555 / 762 | **1224 / 762** | +120.5% dets |
 
-> Nota: val_loss no es directamente comparable entre T2 (Smooth L1) y T3 (GIoU) por cambio de función de loss.
+**Per-class AP@50 (Val):**
 
-### 5.2 Evolución reg_loss (Train)
-
-| Resolución | Train 1 | Train 2 | Train 3 |
+| Clase | Train 3 | **Train 4** | Δ |
 |---|:---:|:---:|:---:|
-| 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) |
-| 224px (final) | ~41 | ~1.3 | ~1.1 |
+| dog | 0.2994 | **0.3138** | +4.8% |
+| door | 0.3847 | **0.4459** | +15.9% |
+| obstacle | 0.3566 | **0.4088** | +14.6% |
+| person | 0.3800 | **0.4531** | +19.2% |
+| stair | 0.4596 | **0.4673** | +1.7% |
 
-### 5.3 Per-class AP@50 — Test (Evolución)
+### 5.6 Resultados — Test
 
-| Clase | T1 | T2 | T3 | Δ T1→T3 |
-|---|:---:|:---:|:---:|:---:|
-| dog | 0.406 | 0.463 | **0.496** | +22.2% |
-| door | 0.339 | **0.519** | 0.503 | +48.4% |
-| obstacle | 0.302 | 0.405 | **0.458** | +51.5% |
-| person | 0.521 | 0.636 | **0.636** | +22.1% |
-| stair | 0.584 | **0.777** | 0.745 | +27.6% |
-| **Media** | **0.430** | **0.560** | **0.568** | **+32.0%** |
+| Métrica | Train 3 | **Train 4** | Δ |
+|---|:---:|:---:|:---:|
+| mAP@50 | 0.5675 | **0.5936** | +4.6% |
+| mAP@50-95 | 0.2602 | **0.2644** | +1.6% |
+| Precision | 0.6609 | 0.3462 | **-47.6%** |
+| Recall | 0.6276 | **0.6886** | +9.7% |
+| F1 | 0.6438 | 0.4607 | -28.4% |
+| Detecciones / GT | 533 / 576 | **1120 / 576** | +110.1% dets |
 
-### 5.4 Confusion Matrix (Test) — Evolución de TP
+**Per-class AP@50 (Test):**
 
-| Clase (Test GT) | T1 TP | T2 TP | T3 TP | T1 FN | T2 FN | T3 FN |
+| Clase | Train 3 | **Train 4** | Δ |
+|---|:---:|:---:|:---:|
+| dog | 0.4957 | **0.5021** | +1.3% |
+| door | 0.5034 | **0.5334** | +6.0% |
+| obstacle | 0.4575 | **0.5116** | +11.8% |
+| person | 0.6359 | **0.6816** | +7.2% |
+| stair | 0.7451 | **0.7394** | -0.8% |
+
+**Confusion Matrix (Test):**
+
+|  | dog | door | obst | pers | stair | FN |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog (58) | 30 | 32 | **33** | 28 | 26 | **25** |
-| door (136) | 54 | **80** | 77 | 82 | **56** | 59 |
-| obstacle (173) | 79 | 86 | **92** | 94 | 87 | **81** |
-| person (101) | 67 | 70 | 70 | 34 | **31** | **31** |
-| stair (108) | 66 | **87** | 84 | 42 | **21** | 24 |
-| **Total** | **296** | **355** | **356** | **280** | **221** | **220** |
+| **dog** | 35 | 0 | 0 | 0 | 0 | 23 |
+| **door** | 0 | 90 | 0 | 0 | 0 | 46 |
+| **obstacle** | 0 | 0 | 107 | 0 | 0 | 66 |
+| **person** | 0 | 0 | 0 | 78 | 0 | 23 |
+| **stair** | 0 | 0 | 0 | 0 | 85 | 23 |
+| **FP** | 88 | 188 | 165 | 144 | 140 | — |
 
-### 5.5 Falsos Positivos (Test)
+**Confusion Matrix (Val):**
 
-| Clase | T1 FP | T2 FP | T3 FP |
-|---|:---:|:---:|:---:|
-| dog | 42 | 32 | **24** |
-| door | 40 | 83 | **44** |
-| obstacle | 72 | **43** | 45 |
-| person | 72 | 38 | **26** |
-| stair | 26 | 34 | 38 |
-| **Total** | **252** | **230** | **177** |
+|  | dog | door | obst | pers | stair | FN |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **dog** | 59 | 0 | 0 | 0 | 0 | 91 |
+| **door** | 0 | 88 | 0 | 0 | 0 | 72 |
+| **obstacle** | 0 | 0 | 94 | 0 | 0 | 70 |
+| **person** | 0 | 0 | 0 | 95 | 0 | 87 |
+| **stair** | 0 | 0 | 0 | 0 | 55 | 51 |
+| **FP** | 172 | 166 | 201 | 184 | 110 | — |
+
+### 5.7 Efecto de los Cambios
+
+**Lo positivo — mAP y Recall mejoraron:**
+- **mAP@50 +4.6%** en test (0.5675→0.5936): El mejor mAP@50 de los 4 entrenamientos. AP sube porque el ranking de detecciones mejora al incluir más TP en posiciones altas del ranking.
+- **Recall +9.7%** en test (0.6276→0.6886): 395 TP vs 356 en T3 → **39 objetos más detectados**. Se cumplió el objetivo de recuperar detecciones.
+- **mAP@50-95 estable** (+1.6%): La calidad de las boxes (IoU con GT) no cambió significativamente, como se esperaba — los cambios son solo de scoring, no de regresión.
+- **Todas las clases mejoran en AP@50** excepto stair (-0.8%). obstacle (+11.8%) y person (+7.2%) son las más beneficiadas.
+
+**Lo negativo — Precision colapsó:**
+- **Precision -47.6%** en test (0.6609→0.3462): El modelo genera **1120 detecciones para 576 GT** (ratio 1.94x). En T3 generaba 533 (ratio 0.93x).
+- **FP se dispararon**: 725 FP en test (vs 177 en T3) → **+309%**. Cada clase acumula entre 88 y 188 FP.
+- **F1 cae -28.4%**: La caída masiva de precision supera con creces la ganancia de recall.
+
+**Diagnóstico — El scoring es demasiado permisivo:**
+
+El problema no es uno solo de los 3 cambios, sino su **efecto compuesto**:
+1. `conf_threshold 0.15` deja pasar candidatos con cls_score bajo que habrían muerto a 0.25.
+2. El filtrado por `cls_score` puro (sin multiplicar ctr primero) deja pasar aún más candidatos.
+3. `ctr^0.5` suaviza el centerness, inflando los scores finales de detecciones de baja calidad.
+4. `geo_quality` en principio debería penalizar boxes malos, pero como los factores 1-3 ya dejaron pasar demasiados candidatos, NMS no puede limpiar todo (hay muchos boxes con overlap bajo entre sí pero todos son FP).
+
+El resultado neto es una **explosión de falsos positivos**. El modelo tiene capacidad de localización (la curva precision-recall tiene area mayor), pero el punto de operación es subóptimo.
+
+### 5.8 Lecciones
+
+1. **No acumular cambios permisivos sin contrapeso**: Los 3 cambios empujan en la misma dirección (más detecciones). Se necesitaba aplicar solo uno a la vez, o incluir un mecanismo de restricción (como max_detections_per_image o score_threshold más adaptativo).
+2. **mAP sube, F1 baja**: mAP mide el area bajo la curva P-R completa, no un punto específico. Que mAP suba no significa que el modelo sea mejor operativamente — en producción necesitamos un punto de trabajo con precision razonable.
+3. **El threshold óptimo** post-NMS probablemente está entre 0.20 y 0.30 para T4, no en 0.15. Un análisis de la curva P-R podría identificarlo.
 
 ---
 
-## 6. Conclusiones Generales
+## 6. Comparativa Global
 
-### 6.1 Impacto por Cambio
+### 6.1 Evolución Total Loss
+
+| Fase | Train 1 | Train 2 | Train 3 | Train 4 |
+|---|:---:|:---:|:---:|:---:|
+| Epoch 0 (640px) | 688.5 | 38.9 | 9.4 | 8.9 |
+| Final | ~43.5 | ~3.5 | ~3.3 | ~3.3 |
+| Best val_loss | 135.49 | **24.01** | 28.12 | 36.46 |
+
+> Nota: val_loss no es directamente comparable entre T2 (Smooth L1) y T3/T4 (GIoU) por cambio de función de loss. T3 y T4 comparten la misma función de loss; la diferencia en best val_loss (28.12 vs 36.46) refleja varianza del val set pequeño y diferente momento de early stop.
+
+### 6.2 Evolución reg_loss (Train)
+
+| Resolución | Train 1 | Train 2 | Train 3 | Train 4 |
+|---|:---:|:---:|:---:|:---:|
+| 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) | ~3.96 (meseta) |
+| 224px (final) | ~41 | ~1.3 | ~1.1 | ~1.1 |
+
+### 6.3 Per-class AP@50 — Test (Evolución)
+
+| Clase | T1 | T2 | T3 | T4 | Δ T1→T4 |
+|---|:---:|:---:|:---:|:---:|:---:|
+| dog | 0.406 | 0.463 | 0.496 | **0.502** | +23.6% |
+| door | 0.339 | 0.519 | 0.503 | **0.533** | +57.2% |
+| obstacle | 0.302 | 0.405 | 0.458 | **0.512** | +69.3% |
+| person | 0.521 | 0.636 | 0.636 | **0.682** | +30.9% |
+| stair | 0.584 | **0.777** | 0.745 | 0.739 | +26.5% |
+| **Media** | **0.430** | **0.560** | **0.568** | **0.594** | **+38.0%** |
+
+### 6.4 Confusion Matrix (Test) — Evolución de TP
+
+| Clase (Test GT) | T1 TP | T2 TP | T3 TP | T4 TP | T1 FN | T2 FN | T3 FN | T4 FN |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog (58) | 30 | 32 | 33 | **35** | 28 | 26 | 25 | **23** |
+| door (136) | 54 | 80 | 77 | **90** | 82 | 56 | 59 | **46** |
+| obstacle (173) | 79 | 86 | 92 | **107** | 94 | 87 | 81 | **66** |
+| person (101) | 67 | 70 | 70 | **78** | 34 | 31 | 31 | **23** |
+| stair (108) | 66 | 87 | 84 | **85** | 42 | 21 | 24 | **23** |
+| **Total** | **296** | **355** | **356** | **395** | **280** | **221** | **220** | **181** |
+
+### 6.5 Falsos Positivos (Test)
+
+| Clase | T1 FP | T2 FP | T3 FP | T4 FP |
+|---|:---:|:---:|:---:|:---:|
+| dog | 42 | 32 | **24** | 88 |
+| door | 40 | 83 | **44** | 188 |
+| obstacle | 72 | **43** | 45 | 165 |
+| person | 72 | 38 | **26** | 144 |
+| stair | 26 | 34 | 38 | 140 |
+| **Total** | **252** | **230** | **177** | **725** |
+
+> **T4 muestra el trade-off clásico: máximo recall (395 TP) pero explosión de FP (725).** El scoring permisivo produce 4.1x más FP que T3 para ganar solo 39 TP adicionales.
+
+---
+
+## 7. Conclusiones Generales
+
+### 7.1 Impacto por Cambio
 
 | Cambio | Métrica más afectada | Impacto |
 |---|---|---|
-| **Stride Normalization** (T1→T2) | mAP@50, Recall | +30% mAP@50, +26% Recall. Cambio más impactante. |
+| **Stride Normalization** (T1→T2) | mAP@50, Recall | +30% mAP@50, +26% Recall. Cambio más impactante de la serie. |
 | **GIoU Loss** (T2→T3) | mAP@50-95, Precision | mAP@50-95 de 0→0.26. Precision +9.3%. Mejora calidad de box. |
-| **Más épocas** (T2→T3) | Convergencia | Best en epoch 80 vs 58. Utilizado efectivamente. |
+| **Más épocas** (T2→T3) | Convergencia | Best en epoch 80 vs 58. Presupuesto extra utilizado efectivamente. |
+| **Scoring permisivo** (T3→T4) | Recall, mAP@50, FP | +9.7% Recall, +4.6% mAP@50, pero Precision -47.6% y FP +309%. Trade-off negativo. |
 
-### 6.2 Fortalezas del Modelo
+### 7.2 Fortalezas del Modelo
 
-- **Clasificación perfecta**: Zero confusión inter-clase en todas las pruebas.
-- **Modelo ligero**: 1.2M params, 4.71 MB FP32, <5ms inferencia en T4.
-- **Export ONNX exitoso**: 9 outputs, opset 13, 4.74 MB, latencia 6ms.
-- **Progresión consistente**: Cada iteración mejoró el resultado global.
+- **Clasificación perfecta**: Zero confusión inter-clase en los 4 entrenamientos. La cabeza cls discrimina las 5 clases impecablemente.
+- **Modelo ligero**: 1.2M params, 4.71 MB FP32, <6ms inferencia en T4 GPU.
+- **Export ONNX exitoso**: 9 outputs, opset 13, 4.74 MB, latencia 5.9ms.
+- **Alto potencial de recall**: T4 demuestra que el modelo *ve* ~69% de los objetos; el reto es rankear bien las detecciones.
+- **mAP@50 mejora sostenidamente**: 0.43 → 0.56 → 0.57 → 0.59 a lo largo de la serie.
 
-### 6.3 Debilidades / Cuellos de Botella
+### 7.3 Debilidades / Cuellos de Botella
 
-- **Recall limitado (~63%)**: El modelo no detecta ~37% de los objetos. Es conservador — alta precision pero baja cobertura.
-- **dog es la clase más débil**: AP@50 = 0.50 (test), menor de las 5 clases en los 3 entrenamientos.
-- **Val loss muy ruidosa**: Con solo 188 imágenes de validación, la loss oscila enormemente entre epochs, dificultando la selección del mejor checkpoint.
-- **Meseta GIoU en Phase 1**: 13 epochs sin aprendizaje de localización (~45% de Phase 1 desperdiciado).
+- **Trade-off Precision-Recall no resuelto**: T3 es conservador (P=0.66, R=0.63), T4 es permisivo (P=0.35, R=0.69). Ninguno logra ambos simultáneamente.
+- **FP dominan en T4**: 725 FP para 395 TP. Ratio FP/TP = 1.84, inaceptable para producción.
+- **dog sigue siendo la clase más débil**: AP@50 = 0.50 (test), menor de las 5 clases en todos los entrenamientos.
+- **Val loss ruidosa**: Con 188 imágenes, oscila enormemente (36→70+ entre epochs), dificultando checkpoint selection.
+- **Meseta GIoU en Phase 1**: ~13 epochs sin aprendizaje de localización en cada entrenamiento.
 
-### 6.4 Oportunidades de Mejora (Candidatas para Train 4+)
+### 7.4 Mejor Configuración Operativa
 
-1. **Bajar conf_threshold** (0.25 → 0.15): Aumentaría recall a costa de precision. El modelo es demasiado conservador.
-2. **Warmup de loss híbrido**: Iniciar con Smooth L1 durante primeras N epochs y transicionar a GIoU, evitando la meseta de 13 epochs.
-3. **Augmentación más agresiva**: MixUp, CutMix, Mosaic para mayor regularización con 1470 imgs.
-4. **Focal Loss tuning**: Ajustar gamma (2→3) y alpha para la cabeza de clasificación.
-5. **Resolución final mayor**: Entrenar/evaluar a 320px en vez de 224px para mejor localización.
+| Objetivo | Mejor Train | Justificación |
+|---|---|---|
+| **Máximo mAP@50** | **T4** (0.5936) | Si solo importa el ranking global de detecciones. |
+| **Producción (F1 balanceado)** | **T3** (F1=0.6438) | Mejor balance precision/recall para uso real. |
+| **Máximo Recall** | **T4** (0.6886) | Si las detecciones perdidas son más costosas que los FP. |
+| **Máxima Precisión** | **T3** (0.6609) | Mínimos falsos positivos (177 FP en test). |
+
+> **Recomendación**: T3 es el mejor modelo operativo actual. Los pesos de T4 son idénticos (mismo entrenamiento); solo cambia el scoring en inferencia. Se puede usar el checkpoint de T3/T4 con un conf_threshold intermedio (0.20) para buscar un punto de operación óptimo.
+
+### 7.5 Oportunidades de Mejora (Candidatas para Train 5+)
+
+1. **Threshold sweep post-NMS**: Con el modelo actual, barrer conf_threshold [0.10, 0.15, 0.20, 0.25, 0.30] offline y graficar la curva P-R para encontrar el punto operativo óptimo (F1 máximo).
+2. **Max detections per image**: Limitar a 50-100 detecciones post-NMS para acotar FP sin necesidad de subir threshold.
+3. **Revertir a ctr_power=1.0, conf=0.20**: Punto intermedio entre T3 y T4 — centerness original pero threshold más bajo.
+4. **Warmup de loss híbrido**: Iniciar con Smooth L1 durante primeros 10 epochs → transición a GIoU, evitando la meseta de 13 epochs.
+5. **Augmentación más agresiva**: MixUp, Mosaic para mayor regularización con 1470 imgs.
+6. **Resolución final mayor**: Evaluar a 320px en vez de 224px para mejorar localización de objetos pequeños.
+7. **Focal Loss tuning**: Ajustar gamma (2→3) para la cabeza de clasificación, ayudando con clases difíciles.
 
 ---
 

@@ -445,7 +445,9 @@ def main() -> None:
         return predict_fcos(model_ref, images_tensor,
                             conf_threshold=conf_threshold or setup.conf_threshold,
                             nms_threshold=setup.iou_threshold,
-                            class_names=setup.class_names)
+                            class_names=setup.class_names,
+                            ctr_power=fc.get("ctr_power", 1.0),
+                            iou_aware=fc.get("iou_aware_scoring", False))
 
     val_results = evaluate_pytorch_model(
         model=model,

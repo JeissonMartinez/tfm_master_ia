@@ -104,6 +104,9 @@ _FCOS_DEFAULTS: Dict[str, Any] = {
     "aug_scale_limit": 0.2,
     "aug_rotate_limit": 15,
     "aug_hflip_prob": 0.5,
+    # Scoring (inference)
+    "ctr_power": 1.0,          # centerness exponent (1.0 = original)
+    "iou_aware_scoring": False,
     # Workers
     "workers": 4,
     "amp": True,
