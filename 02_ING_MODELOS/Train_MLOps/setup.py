@@ -27,13 +27,23 @@ Changes from v2.1.0:
     - Fixed config_loader.py whitelist bug: now passes ALL YAML keys
       (was silently dropping focal_gamma, reg_warmup_epochs, etc.)
     - conf_threshold raised to 0.35 for T8
+
+Changes from v2.2.0:
+    - Version bump for YOLO26_CUSTOM training cycle
+    - Added missing Ultralytics fields to Yolo26CustomConfig
+    - task_yolo26_custom: DEPLOY VERIFICATION + explicit YAML param pass
+
+Changes from v2.3.0:
+    - BUG FIX: CSV concatenation in Bloque 4/5 (was using only Phase 1 CSV)
+    - BUG FIX: Phase 2 results.csv not uploaded to GCS
+    - Train 2 config: MuSGD optimizer (YOLO26 native SGD+Muon hybrid)
 """
 
 from setuptools import setup, find_packages
 
 setup(
     name="tfm-trainer",
-    version="2.2.0",
+    version="2.4.0",
     description=(
         "TFM — Entrenamiento de modelos de detección de objetos "
         "para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)"

@@ -802,6 +802,8 @@ class Yolo26CustomConfig:
     close_mosaic: int = 10
     box: float = 7.5
     cls: float = 0.5
+    warmup_momentum: float = 0.8
+    warmup_bias_lr: float = 0.1
     hsv_h: float = 0.015
     hsv_s: float = 0.7
     hsv_v: float = 0.4
@@ -810,6 +812,10 @@ class Yolo26CustomConfig:
     degrees: float = 0.0
     translate: float = 0.1
     scale: float = 0.5
+    shear: float = 0.0
+    perspective: float = 0.0
+    copy_paste: float = 0.0
+    erasing: float = 0.0
     device: Optional[str] = None
     amp: bool = True
     workers: int = 4

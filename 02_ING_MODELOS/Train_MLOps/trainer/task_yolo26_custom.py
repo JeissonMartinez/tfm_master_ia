@@ -164,6 +164,24 @@ def main() -> None:
 
     logger.log_params(YOLO26_CUSTOM_SPECS)
 
+    # ── DEPLOY VERIFICATION (lección FCOS T8) ──
+    print("\n🎯 DEPLOY VERIFICATION — YOLO26_CUSTOM")
+    print(f"  Pretrained:      {pretrained}")
+    print(f"  Phase 1:         {fc.get('phase1_epochs', 30)} ep, "
+          f"LR0={fc.get('phase1_lr0', 0.01)}, "
+          f"freeze={fc.get('phase1_freeze_layers', 10)} layers")
+    print(f"  Phase 2:         {fc.get('phase2_epochs', 70)} ep, "
+          f"LR0={fc.get('phase2_lr0', 0.001)}, "
+          f"freeze=0")
+    print(f"  Optimizer:       {fc.get('optimizer', 'auto')}")
+    print(f"  Mosaic/Mixup:    {fc.get('mosaic', 1.0)} / {fc.get('mixup', 0.1)}")
+    print(f"  Box/Cls weights: {fc.get('box', 7.5)} / {fc.get('cls', 0.5)}")
+    print(f"  Conf threshold:  {setup.conf_threshold}")
+    print(f"  IoU threshold:   {setup.iou_threshold}")
+    print(f"  Export imgsz:    {fc.get('export_imgsz', 224)}")
+    print(f"  Batch size:      {setup.batch_size}")
+    print(f"  Patience:        {setup.patience}")
+
     # ================================================================
     # Bloque 4 — Entrenamiento (2 fases Ultralytics)
     # ================================================================
@@ -184,10 +202,32 @@ def main() -> None:
         batch=fc.get("batch", setup.batch_size),
         lr0=fc.get("phase1_lr0", 0.01),
         lrf=fc.get("phase1_lrf", 0.01),
+        cos_lr=fc.get("phase1_cos_lr", True),
         freeze=list(range(phase1_freeze)) if phase1_freeze else None,
+        optimizer=fc.get("optimizer", "auto"),
+        momentum=fc.get("momentum", 0.937),
+        weight_decay=fc.get("weight_decay", 0.0005),
+        warmup_epochs=fc.get("warmup_epochs", 3.0),
+        warmup_momentum=fc.get("warmup_momentum", 0.8),
+        warmup_bias_lr=fc.get("warmup_bias_lr", 0.1),
         mosaic=fc.get("mosaic", 1.0),
         mixup=fc.get("mixup", 0.1),
         close_mosaic=fc.get("close_mosaic", 10),
+        copy_paste=fc.get("copy_paste", 0.0),
+        hsv_h=fc.get("hsv_h", 0.015),
+        hsv_s=fc.get("hsv_s", 0.7),
+        hsv_v=fc.get("hsv_v", 0.4),
+        degrees=fc.get("degrees", 0.0),
+        translate=fc.get("translate", 0.1),
+        scale=fc.get("scale", 0.5),
+        shear=fc.get("shear", 0.0),
+        perspective=fc.get("perspective", 0.0),
+        fliplr=fc.get("fliplr", 0.5),
+        flipud=fc.get("flipud", 0.0),
+        erasing=fc.get("erasing", 0.0),
+        box=fc.get("box", 7.5),
+        cls=fc.get("cls", 0.5),
+        max_det=fc.get("max_det", 300),
         patience=setup.patience,
         amp=fc.get("amp", True),
         workers=fc.get("workers", 4),
@@ -211,10 +251,32 @@ def main() -> None:
         batch=fc.get("batch", setup.batch_size),
         lr0=fc.get("phase2_lr0", 0.001),
         lrf=fc.get("phase2_lrf", 0.001),
+        cos_lr=fc.get("phase2_cos_lr", True),
         freeze=None,
+        optimizer=fc.get("optimizer", "auto"),
+        momentum=fc.get("momentum", 0.937),
+        weight_decay=fc.get("weight_decay", 0.0005),
+        warmup_epochs=fc.get("warmup_epochs", 3.0),
+        warmup_momentum=fc.get("warmup_momentum", 0.8),
+        warmup_bias_lr=fc.get("warmup_bias_lr", 0.1),
         mosaic=fc.get("mosaic", 1.0),
         mixup=fc.get("mixup", 0.1),
         close_mosaic=fc.get("close_mosaic", 10),
+        copy_paste=fc.get("copy_paste", 0.0),
+        hsv_h=fc.get("hsv_h", 0.015),
+        hsv_s=fc.get("hsv_s", 0.7),
+        hsv_v=fc.get("hsv_v", 0.4),
+        degrees=fc.get("degrees", 0.0),
+        translate=fc.get("translate", 0.1),
+        scale=fc.get("scale", 0.5),
+        shear=fc.get("shear", 0.0),
+        perspective=fc.get("perspective", 0.0),
+        fliplr=fc.get("fliplr", 0.5),
+        flipud=fc.get("flipud", 0.0),
+        erasing=fc.get("erasing", 0.0),
+        box=fc.get("box", 7.5),
+        cls=fc.get("cls", 0.5),
+        max_det=fc.get("max_det", 300),
         patience=setup.patience,
         amp=fc.get("amp", True),
         workers=fc.get("workers", 4),
@@ -234,15 +296,33 @@ def main() -> None:
     print(f"📦 Best weights: {best_weights}")
 
     # Log richer training metrics from Ultralytics results.csv
+    # Collect & CONCATENATE all phase CSVs (sorted: phase1, phase2, ...)
     import glob
-    _results_csvs = glob.glob(os.path.join(project_dir, "**", "results.csv"),
-                              recursive=True)
+    import pandas as _pd
+    _results_csvs = sorted(glob.glob(
+        os.path.join(project_dir, "**", "results.csv"), recursive=True))
+    _all_phase_csvs = list(_results_csvs)  # keep for upload
+
+    # Build a combined CSV from all phases
+    _combined_csv = os.path.join(LOCAL_WORK_DIR, "results_combined.csv")
+    _phase_counts: list[int] = []  # epochs per phase
     _training_metrics: dict = {"train_time_min": train_time / 60}
     if _results_csvs:
         try:
-            import pandas as _pd
-            _rdf = _pd.read_csv(_results_csvs[-1])
-            _rdf.columns = [c.strip() for c in _rdf.columns]
+            _frames = []
+            for _csv_path in _results_csvs:
+                _df = _pd.read_csv(_csv_path)
+                _df.columns = [c.strip() for c in _df.columns]
+                _phase_counts.append(len(_df))
+                _frames.append(_df)
+            _rdf = _pd.concat(_frames, ignore_index=True)
+            # Re-number epoch column if present
+            if "epoch" in _rdf.columns:
+                _rdf["epoch"] = range(1, len(_rdf) + 1)
+            _rdf.to_csv(_combined_csv, index=False)
+            print(f"📋 Combined CSV: {len(_rdf)} epochs "
+                  f"({' + '.join(str(c) for c in _phase_counts)} per phase)")
+
             # Find best mAP50 epoch
             _map_col = [c for c in _rdf.columns if "map50(b)" in c.lower()
                         or ("map50" in c.lower() and "95" not in c.lower())]
@@ -283,13 +363,15 @@ def main() -> None:
         print_training_summary,
     )
 
-    # Find results.csv from Ultralytics output
-    import glob
-    results_csvs = glob.glob(os.path.join(project_dir, "**", "results.csv"),
-                             recursive=True)
-    if results_csvs:
-        history_csv = results_csvs[-1]  # latest
+    # Use combined CSV for curves (all phases concatenated)
+    if os.path.exists(_combined_csv):
+        history_csv = _combined_csv
         th = extract_yolo26_history(history_csv)
+        # Set phase labels for plot shading
+        if _phase_counts:
+            th.phase = []
+            for i, count in enumerate(_phase_counts, 1):
+                th.phase.extend([f"phase{i}"] * count)
         curves_path = os.path.join(LOCAL_WORK_DIR, "training_curves.png")
         plot_training_curves(th, save_path=curves_path,
                              title_prefix=f"YOLO26 Custom — {setup.experiment_name}")
@@ -412,12 +494,12 @@ def main() -> None:
     exp_json = os.path.join(LOCAL_WORK_DIR, "experiment.json")
     save_experiment(experiment, exp_json)
 
-    # Upload artifacts
+    # Upload artifacts (include all phase CSVs + combined CSV)
     artifacts = [
         local_config, history_csv, curves_path, dist_path,
         cm_path, val_json, test_cm_path, test_json,
         export_result.export_path, exp_json, best_weights,
-    ]
+    ] + _all_phase_csvs  # individual phase results.csv files
     for artifact in artifacts:
         if artifact and os.path.exists(artifact):
             rel = os.path.relpath(artifact, LOCAL_WORK_DIR)
