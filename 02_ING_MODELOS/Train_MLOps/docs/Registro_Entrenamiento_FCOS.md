@@ -19,27 +19,29 @@
 5. [Train 4 — Scoring Refinements (conf, centerness, IoU-aware)](#5-train-4--scoring-refinements-conf-centerness-iou-aware)
 6. [Threshold Sweep — Análisis Post-NMS del Modelo T4](#6-threshold-sweep--análisis-post-nms-del-modelo-t4)
 7. [Train 5 — Hybrid Loss Warmup + Aggressive Augmentation](#7-train-5--hybrid-loss-warmup--aggressive-augmentation)
-8. [Comparativa Global](#8-comparativa-global)
-9. [Conclusiones Generales](#9-conclusiones-generales)
+8. [Train 6 — Phase 1 Extendida + Sin HFlip (Despliegue Parcial)](#8-train-6--phase-1-extendida--sin-hflip-despliegue-parcial)
+9. [Comparativa Global](#9-comparativa-global)
+10. [Conclusiones Generales](#10-conclusiones-generales)
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-| Métrica (Test) | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 |
-|---|:---:|:---:|:---:|:---:|:---:|
-| **mAP@50** | 0.4304 | 0.5600 | 0.5675 | **0.5936** | 0.5887 |
-| **mAP@50-95** | N/C | N/C | 0.2602 | 0.2644 | **0.2703** |
-| **Precision** | 0.5427 | 0.6049 | **0.6609** | 0.3462 | 0.3505 |
-| **Recall** | 0.5291 | 0.6271 | 0.6276 | **0.6886** | 0.6845 |
-| **F1-Score** | 0.5358 | 0.6158 | **0.6438** | 0.4607 | 0.4636 |
-| Épocas | 52 | 74 | 101 | 77 | 76 |
-| Tiempo | 12.1 min | 15.9 min | 23.6 min | 17.9 min | 17.9 min |
-| Inferencia | 5.0 ms | 4.6 ms | 4.8 ms | 5.4 ms | 4.9 ms |
+| Métrica (Test) | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mAP@50** | 0.4304 | 0.5600 | 0.5675 | **0.5936** | 0.5887 | 0.5572 |
+| **mAP@50-95** | N/C | N/C | 0.2602 | 0.2644 | **0.2703** | 0.2511 |
+| **Precision** | 0.5427 | 0.6049 | **0.6609** | 0.3462 | 0.3505 | 0.3290 |
+| **Recall** | 0.5291 | 0.6271 | 0.6276 | **0.6886** | 0.6845 | 0.6558 |
+| **F1-Score** | 0.5358 | 0.6158 | **0.6438** | 0.4607 | 0.4636 | 0.4382 |
+| Épocas | 52 | 74 | 101 | 77 | 76 | 86 |
+| Tiempo | 12.1 min | 15.9 min | 23.6 min | 17.9 min | 17.9 min | 19.5 min |
+| Inferencia | 5.0 ms | 4.6 ms | 4.8 ms | 5.4 ms | 4.9 ms | 5.1 ms |
 
 > **N/C**: No Calculado — la implementación de mAP@50-95 fue añadida después de Train 2.  
 > **Train 4**: Mejores mAP@50 y Recall de la serie, pero Precision colapsa por exceso de FP (scoring demasiado permisivo).  
-> **Train 5**: Mejor mAP@50-95 de la serie (calidad de box). El warmup de loss eliminó la meseta GIoU pero la augmentación agresiva degradó la calibración de confianza, replicando el perfil de FP de T4.
+> **Train 5**: Mejor mAP@50-95 de la serie (calidad de box). El warmup de loss eliminó la meseta GIoU pero la augmentación agresiva degradó la calibración de confianza, replicando el perfil de FP de T4.  
+> **Train 6**: Despliegue parcial — Focal Loss y SL1 warmup no se activaron (incidente de empaquetado). Resultado efectivo: T3 sin HFlip + Phase 1 extendida. **Peor F1 de la serie** (0.4382). Confirma que el HFlip runtime es esencial.
 
 ---
 
@@ -725,65 +727,191 @@ La comparación clave es con T3 (mismo scoring): T3 produce 533 dets a conf=0.25
 
 ---
 
-## 8. Comparativa Global
+## 8. Train 6 — Phase 1 Extendida + Sin HFlip (Despliegue Parcial)
 
-### 8.1 Evolución Total Loss
+### 8.1 Identificador
 
-| Fase | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Epoch 0 (640px) | 688.5 | 38.9 | 9.4 | 8.9 | 8.6 (SL1) |
-| Final | ~43.5 | ~3.5 | ~3.3 | ~3.3 | ~3.4 |
-| Best val_loss | 135.49 | **24.01** | 28.12 | 36.46 | 28.75 |
+| Campo | Valor |
+|---|---|
+| **Job ID** | `fcos_v3s_v1-1771715459` |
+| **Fecha** | 21 de febrero de 2026 |
+| **Output GCS** | `gs://project-18f58341-12cf-47bc-861-tfm-data/output/fcos_v3s_v1-1771715459/` |
+| **Output local** | `outputs/fcos_v3s_v1-1771715459/` |
+| **Log** | `logs/FCOS_Train_6.md` |
 
-> Nota: val_loss no es directamente comparable entre T2 (Smooth L1) y T3/T4/T5 (GIoU) por cambio de función de loss. T5 usó Smooth L1 en primeros 10 epochs; su best val_loss (28.75) es comparable a T3 (28.12) ya que ambos usan GIoU luego del warmup.
+### 8.2 Incidente de Despliegue
 
-### 8.2 Evolución reg_loss (Train)
+> **⚠️ DESPLIEGUE PARCIAL**: Los cambios de código Python (Focal Loss γ=3, SL1 warmup) NO se activaron en el job desplegado. Solo los cambios del YAML config (Phase 1=40ep, HFlip=0.0) fueron efectivos.
 
-| Resolución | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 |
-|---|:---:|:---:|:---:|:---:|:---:|
-| 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) | ~3.96 (meseta) | ~3.67 (SL1, sin meseta) |
-| 224px (final) | ~41 | ~1.3 | ~1.1 | ~1.1 | ~1.1 |
+**Evidencia:**
 
-### 8.3 Per-class AP@50 — Test (Evolución)
+| Señal | Valor esperado | Valor observado | Conclusión |
+|---|---|---|---|
+| reg_loss epoch 0 | ~3.67 (SL1) | 4.5000 (GIoU) | Warmup SL1 **no activo** |
+| reg_loss epochs 0-39 | Descenso inmediato | Constante 4.5000 | Meseta GIoU de 40 epochs |
+| cls_loss epoch 0 | ~0.4 (Focal γ=3) | 3.02 (≈BCE) | Focal Loss **no activo** |
+| Log "🎯 Focal Loss" | Presente | Ausente | Función no ejecutada |
 
-| Clase | T1 | T2 | T3 | T4 | T5 | Δ T1→T5 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog | 0.406 | 0.463 | 0.496 | 0.502 | **0.522** | +28.6% |
-| door | 0.339 | 0.519 | 0.503 | 0.533 | **0.544** | +60.3% |
-| obstacle | 0.302 | 0.405 | 0.458 | **0.512** | 0.464 | +53.6% |
-| person | 0.521 | 0.636 | 0.636 | **0.682** | 0.666 | +27.8% |
-| stair | 0.584 | **0.777** | 0.745 | 0.739 | 0.747 | +27.9% |
-| **Media** | **0.430** | **0.560** | **0.568** | **0.594** | **0.589** | **+36.9%** |
+**Causa probable**: El paquete `tfm_trainer-2.0.0.tar.gz` subido a GCS no contenía las modificaciones de `src_colab/utils_train.py` y `trainer/task_fcos.py`. El YAML sí se subió correctamente porque se copia como archivo independiente, no como parte del sdist.
 
-### 8.4 Confusion Matrix (Test) — Evolución de TP
+**Configuración efectiva (lo que realmente corrió):**
 
-| Clase (Test GT) | T1 TP | T2 TP | T3 TP | T4 TP | T5 TP | T1 FN | T2 FN | T3 FN | T4 FN | T5 FN |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog (58) | 30 | 32 | 33 | 35 | **36** | 28 | 26 | 25 | 23 | **22** |
-| door (136) | 54 | 80 | 77 | 90 | **93** | 82 | 56 | 59 | 46 | **43** |
-| obstacle (173) | 79 | 86 | 92 | **107** | 105 | 94 | 87 | 81 | **66** | 68 |
-| person (101) | 67 | 70 | 70 | **78** | 75 | 34 | 31 | 31 | **23** | 26 |
-| stair (108) | 66 | 87 | 84 | **85** | 83 | 42 | 21 | 24 | **23** | 25 |
-| **Total** | **296** | **355** | **356** | **395** | **392** | **280** | **221** | **220** | **181** | **184** |
+| Parámetro | Valor Previsto | Valor Real |
+|---|---|---|
+| Focal Loss | γ=3, α=0.25 | **BCE** (estándar) |
+| Warmup SL1→GIoU | 10 epochs | **Desactivado** (GIoU desde ep 0) |
+| Phase 1 epochs | 40 | 40 ✅ |
+| HFlip | p=0.0 | p=0.0 ✅ |
+| Brightness/Contrast | 0.2 / 0.2 | 0.2 / 0.2 ✅ |
+| Aug agresiva | Eliminada | Eliminada ✅ |
+| Scoring | T3 (conf=0.25) | T3 ✅ |
 
-### 8.5 Falsos Positivos (Test)
+### 8.3 Entrenamiento
 
-| Clase | T1 FP | T2 FP | T3 FP | T4 FP | T5 FP |
-|---|:---:|:---:|:---:|:---:|:---:|
-| dog | 42 | 32 | **24** | 88 | 103 |
-| door | 40 | 83 | **44** | 188 | 216 |
-| obstacle | 72 | **43** | 45 | 165 | 171 |
-| person | 72 | 38 | **26** | 144 | 105 |
-| stair | 26 | 34 | **38** | 140 | 127 |
-| **Total** | **252** | **230** | **177** | **725** | **722** |
+- **Épocas completadas**: 86 (Phase 1: 40, Phase 2: 46, early stop epoch 85)
+- **Mejor val_loss**: 33.3135 (epoch 65)
+- **Tiempo total**: 19.5 min (Phase 1: 9.4 min, Phase 2: 10.1 min)
 
-> **T5 replica el perfil de FP de T4** (722 vs 725) pese a usar scoring idéntico a T3 (conf=0.25, ctr^1.0). Esto confirma que la augmentación agresiva cambió la calibración del modelo, no solo el scoring.
+**Meseta GIoU en Phase 1 (40 epochs completos):**
+
+| Epoch | reg_loss | Observación |
+|:---:|:---:|---|
+| 0-39 | 4.5000 (constante) | GIoU meseta, idéntica a T3/T4 |
+| 40 | 4.5000 | Phase 2 inicia, aún congelado |
+| 42 | 3.4977 | Backbone descongelado, reg empieza a aprender |
+| 65 | 1.3076 | ★ best val_loss |
+| 85 | 1.1197 | Early stop |
+
+> La Phase 1 extendida con meseta GIoU desperdició 10 epochs adicionales sin aprendizaje de regresión. Phase 2 solo aprovechó 46 epochs (vs 71 en T3).
+
+### 8.4 Resultados — Validación
+
+| Métrica | Valor |
+|---|---|
+| mAP@50 | 0.3799 |
+| mAP@50-95 | 0.1632 |
+| Precision | 0.2904 |
+| Recall | 0.4778 |
+| F1-Score | 0.3613 |
+| Detecciones / GT | 1289 / 762 |
+| Inferencia | 5.5 ms |
+
+### 8.5 Resultados — Test
+
+| Métrica | Valor | vs T3 | vs T5 |
+|---|---|---|---|
+| mAP@50 | 0.5572 | −1.8% | −5.4% |
+| mAP@50-95 | 0.2511 | −3.5% | −7.1% |
+| Precision | 0.3290 | −50.2% | −6.1% |
+| Recall | 0.6558 | +4.5% | −4.2% |
+| F1-Score | 0.4382 | −31.9% | −5.5% |
+| Detecciones / GT | 1124 / 576 | — | — |
+| Inferencia | 5.1 ms | — | — |
+
+**Per-class AP@50 (Test):**
+
+| Clase | AP@50 | Precision | Recall | F1 | vs T3 |
+|---|:---:|:---:|:---:|:---:|---|
+| dog | 0.4424 | 0.2540 | 0.5517 | 0.3478 | −10.8% |
+| door | 0.4642 | 0.3571 | 0.5515 | 0.4335 | −7.7% |
+| obstacle | 0.4600 | 0.3293 | 0.6243 | 0.4311 | +0.4% |
+| person | 0.6834 | 0.3433 | 0.7921 | 0.4790 | +7.4% |
+| stair | 0.7359 | 0.3612 | 0.7593 | 0.4896 | −1.2% |
+
+**Confusion Matrix (Test):**
+
+| Clase (GT) | TP | FP | FN |
+|---|:---:|:---:|:---:|
+| dog (58) | 32 | 94 | 26 |
+| door (136) | 75 | 135 | 61 |
+| obstacle (173) | 108 | 220 | 65 |
+| person (101) | 80 | 153 | 21 |
+| stair (108) | 82 | 145 | 26 |
+| **Total (576)** | **377** | **747** | **199** |
+
+### 8.6 Efecto de los Cambios
+
+**Eliminación de HFlip runtime — SEVERAMENTE NEGATIVO:**
+- ❌ **1124 detecciones** con scoring T3 (conf=0.25). T3 producía solo 533 con el mismo scoring.
+- ❌ **747 FP** — peor de toda la serie (vs T3: 177, T4: 725, T5: 722).
+- ❌ **377 TP** — peor de T3-T6, incluso inferior a T3 (356) corregido: T3 tiene 356 TP. En realidad T6 tiene más TP (377 > 356) pero con +570 FP adicionales.
+- ❌ F1 = 0.4382 — **peor de la serie**, inferior incluso a T4 (0.4607) y T5 (0.4636).
+- La eliminación de HFlip redujo la diversidad de augmentación, causando que el modelo sea menos discriminativo pese a que el dataset ya contiene copias flippeadas offline.
+
+**Phase 1 extendida (30→40) con meseta GIoU — CONTRAPRODUCENTE:**
+- ❌ 10 epochs adicionales con reg_loss=4.5 constante. Sin aprendizaje de regresión.
+- ❌ Phase 2 convergió más lento: best epoch 65 (25 epochs Phase 2) vs T3 best epoch 80 (50 epochs Phase 2).
+- ❌ Early stopping en epoch 85 (46 epochs Phase 2) vs T3 epoch 100 (70 epochs Phase 2).
+- La extensión de Phase 1 con meseta GIoU es peor que inútil: el head sobreajusta clasificación sin progresar en regresión.
+
+### 8.7 Lecciones
+
+1. **HFlip runtime es esencial** incluso con datos flippeados offline: la combinación dinámica con otras augmentaciones (affine, color) genera variedad que las copias estáticas no aportan.
+2. **Extender Phase 1 sin resolver la meseta GIoU es contraproducente**: más epochs congelados = más sobreajuste de cls sin progreso de reg.
+3. **Bump de versión obligatorio**: Para futuros trains, se debe incrementar la versión del paquete (`2.0.0 → 2.1.0`) para garantizar que pip instale la versión actualizada y evitar problemas de cache.
+4. **Verificación pre-launch**: Añadir un `--dry-run` que imprima los valores de `focal_gamma`, `reg_warmup_epochs` y `aug_hflip_prob` leídos dentro del job.
 
 ---
 
-## 9. Conclusiones Generales
+## 9. Comparativa Global
 
-### 9.1 Impacto por Cambio
+### 9.1 Evolución Total Loss
+
+| Fase | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Epoch 0 (640px) | 688.5 | 38.9 | 9.4 | 8.9 | 8.6 (SL1) | 9.4 (GIoU) |
+| Final | ~43.5 | ~3.5 | ~3.3 | ~3.3 | ~3.4 | ~3.3 |
+| Best val_loss | 135.49 | **24.01** | 28.12 | 36.46 | 28.75 | 33.31 |
+
+> Nota: val_loss no es directamente comparable entre T2 (Smooth L1) y T3-T6 (GIoU) por cambio de función de loss. T5 usó Smooth L1 en primeros 10 epochs; T6 debía usarlo pero el warmup no se activó.
+
+### 9.2 Evolución reg_loss (Train)
+
+| Resolución | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) | ~3.96 (meseta) | ~3.67 (SL1, sin meseta) | ~4.5 (meseta) |
+| 224px (final) | ~41 | ~1.3 | ~1.1 | ~1.1 | ~1.1 | ~1.1 |
+
+### 9.3 Per-class AP@50 — Test (Evolución)
+
+| Clase | T1 | T2 | T3 | T4 | T5 | T6 | Δ T1→T6 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog | 0.406 | 0.463 | 0.496 | 0.502 | **0.522** | 0.442 | +8.9% |
+| door | 0.339 | 0.519 | 0.503 | 0.533 | **0.544** | 0.464 | +36.9% |
+| obstacle | 0.302 | 0.405 | 0.458 | **0.512** | 0.464 | 0.460 | +52.3% |
+| person | 0.521 | 0.636 | 0.636 | **0.682** | 0.666 | 0.683 | +31.1% |
+| stair | 0.584 | **0.777** | 0.745 | 0.739 | 0.747 | 0.736 | +26.0% |
+| **Media** | **0.430** | **0.560** | **0.568** | **0.594** | **0.589** | **0.557** | **+29.5%** |
+
+### 9.4 Confusion Matrix (Test) — Evolución de TP
+
+| Clase (Test GT) | T1 TP | T2 TP | T3 TP | T4 TP | T5 TP | T6 TP | T1 FN | T2 FN | T3 FN | T4 FN | T5 FN | T6 FN |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog (58) | 30 | 32 | 33 | 35 | **36** | 32 | 28 | 26 | 25 | 23 | **22** | 26 |
+| door (136) | 54 | 80 | 77 | 90 | **93** | 75 | 82 | 56 | 59 | 46 | **43** | 61 |
+| obstacle (173) | 79 | 86 | 92 | 107 | 105 | **108** | 94 | 87 | 81 | **66** | 68 | 65 |
+| person (101) | 67 | 70 | 70 | 78 | 75 | **80** | 34 | 31 | 31 | 23 | 26 | **21** |
+| stair (108) | 66 | 87 | 84 | **85** | 83 | 82 | 42 | 21 | 24 | **23** | 25 | 26 |
+| **Total** | **296** | **355** | **356** | **395** | **392** | **377** | **280** | **221** | **220** | **181** | **184** | **199** |
+
+### 9.5 Falsos Positivos (Test)
+
+| Clase | T1 FP | T2 FP | T3 FP | T4 FP | T5 FP | T6 FP |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog | 42 | 32 | **24** | 88 | 103 | 94 |
+| door | 40 | 83 | **44** | 188 | 216 | 135 |
+| obstacle | 72 | **43** | 45 | 165 | 171 | 220 |
+| person | 72 | 38 | **26** | 144 | 105 | 153 |
+| stair | 26 | 34 | **38** | 140 | 127 | 145 |
+| **Total** | **252** | **230** | **177** | **725** | **722** | **747** |
+
+> **T6 tiene el peor FP de la serie** (747). Con scoring idéntico a T3 (conf=0.25), produce 4.2× más FP que T3 (177). La eliminación de HFlip runtime generó un modelo aún menos discriminativo que T4/T5.
+
+---
+
+## 10. Conclusiones Generales
+
+### 10.1 Impacto por Cambio
 
 | Cambio | Métrica más afectada | Impacto |
 |---|---|---|
@@ -793,26 +921,30 @@ La comparación clave es con T3 (mismo scoring): T3 produce 533 dets a conf=0.25
 | **Scoring permisivo** (T3→T4) | Recall, mAP@50, FP | +9.7% Recall, +4.6% mAP@50, pero Precision -47.6% y FP +309%. Trade-off negativo. |
 | **SL1 warmup** (T3→T5) | reg_loss, mAP@50-95 | Elimina meseta GIoU. mAP@50-95 +3.9%. Técnica validada. |
 | **Aug agresiva** (T3→T5) | Precision, FP | Precision -47%, FP +308%. Destruye calibración de confianza en modelo pequeño. |
+| **Sin HFlip runtime** (T3→T6) | Precision, FP | Precision -50%, FP +322%. Peor F1 de la serie. HFlip runtime es irrenunciable. |
+| **Phase 1 40ep + meseta** (T3→T6) | Convergencia | Phase 2 solo 46 ep (vs 71 en T3). Menor tiempo efectivo de fine-tuning. |
 
-### 9.2 Fortalezas del Modelo
+### 10.2 Fortalezas del Modelo
 
-- **Clasificación perfecta**: Zero confusión inter-clase en los 5 entrenamientos. La cabeza cls discrimina las 5 clases impecablemente.
+- **Clasificación perfecta**: Zero confusión inter-clase en los 6 entrenamientos. La cabeza cls discrimina las 5 clases impecablemente.
 - **Modelo ligero**: 1.2M params, 4.71 MB FP32, <6ms inferencia en T4 GPU.
-- **Export ONNX exitoso**: 9 outputs, opset 13, 4.74 MB, latencia ~4.4ms.
-- **Alto potencial de recall**: T4/T5 demuestran que el modelo *ve* ~69% de los objetos; el reto es rankear bien las detecciones.
-- **mAP@50 mejora sostenidamente**: 0.43 → 0.56 → 0.57 → 0.59 → 0.59 a lo largo de la serie.
+- **Export ONNX exitoso**: 9 outputs, opset 13, 4.74 MB, latencia ~4.4–6.1 ms.
+- **Alto potencial de recall**: T4/T5/T6 demuestran que el modelo *ve* ~66-69% de los objetos; el reto es rankear bien las detecciones.
+- **mAP@50 mejora sostenidamente**: 0.43 → 0.56 → 0.57 → 0.59 → 0.59 (T6 retrocede a 0.56 por incidente de despliegue).
 - **mAP@50-95 progresa**: 0.26 → 0.26 → 0.27 — la calidad de box mejora con cada cambio de loss.
 
-### 9.3 Debilidades / Cuellos de Botella
+### 10.3 Debilidades / Cuellos de Botella
 
-- **Trade-off Precision-Recall no resuelto**: T3 es conservador (P=0.66, R=0.63), T4/T5 son permisivos (P≈0.35, R≈0.69). Ninguno logra ambos simultáneamente.
-- **FP dominan en T4/T5**: ~722 FP para ~393 TP. Ratio FP/TP ≈ 1.84, inaceptable para producción.
-- **dog sigue siendo la clase más débil**: AP@50 = 0.52 (T5 test), menor de las 5 clases en todos los entrenamientos.
+- **Trade-off Precision-Recall no resuelto**: T3 es conservador (P=0.66, R=0.63), T4/T5/T6 son permisivos (P≈0.33-0.35, R≈0.66-0.69). Ninguno logra ambos simultáneamente.
+- **FP dominan en T4/T5/T6**: ~722–747 FP para ~377–395 TP. Ratio FP/TP ≈ 1.8–2.0, inaceptable para producción.
+- **dog sigue siendo la clase más débil**: AP@50 = 0.44-0.52, menor de las 5 clases en todos los entrenamientos.
 - **Val loss ruidosa**: Con 188 imágenes, oscila enormemente, dificultando checkpoint selection.
-- ~~**Meseta GIoU en Phase 1**~~: Resuelta con warmup SL1 en T5.
-- **Augmentación destructiva contraproducente**: CoarseDropout + GaussNoise degradan calibración en modelo de 1.2M params.
+- ~~**Meseta GIoU en Phase 1**~~: Resuelta con warmup SL1 en T5 (no se activó en T6 por incidente).
+- **Augmentación destructiva contraproducente**: CoarseDropout + GaussNoise degradan calibración en modelo de 1.2M params (T5).
+- **HFlip runtime irrenunciable**: Su eliminación (T6) produjo el peor F1 de la serie pese a que el dataset tiene copias estáticas flippeadas.
+- **Pipeline de despliegue frágil**: El versionado fijo del paquete (`2.0.0`) impidió que cambios de código se reflejaran en T6.
 
-### 9.4 Mejor Configuración Operativa
+### 10.4 Mejor Configuración Operativa
 
 | Objetivo | Mejor Train | Justificación |
 |---|---|---|
@@ -822,19 +954,51 @@ La comparación clave es con T3 (mismo scoring): T3 produce 533 dets a conf=0.25
 | **Máximo Recall** | **T4** (0.6886) | Si las detecciones perdidas son más costosas que los FP. |
 | **Máxima Precisión** | **T3** (0.6609) | Mínimos falsos positivos (177 FP en test). |
 
-> **Recomendación**: T3 sigue siendo el mejor modelo operativo. T5 validó que el warmup SL1→GIoU funciona y debe mantenerse, pero la augmentación agresiva debe descartarse o reducirse drásticamente.
+> **Recomendación**: T3 sigue siendo el mejor modelo operativo. T5 validó que el warmup SL1→GIoU funciona. Para el próximo train, usar T3 como base + warmup + Focal Loss, asegurando despliegue correcto (version bump).
 
-### 9.5 Oportunidades de Mejora (Candidatas para Train 6+)
+### 10.5 Oportunidades de Mejora (Candidatas para Train 7+)
 
 1. ~~**Threshold sweep post-NMS** — COMPLETADO (§6)~~: Scoring T4 descartado.
 2. ~~**Max detections per image** — DESCARTADO~~: Problema estructural, no de cantidad.
 3. ~~**Revertir a ctr_power=1.0, conf=0.20** — DESCARTADO~~: Confirmado por sweep.
 4. ~~**Warmup de loss híbrido** — COMPLETADO (§7, T5)~~: Funciona. Elimina meseta GIoU, mejora mAP@50-95. **Mantener en futuros trains.**
 5. ~~**Augmentación más agresiva** — COMPLETADO (§7, T5) — DESCARTADO~~: CoarseDropout+GaussNoise+GaussianBlur destruyen calibración. Revertir a augmentación base de T3.
-6. **Resolución final mayor**: Evaluar a 320px en vez de 224px para mejorar localización de objetos pequeños.
-7. **Focal Loss tuning**: Ajustar gamma (2→3) para la cabeza de clasificación, ayudando con clases difíciles.
-8. **T6 = T3 + warmup SL1 (sin aug agresiva)**: Combinar lo mejor: scoring T3 + warmup validado + augmentación base. Aísla el efecto neto del warmup sin contaminación de augmentación.
+6. ~~**Resolución final mayor** — DESCARTADO~~: Se mantiene 224px por restricción del target (ESP32-S3).
+7. ~~**Focal Loss tuning — PENDIENTE RE-RUN**~~: γ=3, α=0.25. No se activó en T6 por incidente de despliegue. **→ EN CURSO (T7)**.
+8. ~~**Sin HFlip runtime** — COMPLETADO (§8, T6) — DESCARTADO~~: Eliminar HFlip runtime produce peor F1 de la serie. **Mantener HFlip p=0.5 en futuros trains.**
+9. ~~**Phase 1 extendida (40ep)** — COMPLETADO (§8, T6) — DESCARTADO~~: Sin warmup SL1, 10 epochs extras desperdiciados en meseta GIoU. Revertir a 30 ep.
+10. ~~**T7 = T3 + warmup SL1 + Focal Loss γ=3 + HFlip p=0.5** — EN CURSO~~:
 
+**T7 — Configuración Final Preparada:**
+
+| Parámetro | Valor | Origen |
+|---|---|---|
+| Phase 1 epochs | 30 | T3 (revert T6) |
+| Phase 2 epochs | 80 | T3 |
+| Scoring | conf=0.30, ctr^1.0 | T3 base + subida leve para reducir FP |
+| HFlip | p=0.5 | T3 (restored, T6 lesson) |
+| SL1 warmup | 10 epochs | T5 (validated) |
+| Focal Loss | γ=3, α=0.25 | NEW (failed to deploy in T6) |
+| Aug base | brightness/contrast=0.2 | T3 |
+| Package version | 2.1.0 | Fix T6 deploy bug |
+| Verificación | `🔍 DEPLOY VERIFICATION` al inicio del log | NEW |
+
+**Archivos modificados:**
+- `setup.py` → version `2.0.0` → `2.1.0` (fuerza invalidación de pip cache)
+- `vertex_ai/configs/fcos_v3s_v1.yaml` → phase1=30, HFlip=0.5, comments T7
+- `trainer/task_fcos.py` → bloque `DEPLOY VERIFICATION` que imprime focal_gamma, reg_warmup y aug_hflip al inicio del training
+
+**Verificación pre-launch:**
+- [x] `_sigmoid_focal_loss()` presente en sdist (`utils_train.py:217`)
+- [x] `build_fcos_loss()` con `focal_gamma`/`focal_alpha` params (`utils_train.py:250`)
+- [x] `task_fcos.py` pasa `focal_gamma`/`focal_alpha`/`reg_warmup_epochs` a `build_fcos_loss()`
+- [x] `DEPLOY VERIFICATION` block en `task_fcos.py` confirma valores en runtime
+- [x] Test build local: `tfm_trainer-2.1.0.tar.gz` (67 KB) contiene todos los archivos
+
+**Lanzamiento:**
+```bash
+./vertex_ai/build_and_launch.sh fcos_v3s_v1
+```
 ---
 
 *Documento generado y mantenido como parte del pipeline MLOps del TFM — Detección de Objetos para Asistencia Visual.*

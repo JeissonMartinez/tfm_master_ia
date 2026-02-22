@@ -214,11 +214,46 @@ def _smooth_l1_ltrb(
     return nn.functional.smooth_l1_loss(pred_ltrb, target_ltrb, beta=beta)
 
 
+def _sigmoid_focal_loss(
+    inputs: torch.Tensor,
+    targets: torch.Tensor,
+    gamma: float = 2.0,
+    alpha: float = 0.25,
+) -> torch.Tensor:
+    """Sigmoid focal loss (Lin et al., 2017).
+
+    Reduces the loss contribution of well-classified (easy) examples,
+    focusing training on hard negatives / hard positives.
+
+    Args:
+        inputs:  Raw logits, shape (N, C).
+        targets: Binary targets, shape (N, C) in {0, 1}.
+        gamma:   Focusing parameter.  gamma=0 → standard BCE.
+        alpha:   Balancing factor for positive class (1-alpha for negatives).
+
+    Returns:
+        Scalar sum (not mean) — the caller normalises by n_pos.
+    """
+    p = torch.sigmoid(inputs)
+    bce = nn.functional.binary_cross_entropy_with_logits(
+        inputs, targets, reduction="none",
+    )
+    # p_t: probability of the correct class
+    p_t = p * targets + (1 - p) * (1 - targets)
+    focal_weight = (1 - p_t) ** gamma
+    # alpha weighting: alpha for positives, (1-alpha) for negatives
+    alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+    loss = alpha_t * focal_weight * bce
+    return loss.sum()
+
+
 def build_fcos_loss(
     cls_weight: float = 1.0,
     reg_weight: float = 1.0,
     ctr_weight: float = 1.0,
     reg_warmup_epochs: int = 0,
+    focal_gamma: float = 0.0,
+    focal_alpha: float = 0.25,
 ) -> Callable:
     """Build a combined FCOS loss function (cls + reg + centerness).
 
@@ -230,8 +265,17 @@ def build_fcos_loss(
     the first *reg_warmup_epochs* global epochs, then switches to GIoU.
     This avoids the initial GIoU plateau observed in previous trains.
     Use ``fcos_loss.set_epoch(e)`` to update the current epoch.
+
+    If ``focal_gamma > 0``, sigmoid focal loss replaces BCE for
+    classification, helping the model focus on hard examples.
     """
-    cls_loss_fn = nn.BCEWithLogitsLoss(reduction="none")
+    use_focal = focal_gamma > 0
+    cls_loss_fn = (
+        None if use_focal
+        else nn.BCEWithLogitsLoss(reduction="none")
+    )
+    if use_focal:
+        log(f"🎯 cls_loss: Sigmoid Focal Loss (γ={focal_gamma}, α={focal_alpha})")
     # Mutable state so the training loop can set the current epoch
     _state = {"epoch": 0}
 
@@ -253,10 +297,15 @@ def build_fcos_loss(
             pos_mask = targets[f"pos_{lvl_idx}"]
 
             # Classification loss (all locations)
-            cls_loss = cls_loss_fn(
-                cls_pred.permute(0, 2, 3, 1).reshape(-1, cls_pred.shape[1]),
-                cls_target.reshape(-1, cls_pred.shape[1]),
-            ).sum()
+            flat_pred = cls_pred.permute(0, 2, 3, 1).reshape(-1, cls_pred.shape[1])
+            flat_tgt = cls_target.reshape(-1, cls_pred.shape[1])
+            if use_focal:
+                cls_loss = _sigmoid_focal_loss(
+                    flat_pred, flat_tgt,
+                    gamma=focal_gamma, alpha=focal_alpha,
+                )
+            else:
+                cls_loss = cls_loss_fn(flat_pred, flat_tgt).sum()
             total_cls = total_cls + cls_loss
 
             # Regression + centerness (positive only)

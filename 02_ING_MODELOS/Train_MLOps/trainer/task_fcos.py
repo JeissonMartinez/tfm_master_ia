@@ -381,7 +381,21 @@ def main() -> None:
         reg_weight=fc.get("reg_weight", 1.5),
         ctr_weight=fc.get("centerness_weight", 1.0),
         reg_warmup_epochs=fc.get("reg_warmup_epochs", 0),
+        focal_gamma=fc.get("focal_gamma", 0.0),
+        focal_alpha=fc.get("focal_alpha", 0.25),
     )
+
+    # ── Startup verification (T7+): confirm code-level features deployed ──
+    _focal_g = fc.get("focal_gamma", 0.0)
+    _warmup_e = fc.get("reg_warmup_epochs", 0)
+    _hflip_p = fc.get("aug_hflip_prob", 0.5)
+    log("═" * 60)
+    log("🔍 DEPLOY VERIFICATION — package v2.1.0")
+    log(f"   focal_gamma  = {_focal_g}  {'✅ Focal Loss ACTIVE' if _focal_g > 0 else '⚠️ BCE (standard)'}")
+    log(f"   reg_warmup   = {_warmup_e}  {'✅ SL1→GIoU warmup ACTIVE' if _warmup_e > 0 else '⚠️ GIoU from epoch 0'}")
+    log(f"   aug_hflip    = {_hflip_p}  {'✅ HFlip ON' if _hflip_p > 0 else '⚠️ HFlip OFF'}")
+    log(f"   phase1_epochs= {fc.get('phase1_epochs', 30)}")
+    log("═" * 60)
 
     checkpoint_dir = os.path.join(LOCAL_WORK_DIR, "checkpoints")
     t0 = time.time()

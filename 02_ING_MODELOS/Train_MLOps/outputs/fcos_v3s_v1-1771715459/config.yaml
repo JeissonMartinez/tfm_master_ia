@@ -1,9 +1,8 @@
 # ─────────────────────────────────────────────────────────────
 # Configuración: FCOS — MobileNetV3-Small + FPN — v1
 # ─────────────────────────────────────────────────────────────
-# Train 7 (FINAL): T3 scoring + SL1 warmup + Focal Loss γ=3
-#   HFlip p=0.5 RESTORED + Phase 1 = 30 epochs (revert T6)
-#   Package version bumped 2.0.0 → 2.1.0 (fix T6 deploy bug)
+# Train 6: T3 scoring + SL1 warmup + base aug (sin HFlip)
+#           + Focal Loss γ=3 + Phase 1 extendida a 40 epochs
 # Custom Job de Vertex AI · Ciclo 2
 # Leído por trainer/config_loader.py → ExperimentSetup
 
@@ -23,7 +22,7 @@ common:
   batch_size: 16
   patience: 20
   seed: 42
-  conf_threshold: 0.30              # Slightly raised from T3's 0.25 to reduce FP
+  conf_threshold: 0.25              # T3 standard scoring
   iou_threshold: 0.45
 
 fcos:
@@ -35,9 +34,9 @@ fcos:
   num_head_convs: 2
 
   # ── Fase 1 — Backbone congelado ──────────────────────────
-  # Reverted to 30 (T6 showed 40 wastes epochs on GIoU plateau).
-  # With SL1 warmup active, Phase 1 is productive from epoch 0.
-  phase1_epochs: 30
+  # Extended from 30→40: 10 extra epochs at 224px (target res)
+  # so the head adapts to final resolution BEFORE unfreezing backbone.
+  phase1_epochs: 40
   phase1_lr: 1.0e-3
   phase1_wd: 1.0e-4
   phase1_optimizer: adamw
@@ -80,9 +79,8 @@ fcos:
 
   # ── Augmentation (Albumentations) ─────────────────────────
   # Base augmentations only — reverted from T5 aggressive aug.
-  # HFlip RESTORED: T6 proved runtime HFlip is essential even
-  # with offline copies (4.2× more FP without it).
-  aug_hflip_prob: 0.5               # ← restored (T6 lesson: essential)
+  # HFlip DISABLED: already applied offline in dataset preprocessing.
+  aug_hflip_prob: 0.0               # ← disabled (offline augmentation)
   aug_brightness_limit: 0.2         # ← reverted from T5's 0.3 to T3 value
   aug_contrast_limit: 0.2           # ← reverted from T5's 0.3 to T3 value
   aug_hue_shift_limit: 20
