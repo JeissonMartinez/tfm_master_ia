@@ -1,0 +1,107 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: FCOS — MobileNetV3-Small + FPN — v1
+# ─────────────────────────────────────────────────────────────
+# Train 8: Fix config_loader whitelist → Focal Loss + SL1 warmup activos
+#   conf_threshold=0.35 (subido desde 0.30 para reducir FP)
+#   Package version bumped 2.1.0 → 2.2.0
+#   config_loader.py ahora pasa TODAS las claves YAML (Option B)
+# Custom Job de Vertex AI · Ciclo 2
+# Leído por trainer/config_loader.py → ExperimentSetup
+
+model:
+  family: FCOS
+  variant: fcos_v3s
+  version: v1
+  description: "FCOS con MobileNetV3-Small backbone + SimpleFPN + FCOS head"
+
+dataset:
+  name: iodc_yolo
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/iodc_yolo.zip
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 224
+
+common:
+  batch_size: 16
+  patience: 20
+  seed: 42
+  conf_threshold: 0.35              # T8: raised from 0.30, good FP reduction in T7
+  iou_threshold: 0.45
+
+fcos:
+  # ── Arquitectura ──────────────────────────────────────────
+  backbone: mobilenet_v3_small
+  pretrained_backbone: true
+  fpn_channels: 64
+  strides: [8, 16, 32]
+  num_head_convs: 2
+
+  # ── Fase 1 — Backbone congelado ──────────────────────────
+  # Reverted to 30 (T6 showed 40 wastes epochs on GIoU plateau).
+  # With SL1 warmup active, Phase 1 is productive from epoch 0.
+  phase1_epochs: 30
+  phase1_lr: 1.0e-3
+  phase1_wd: 1.0e-4
+  phase1_optimizer: adamw
+  phase1_scheduler: cosine
+
+  # ── Fase 2 — Todo descongelado ───────────────────────────
+  phase2_epochs: 80
+  phase2_lr: 1.0e-4
+  phase2_wd: 1.0e-5
+  phase2_optimizer: adamw
+  phase2_scheduler: cosine
+
+  # ── Redimensionado progresivo ─────────────────────────────
+  # Epochs 30-39: head trains at 224px with frozen backbone
+  resize_schedule:
+    0: 640
+    10: 416
+    20: 320
+    30: 224
+
+  # ── Scoring (inferencia) ──────────────────────────────────
+  # T3 standard scoring (ctr^1.0, no iou_aware)
+  # ctr_power / iou_aware_scoring omitted → defaults: 1.0 / false
+
+  # ── Loss weights ──────────────────────────────────────────
+  cls_weight: 1.0
+  reg_weight: 1.5
+  centerness_weight: 1.0
+
+  # ── Focal Loss (NEW for Train 6) ──────────────────────────
+  # Replaces BCE for classification. gamma=3 focuses on hard examples,
+  # especially helping weak classes (dog, obstacle).
+  focal_gamma: 3.0
+  focal_alpha: 0.25
+
+  # ── Hybrid loss warmup (validated in T5) ──────────────────
+  # Smooth L1 for regression during first 10 epochs, then GIoU.
+  # Eliminates the ~13 epoch GIoU plateau observed in T3/T4.
+  reg_warmup_epochs: 10
+
+  # ── Augmentation (Albumentations) ─────────────────────────
+  # Base augmentations only — reverted from T5 aggressive aug.
+  # HFlip RESTORED: T6 proved runtime HFlip is essential even
+  # with offline copies (4.2× more FP without it).
+  aug_hflip_prob: 0.5               # ← restored (T6 lesson: essential)
+  aug_brightness_limit: 0.2         # ← reverted from T5's 0.3 to T3 value
+  aug_contrast_limit: 0.2           # ← reverted from T5's 0.3 to T3 value
+  aug_hue_shift_limit: 20
+  aug_sat_shift_limit: 30
+  aug_val_shift_limit: 20
+  aug_shift_limit: 0.1
+  aug_scale_limit: 0.2
+  aug_rotate_limit: 15
+  # Aggressive augmentations REMOVED (T5 proved they destroy calibration)
+  # aug_gaussian_noise: 0
+  # aug_coarse_dropout: 0
+  # aug_blur: 0
+
+  # ── Entrenamiento ─────────────────────────────────────────
+  amp: true
+  grad_clip: 10.0
+  workers: 4
+
+  # ── Export ────────────────────────────────────────────────
+  export_imgsz: 224
+  export_opset: 13
