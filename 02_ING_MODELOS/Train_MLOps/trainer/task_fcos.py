@@ -390,7 +390,7 @@ def main() -> None:
     _warmup_e = fc.get("reg_warmup_epochs", 0)
     _hflip_p = fc.get("aug_hflip_prob", 0.5)
     log("═" * 60)
-    log("🔍 DEPLOY VERIFICATION — package v2.1.0")
+    log("🔍 DEPLOY VERIFICATION — package v2.2.0")
     log(f"   focal_gamma  = {_focal_g}  {'✅ Focal Loss ACTIVE' if _focal_g > 0 else '⚠️ BCE (standard)'}")
     log(f"   reg_warmup   = {_warmup_e}  {'✅ SL1→GIoU warmup ACTIVE' if _warmup_e > 0 else '⚠️ GIoU from epoch 0'}")
     log(f"   aug_hflip    = {_hflip_p}  {'✅ HFlip ON' if _hflip_p > 0 else '⚠️ HFlip OFF'}")

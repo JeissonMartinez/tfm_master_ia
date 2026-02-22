@@ -1,10 +1,9 @@
 # ─────────────────────────────────────────────────────────────
 # Configuración: FCOS — MobileNetV3-Small + FPN — v1
 # ─────────────────────────────────────────────────────────────
-# Train 8: Fix config_loader whitelist → Focal Loss + SL1 warmup activos
-#   conf_threshold=0.35 (subido desde 0.30 para reducir FP)
-#   Package version bumped 2.1.0 → 2.2.0
-#   config_loader.py ahora pasa TODAS las claves YAML (Option B)
+# Train 7 (FINAL): T3 scoring + SL1 warmup + Focal Loss γ=3
+#   HFlip p=0.5 RESTORED + Phase 1 = 30 epochs (revert T6)
+#   Package version bumped 2.0.0 → 2.1.0 (fix T6 deploy bug)
 # Custom Job de Vertex AI · Ciclo 2
 # Leído por trainer/config_loader.py → ExperimentSetup
 
@@ -24,7 +23,7 @@ common:
   batch_size: 16
   patience: 20
   seed: 42
-  conf_threshold: 0.35              # T8: raised from 0.30, good FP reduction in T7
+  conf_threshold: 0.30              # Slightly raised from T3's 0.25 to reduce FP
   iou_threshold: 0.45
 
 fcos:

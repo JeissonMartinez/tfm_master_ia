@@ -70,10 +70,10 @@ def load_config_from_yaml(yaml_path: str) -> ExperimentSetup:
     if section_info:
         yaml_key, defaults = section_info
         family_section = cfg.get(yaml_key, {})
-        # Partir de defaults, sobrescribir con valores del YAML
-        for key in defaults:
-            if key in family_section:
-                family_kwargs[key] = family_section[key]
+        # Pasar TODAS las claves de la sección YAML (no solo las del whitelist).
+        # Fix T8: El patrón anterior iteraba solo sobre `defaults`, descartando
+        # silenciosamente claves nuevas como focal_gamma, reg_warmup_epochs, etc.
+        family_kwargs = dict(family_section)
 
     # ── Crear ExperimentSetup vía create_manual_setup ──
     setup = create_manual_setup(

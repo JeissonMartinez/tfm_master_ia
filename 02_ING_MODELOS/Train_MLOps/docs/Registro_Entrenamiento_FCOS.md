@@ -6,7 +6,7 @@
 > **Splits**: Train 1470 | Val 188 | Test 187  
 > **Infraestructura**: Google Vertex AI Custom Job — `n1-standard-8` + NVIDIA Tesla T4  
 > **Contenedor**: `us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest`  
-> **Última actualización**: 21 de febrero de 2026  
+> **Última actualización**: 22 de febrero de 2026  
 
 ---
 
@@ -20,28 +20,29 @@
 6. [Threshold Sweep — Análisis Post-NMS del Modelo T4](#6-threshold-sweep--análisis-post-nms-del-modelo-t4)
 7. [Train 5 — Hybrid Loss Warmup + Aggressive Augmentation](#7-train-5--hybrid-loss-warmup--aggressive-augmentation)
 8. [Train 6 — Phase 1 Extendida + Sin HFlip (Despliegue Parcial)](#8-train-6--phase-1-extendida--sin-hflip-despliegue-parcial)
-9. [Comparativa Global](#9-comparativa-global)
-10. [Conclusiones Generales](#10-conclusiones-generales)
+9. [Train 7 — Config Final (T3 + build_fcos_loss + conf 0.30)](#9-train-7--config-final-t3--build_fcos_loss--conf-030)
+10. [Comparativa Global](#10-comparativa-global)
+11. [Conclusiones Generales](#11-conclusiones-generales)
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-| Métrica (Test) | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **mAP@50** | 0.4304 | 0.5600 | 0.5675 | **0.5936** | 0.5887 | 0.5572 |
-| **mAP@50-95** | N/C | N/C | 0.2602 | 0.2644 | **0.2703** | 0.2511 |
-| **Precision** | 0.5427 | 0.6049 | **0.6609** | 0.3462 | 0.3505 | 0.3290 |
-| **Recall** | 0.5291 | 0.6271 | 0.6276 | **0.6886** | 0.6845 | 0.6558 |
-| **F1-Score** | 0.5358 | 0.6158 | **0.6438** | 0.4607 | 0.4636 | 0.4382 |
-| Épocas | 52 | 74 | 101 | 77 | 76 | 86 |
-| Tiempo | 12.1 min | 15.9 min | 23.6 min | 17.9 min | 17.9 min | 19.5 min |
-| Inferencia | 5.0 ms | 4.6 ms | 4.8 ms | 5.4 ms | 4.9 ms | 5.1 ms |
+| Métrica (Test) | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | **Train 7** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mAP@50** | 0.4304 | 0.5600 | 0.5675 | 0.5936 | 0.5887 | 0.5572 | **0.6120** |
+| **mAP@50-95** | N/C | N/C | 0.2602 | 0.2644 | 0.2703 | 0.2511 | **0.2824** |
+| **Precision** | 0.5427 | 0.6049 | **0.6609** | 0.3462 | 0.3505 | 0.3290 | 0.3716 |
+| **Recall** | 0.5291 | 0.6271 | 0.6276 | **0.6886** | 0.6845 | 0.6558 | 0.6872 |
+| **F1-Score** | 0.5358 | 0.6158 | **0.6438** | 0.4607 | 0.4636 | 0.4382 | 0.4824 |
+| Épocas | 52 | 74 | 101 | 77 | 76 | 86 | 98 |
+| Tiempo | 12.1 min | 15.9 min | 23.6 min | 17.9 min | 17.9 min | 19.5 min | ~23 min |
+| Inferencia | 5.0 ms | 4.6 ms | 4.8 ms | 5.4 ms | 4.9 ms | 5.1 ms | 5.0 ms |
 
 > **N/C**: No Calculado — la implementación de mAP@50-95 fue añadida después de Train 2.  
-> **Train 4**: Mejores mAP@50 y Recall de la serie, pero Precision colapsa por exceso de FP (scoring demasiado permisivo).  
-> **Train 5**: Mejor mAP@50-95 de la serie (calidad de box). El warmup de loss eliminó la meseta GIoU pero la augmentación agresiva degradó la calibración de confianza, replicando el perfil de FP de T4.  
-> **Train 6**: Despliegue parcial — Focal Loss y SL1 warmup no se activaron (incidente de empaquetado). Resultado efectivo: T3 sin HFlip + Phase 1 extendida. **Peor F1 de la serie** (0.4382). Confirma que el HFlip runtime es esencial.
+> **Train 3**: Mejor F1 (0.6438) y Precision (0.6609) de toda la serie. Referencia operativa para producción.  
+> **Train 7**: **Mejor mAP@50 (0.6120) y mAP@50-95 (0.2824) de la serie.** Segundo incidente de despliegue: bug de whitelist en `config_loader.py` impidió activar Focal Loss y SL1 warmup. Resultado efectivo: T3 + `build_fcos_loss` (reg_weight=1.5) + conf=0.30 + HFlip restaurado.  
+> **Train 6**: Despliegue parcial — sdist cache impidió deploy de código Python. Peor F1 de la serie (0.4382). Confirma que HFlip runtime es esencial.
 
 ---
 
@@ -853,152 +854,403 @@ La comparación clave es con T3 (mismo scoring): T3 produce 533 dets a conf=0.25
 
 ---
 
-## 9. Comparativa Global
+## 9. Train 7 — Config Final (T3 + build_fcos_loss + conf 0.30)
 
-### 9.1 Evolución Total Loss
+### 9.1 Identificador
 
-| Fase | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Epoch 0 (640px) | 688.5 | 38.9 | 9.4 | 8.9 | 8.6 (SL1) | 9.4 (GIoU) |
-| Final | ~43.5 | ~3.5 | ~3.3 | ~3.3 | ~3.4 | ~3.3 |
-| Best val_loss | 135.49 | **24.01** | 28.12 | 36.46 | 28.75 | 33.31 |
+| Campo | Valor |
+|---|---|
+| **Job ID** | `fcos_v3s_v1-1771726575` |
+| **Fecha** | 22 de febrero de 2026 |
+| **Output GCS** | `gs://project-18f58341-12cf-47bc-861-tfm-data/output/fcos_v3s_v1-1771726575/` |
+| **Output local** | `outputs/fcos_v3s_v1-1771726575/` |
+| **Package** | `tfm_trainer-2.1.0.tar.gz` (version bump desde 2.0.0) |
 
-> Nota: val_loss no es directamente comparable entre T2 (Smooth L1) y T3-T6 (GIoU) por cambio de función de loss. T5 usó Smooth L1 en primeros 10 epochs; T6 debía usarlo pero el warmup no se activó.
+### 9.2 Objetivo
 
-### 9.2 Evolución reg_loss (Train)
+Entrenamiento **final** de la serie FCOS. Combinar las mejores configuraciones probadas:
+- **Base T3** (scoring conservador, augmentación base, HFlip p=0.5)
+- **SL1 warmup** de T5 (10 epochs Smooth L1 → GIoU)
+- **Focal Loss γ=3** (nuevo, no probado previamente)
+- **conf_threshold=0.30** (subida leve vs T3's 0.25 para reducir FP)
+- **Version bump 2.0.0→2.1.0** (fix del cache bug de T6)
 
-| Resolución | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) | ~3.96 (meseta) | ~3.67 (SL1, sin meseta) | ~4.5 (meseta) |
-| 224px (final) | ~41 | ~1.3 | ~1.1 | ~1.1 | ~1.1 | ~1.1 |
+### 9.3 Incidente de Despliegue — Bug de Whitelist en config_loader.py
 
-### 9.3 Per-class AP@50 — Test (Evolución)
+> **⚠️ SEGUNDO INCIDENTE DE DESPLIEGUE**: El código Python se desplegó correctamente (version bump funcionó), pero un bug en `config_loader.py` impidió que las claves nuevas del YAML llegaran al código de entrenamiento.
 
-| Clase | T1 | T2 | T3 | T4 | T5 | T6 | Δ T1→T6 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog | 0.406 | 0.463 | 0.496 | 0.502 | **0.522** | 0.442 | +8.9% |
-| door | 0.339 | 0.519 | 0.503 | 0.533 | **0.544** | 0.464 | +36.9% |
-| obstacle | 0.302 | 0.405 | 0.458 | **0.512** | 0.464 | 0.460 | +52.3% |
-| person | 0.521 | 0.636 | 0.636 | **0.682** | 0.666 | 0.683 | +31.1% |
-| stair | 0.584 | **0.777** | 0.745 | 0.739 | 0.747 | 0.736 | +26.0% |
-| **Media** | **0.430** | **0.560** | **0.568** | **0.594** | **0.589** | **0.557** | **+29.5%** |
+**Causa raíz**: `config_loader.py` (líneas 73-75) itera sobre las claves de `_FCOS_DEFAULTS` (definido en `utils_widgets.py:76`) como **whitelist**. Solo las claves que existen en `_FCOS_DEFAULTS` se pasan a `create_manual_setup()`. Cualquier clave nueva del YAML que no esté en el diccionario de defaults se descarta silenciosamente.
 
-### 9.4 Confusion Matrix (Test) — Evolución de TP
+```python
+# config_loader.py líneas 73-75 — bug de whitelist
+for key in defaults:                    # ← solo itera claves de _FCOS_DEFAULTS
+    if key in family_section:           # ← si la clave existe en YAML
+        family_kwargs[key] = family_section[key]  # ← la pasa
+# 17 claves del YAML NO están en _FCOS_DEFAULTS → se pierden silenciosamente
+```
 
-| Clase (Test GT) | T1 TP | T2 TP | T3 TP | T4 TP | T5 TP | T6 TP | T1 FN | T2 FN | T3 FN | T4 FN | T5 FN | T6 FN |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog (58) | 30 | 32 | 33 | 35 | **36** | 32 | 28 | 26 | 25 | 23 | **22** | 26 |
-| door (136) | 54 | 80 | 77 | 90 | **93** | 75 | 82 | 56 | 59 | 46 | **43** | 61 |
-| obstacle (173) | 79 | 86 | 92 | 107 | 105 | **108** | 94 | 87 | 81 | **66** | 68 | 65 |
-| person (101) | 67 | 70 | 70 | 78 | 75 | **80** | 34 | 31 | 31 | 23 | 26 | **21** |
-| stair (108) | 66 | 87 | 84 | **85** | 83 | 82 | 42 | 21 | 24 | **23** | 25 | 26 |
-| **Total** | **296** | **355** | **356** | **395** | **392** | **377** | **280** | **221** | **220** | **181** | **184** | **199** |
+**Claves YAML descartadas** (17 en total):
 
-### 9.5 Falsos Positivos (Test)
+| Clave YAML | Valor configurado | Valor efectivo (via .get default) |
+|---|---|---|
+| `focal_gamma` | 3.0 | **0.0** → Focal Loss **no activo** (BCE) |
+| `focal_alpha` | 0.25 | 0.25 (coincide por defecto en .get) |
+| `reg_warmup_epochs` | 10 | **0** → Warmup SL1 **no activo** |
+| `reg_weight` | 1.5 | 1.5 (coincide por defecto en .get) |
+| `cls_weight` | 1.0 | 1.0 (coincide) |
+| `centerness_weight` | 1.0 | 1.0 (coincide) |
+| `strides` | [8,16,32] | Hardcoded en modelo |
+| `num_head_convs` | 2 | Hardcoded en modelo |
+| `pretrained_backbone` | true | true (default) |
+| `grad_clip` | 10.0 | 10.0 (coincide) |
+| `export_imgsz` | 224 | 224 (leído por ruta separada) |
+| `export_opset` | 13 | 13 (leído por ruta separada) |
+| `phase1_wd` | 1e-4 | 1e-4 (leído por ruta separada) |
+| `phase2_wd` | 1e-5 | 1e-5 (leído por ruta separada) |
+| `phase1_optimizer` | adamw | adamw (coincide) |
+| `phase2_optimizer` | adamw | adamw (coincide) |
+| `phase1_scheduler` / `phase2_scheduler` | cosine | cosine (coincide) |
 
-| Clase | T1 FP | T2 FP | T3 FP | T4 FP | T5 FP | T6 FP |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog | 42 | 32 | **24** | 88 | 103 | 94 |
-| door | 40 | 83 | **44** | 188 | 216 | 135 |
-| obstacle | 72 | **43** | 45 | 165 | 171 | 220 |
-| person | 72 | 38 | **26** | 144 | 105 | 153 |
-| stair | 26 | 34 | **38** | 140 | 127 | 145 |
-| **Total** | **252** | **230** | **177** | **725** | **722** | **747** |
+**Evidencia diagnóstica:**
 
-> **T6 tiene el peor FP de la serie** (747). Con scoring idéntico a T3 (conf=0.25), produce 4.2× más FP que T3 (177). La eliminación de HFlip runtime generó un modelo aún menos discriminativo que T4/T5.
+| Señal | Valor esperado (Focal γ=3) | Valor observado | Conclusión |
+|---|---|---|---|
+| cls_loss epoch 0 | ~0.28 (focal weighting) | 3.0920 (≈ BCE) | Focal Loss **no activo** |
+| reg_loss epoch 0 | ~3.67 (SL1) | 3.5739 (GIoU, nuevo código) | Warmup SL1 **no activo** |
+| reg_loss patrón | Descenso SL1 → transición ep10 | Descenso GIoU inmediato | GIoU desde epoch 0 |
+| `DEPLOY VERIFICATION` log | focal_gamma=3.0, reg_warmup=10 | focal_gamma=0.0, reg_warmup=0 | Valores filtrados |
+
+> **Nota sobre reg_loss**: El valor 3.57 (distinto de la meseta 4.5 de T3/T6) se debe al cambio en la función de loss entre versiones de código. T3/T6 usaron la loss inline original; T4/T5/T7 usan `build_fcos_loss()` con `reg_weight=1.5` y normalización diferente. Ambos computan GIoU, pero con escalado distinto.
+
+**Impacto del bug**: Este bug ha estado presente desde T4 (primera vez que se usó `config_loader.py`). Las claves para Focal Loss y warmup en T5 y T6 también fueron descartadas. La mejora de mAP@50-95 atribuida al warmup SL1 en T5 se debió en realidad al cambio en la función de loss (`build_fcos_loss` con `reg_weight=1.5`), no al warmup explícito.
+
+### 9.4 Configuración Efectiva
+
+| Parámetro | Valor Previsto | Valor Real | Origen |
+|---|---|---|---|
+| Focal Loss | γ=3, α=0.25 | **BCE** (estándar) | Bug whitelist |
+| Warmup SL1→GIoU | 10 epochs | **Desactivado** | Bug whitelist |
+| reg_weight | 1.5 | 1.5 ✅ | `.get("reg_weight", 1.5)` coincide |
+| Phase 1 epochs | 30 | 30 ✅ | En `_FCOS_DEFAULTS` |
+| Phase 2 epochs | 80 | 80 ✅ | En `_FCOS_DEFAULTS` |
+| HFlip | p=0.5 | p=0.5 ✅ | En `_FCOS_DEFAULTS` |
+| conf_threshold | 0.30 | 0.30 ✅ | Leído aparte |
+| Brightness/Contrast | 0.2 | **0.3** | `_FCOS_DEFAULTS` default |
+| Gaussian Noise | 0 (eliminado) | **0.2** | `_FCOS_DEFAULTS` default |
+| Scoring | T3 (ctr^1.0) | T3 ✅ | Default |
+| Package | 2.1.0 | 2.1.0 ✅ | Version bump funcionó |
+
+> **Configuración resultante**: Equivalente a T4/T5 (misma función `build_fcos_loss` con `reg_weight=1.5`, mismos defaults de `_FCOS_DEFAULTS`), pero con `conf_threshold=0.30` (vs 0.25 en T4/T5) y Phase 1 de 30 epochs (vs 30 en T4/T5).
+
+### 9.5 Entrenamiento
+
+- **Épocas completadas**: 98 (Phase 1: 30, Phase 2: 68, early stop epoch 97)
+- **Mejor val_loss**: 18.6400 (epoch 77) — **mejor de toda la serie**
+- **Tiempo total**: ~23 min (estimado, 98 epochs)
+
+**Dinámica de pérdida:**
+
+| Epoch | train_loss | cls_loss | reg_loss | Observación |
+|:---:|:---:|:---:|:---:|---|
+| 0 (640px) | 8.512 | 3.092 | 3.574 | GIoU inmediato (nuevo código) |
+| 10 (416px) | 5.567 | 1.667 | 2.184 | Resize 640→416 |
+| 20 (320px) | 4.928 | 1.406 | 1.802 | Resize 416→320 |
+| 29 (320px) | 4.604 | 1.223 | 1.658 | Fin Phase 1 |
+| 30 (224px) | 5.095 | 1.274 | 2.100 | → Phase 2, resize 320→224 |
+| 50 | 3.561 | 0.648 | 1.213 | Convergencia Phase 2 |
+| 77 | 3.261 | 0.542 | 1.042 | ★ best val_loss (18.64) |
+| 97 | 3.241 | 0.531 | 1.038 | Early stop |
+
+### 9.6 Resultados — Validación
+
+| Métrica | Valor |
+|---|---|
+| mAP@50 | 0.4367 |
+| mAP@50-95 | 0.2014 |
+| Precision | 0.3493 |
+| Recall | 0.5180 |
+| F1-Score | 0.4173 |
+| Detecciones / GT | 1139 / 762 |
+| Inferencia | 5.5 ms |
+
+**Per-class AP@50 (Val):**
+
+| Clase | AP@50 | Precision | Recall | F1 |
+|---|:---:|:---:|:---:|:---:|
+| dog | 0.3270 | 0.2684 | 0.4133 | 0.3255 |
+| door | 0.4651 | 0.3466 | 0.5437 | 0.4234 |
+| obstacle | 0.4476 | 0.3369 | 0.5732 | 0.4244 |
+| person | 0.4629 | 0.4222 | 0.5220 | 0.4668 |
+| stair | 0.4807 | 0.3725 | 0.5377 | 0.4402 |
+
+### 9.7 Resultados — Test
+
+| Métrica | Valor | vs T3 | vs T4 | vs T5 |
+|---|---|---|---|---|
+| **mAP@50** | **0.6120** | **+7.8%** | +3.1% | +4.0% |
+| **mAP@50-95** | **0.2824** | **+8.5%** | +6.8% | +4.5% |
+| Precision | 0.3716 | −43.8% | +7.3% | +6.0% |
+| Recall | 0.6872 | +9.5% | −0.2% | +0.4% |
+| F1-Score | 0.4824 | −25.1% | +4.7% | +4.1% |
+| Detecciones / GT | 1049 / 576 | — | — | — |
+| Inferencia | 5.0 ms | — | — | — |
+
+**Per-class AP@50 (Test):**
+
+| Clase | AP@50 | Precision | Recall | F1 | vs T3 |
+|---|:---:|:---:|:---:|:---:|---|
+| dog | 0.5062 | 0.2846 | 0.6034 | 0.3867 | +2.1% |
+| door | **0.5689** | 0.3384 | 0.6544 | 0.4461 | +13.0% |
+| obstacle | **0.5233** | 0.3993 | 0.6301 | 0.4888 | +14.4% |
+| person | **0.6912** | 0.4386 | 0.7426 | 0.5515 | +8.7% |
+| stair | **0.7705** | 0.3973 | 0.8056 | 0.5321 | +3.4% |
+
+> T7 logra la **mejor AP@50 en 4 de 5 clases** (door, obstacle, person, stair). Solo dog queda ligeramente por debajo de T5 (0.522).
+
+**Confusion Matrix (Test):**
+
+| Clase (GT) | TP | FP | FN |
+|---|:---:|:---:|:---:|
+| dog (58) | 35 | 88 | 23 |
+| door (136) | 89 | 174 | 47 |
+| obstacle (173) | 109 | 164 | 64 |
+| person (101) | 75 | 96 | 26 |
+| stair (108) | 87 | 132 | 21 |
+| **Total (576)** | **395** | **654** | **181** |
+
+### 9.8 Efecto del conf_threshold 0.30
+
+T7 usa `conf_threshold=0.30` (vs 0.25 en T4/T5). Con la misma función de loss (`build_fcos_loss`, `reg_weight=1.5`):
+
+| Métrica | T4 (conf=0.25) | T5 (conf=0.25) | T7 (conf=0.30) | Efecto |
+|---|:---:|:---:|:---:|---|
+| Detecciones | 1120 | 1114 | **1049** | −6% dets |
+| TP | 395 | 392 | **395** | Mantiene TP |
+| FP | 725 | 722 | **654** | −10% FP |
+| FN | 181 | 184 | **181** | Mantiene FN |
+| Precision | 0.3462 | 0.3505 | **0.3716** | +7% |
+| mAP@50 | 0.5936 | 0.5887 | **0.6120** | +3% |
+
+> La subida de conf a 0.30 eliminó ~70 FP sin perder TP. Esto confirma que había detecciones de baja confianza que eran mayoritariamente falsos positivos.
+
+### 9.9 Lecciones
+
+1. **Bug de whitelist en config_loader**: El patrón de iterar sobre `_FCOS_DEFAULTS` como whitelist impide agregar nuevas funcionalidades via YAML sin actualizar también el diccionario de defaults. Este bug afectó T4-T7 silenciosamente.
+2. **Focal Loss nunca fue probado**: En 7 entrenamientos, la Focal Loss nunca se activó. T6 por cache de sdist, T7 por whitelist de config_loader. Queda como técnica no validada para este modelo.
+3. **SL1 warmup nunca fue probado**: Igualmente, el warmup SL1→GIoU nunca se activó realmente. La diferencia de reg_loss entre T3 y T4+ se debe al cambio de función de loss (`build_fcos_loss` vs inline), no al warmup.
+4. **conf_threshold=0.30 funciona**: Reduce FP sin sacrificar TP. Es el ajuste más efectivo para controlar la explosión de FP en el régimen de `build_fcos_loss`.
+5. **T7 es el mejor modelo en mAP**: mAP@50=0.6120 (+7.8% vs T3), mAP@50-95=0.2824 (+8.5% vs T3). Pero el trade-off con precision persiste (0.37 vs 0.66).
+6. **Version bump funcionó**: El cambio 2.0.0→2.1.0 garantizó que pip instalara el código actualizado. El problema de T7 fue diferente (whitelist, no cache).
 
 ---
 
-## 10. Conclusiones Generales
+## 10. Comparativa Global
 
-### 10.1 Impacto por Cambio
+### 10.1 Evolución Total Loss
+
+| Fase | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | Train 7 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Epoch 0 (640px) | 688.5 | 38.9 | 9.4 | 8.9 | 8.6 | 9.4 (old code) | 8.5 |
+| Final | ~43.5 | ~3.5 | ~3.3 | ~3.3 | ~3.4 | ~3.3 | ~3.2 |
+| Best val_loss | 135.49 | 24.01 | 28.12 | 36.46 | 28.75 | 33.31 | **18.64** |
+
+> Nota: T1-T3 y T6 usaron la loss inline original. T4, T5 y T7 usaron `build_fcos_loss()` con `reg_weight=1.5`. val_loss no es directamente comparable entre regímenes de código.
+
+### 10.2 Evolución reg_loss (Train)
+
+| Resolución | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | Train 7 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) | ~3.96 | ~3.67 | ~4.5 (meseta) | ~3.57 |
+| 224px (final) | ~41 | ~1.3 | ~1.1 | ~1.1 | ~1.1 | ~1.1 | ~1.0 |
+
+> Dos regímenes: T3/T6 muestran meseta GIoU (4.5, código inline). T4/T5/T7 muestran descenso inmediato (~3.6-3.96, `build_fcos_loss` con `reg_weight=1.5`).
+
+### 10.3 Per-class AP@50 — Test (Evolución)
+
+| Clase | T1 | T2 | T3 | T4 | T5 | T6 | T7 | Δ T1→T7 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog | 0.406 | 0.463 | 0.496 | 0.502 | **0.522** | 0.442 | 0.506 | +24.6% |
+| door | 0.339 | 0.519 | 0.503 | 0.533 | 0.544 | 0.464 | **0.569** | +67.8% |
+| obstacle | 0.302 | 0.405 | 0.458 | 0.512 | 0.464 | 0.460 | **0.523** | +73.2% |
+| person | 0.521 | 0.636 | 0.636 | 0.682 | 0.666 | 0.683 | **0.691** | +32.6% |
+| stair | 0.584 | **0.777** | 0.745 | 0.739 | 0.747 | 0.736 | 0.770 | +31.8% |
+| **Media** | **0.430** | **0.560** | **0.568** | **0.594** | **0.589** | **0.557** | **0.612** | **+42.3%** |
+
+### 10.4 Confusion Matrix (Test) — Evolución de TP
+
+| Clase (Test GT) | T1 TP | T2 TP | T3 TP | T4 TP | T5 TP | T6 TP | T7 TP | T1 FN | T2 FN | T3 FN | T4 FN | T5 FN | T6 FN | T7 FN |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog (58) | 30 | 32 | 33 | 35 | **36** | 32 | 35 | 28 | 26 | 25 | 23 | **22** | 26 | 23 |
+| door (136) | 54 | 80 | 77 | 90 | **93** | 75 | 89 | 82 | 56 | 59 | 46 | **43** | 61 | 47 |
+| obstacle (173) | 79 | 86 | 92 | 107 | 105 | 108 | **109** | 94 | 87 | 81 | 66 | 68 | 65 | **64** |
+| person (101) | 67 | 70 | 70 | 78 | 75 | **80** | 75 | 34 | 31 | 31 | 23 | 26 | **21** | 26 |
+| stair (108) | 66 | 87 | 84 | 85 | 83 | 82 | **87** | 42 | 21 | 24 | 23 | 25 | 26 | **21** |
+| **Total** | **296** | **355** | **356** | **395** | **392** | **377** | **395** | **280** | **221** | **220** | **181** | **184** | **199** | **181** |
+
+### 10.5 Falsos Positivos (Test)
+
+| Clase | T1 FP | T2 FP | T3 FP | T4 FP | T5 FP | T6 FP | T7 FP |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog | 42 | 32 | **24** | 88 | 103 | 94 | 88 |
+| door | 40 | 83 | **44** | 188 | 216 | 135 | 174 |
+| obstacle | 72 | **43** | 45 | 165 | 171 | 220 | 164 |
+| person | 72 | 38 | **26** | 144 | 105 | 153 | 96 |
+| stair | 26 | 34 | **38** | 140 | 127 | 145 | 132 |
+| **Total** | **252** | **230** | **177** | **725** | **722** | **747** | **654** |
+
+> **T7 reduce FP significativamente vs T4-T6** (654 vs 722-747) gracias a `conf_threshold=0.30`. Aun así, **T3 sigue siendo el más limpio** (177 FP) por usar el código inline original con scoring más restrictivo.
+
+---
+
+## 11. Conclusiones Generales
+
+### 11.1 Impacto por Cambio
 
 | Cambio | Métrica más afectada | Impacto |
 |---|---|---|
 | **Stride Normalization** (T1→T2) | mAP@50, Recall | +30% mAP@50, +26% Recall. Cambio más impactante de la serie. |
 | **GIoU Loss** (T2→T3) | mAP@50-95, Precision | mAP@50-95 de 0→0.26. Precision +9.3%. Mejora calidad de box. |
 | **Más épocas** (T2→T3) | Convergencia | Best en epoch 80 vs 58. Presupuesto extra utilizado efectivamente. |
-| **Scoring permisivo** (T3→T4) | Recall, mAP@50, FP | +9.7% Recall, +4.6% mAP@50, pero Precision -47.6% y FP +309%. Trade-off negativo. |
-| **SL1 warmup** (T3→T5) | reg_loss, mAP@50-95 | Elimina meseta GIoU. mAP@50-95 +3.9%. Técnica validada. |
-| **Aug agresiva** (T3→T5) | Precision, FP | Precision -47%, FP +308%. Destruye calibración de confianza en modelo pequeño. |
-| **Sin HFlip runtime** (T3→T6) | Precision, FP | Precision -50%, FP +322%. Peor F1 de la serie. HFlip runtime es irrenunciable. |
-| **Phase 1 40ep + meseta** (T3→T6) | Convergencia | Phase 2 solo 46 ep (vs 71 en T3). Menor tiempo efectivo de fine-tuning. |
+| **Scoring permisivo** (T3→T4) | Recall, mAP@50, FP | +9.7% Recall, +4.6% mAP@50, pero Precision −47.6% y FP +309%. Trade-off negativo. |
+| **`build_fcos_loss` + reg_weight=1.5** (T3→T4) | reg_loss, mAP | Cambio de código de loss: eliminó meseta GIoU, mejoró mAP. Anteriormente atribuido a SL1 warmup (ahora desmentido). |
+| **Aug agresiva** (T3→T5) | Precision, FP | Precision −47%, FP +308%. Destruye calibración de confianza en modelo pequeño. |
+| **Sin HFlip runtime** (T3→T6) | Precision, FP | Precision −50%, FP +322%. Peor F1 de la serie. HFlip runtime es irrenunciable. |
+| **conf_threshold 0.25→0.30** (T4→T7) | FP, Precision | −10% FP, +7% Precision sin perder TP. Ajuste simple y efectivo. |
 
-### 10.2 Fortalezas del Modelo
+### 11.2 Dos Regímenes de Código
 
-- **Clasificación perfecta**: Zero confusión inter-clase en los 6 entrenamientos. La cabeza cls discrimina las 5 clases impecablemente.
+Un hallazgo clave del análisis post-T7 es que los 7 entrenamientos se dividen en **dos regímenes de código distintos**:
+
+| Régimen | Trains | Loss regression | reg_loss ep0 | Comportamiento |
+|---|---|---|---|---|
+| **Inline** (código original) | T1, T2, T3, T6 | GIoU inline, weight=1.0 | ~4.5 (meseta 13 ep) | Precision alta, FP bajos |
+| **build_fcos_loss** (nuevo) | T4, T5, T7 | GIoU via `build_fcos_loss`, reg_weight=1.5 | ~3.6-3.9 (descenso inmediato) | mAP alta, FP altos |
+
+T6 usó el código inline (por cache de sdist). T4, T5 y T7 usaron `build_fcos_loss` (código nuevo desplegado correctamente, pero con whitelist bug que descartó Focal Loss y warmup).
+
+La mejora de mAP en T4+ no proviene de scoring, warmup ni Focal Loss, sino del **cambio en la función de loss** (mayor ponderación de regresión con `reg_weight=1.5`).
+
+### 11.3 Fortalezas del Modelo
+
+- **Clasificación perfecta**: Zero confusión inter-clase en los 7 entrenamientos. La cabeza cls discrimina las 5 clases impecablemente.
 - **Modelo ligero**: 1.2M params, 4.71 MB FP32, <6ms inferencia en T4 GPU.
-- **Export ONNX exitoso**: 9 outputs, opset 13, 4.74 MB, latencia ~4.4–6.1 ms.
-- **Alto potencial de recall**: T4/T5/T6 demuestran que el modelo *ve* ~66-69% de los objetos; el reto es rankear bien las detecciones.
-- **mAP@50 mejora sostenidamente**: 0.43 → 0.56 → 0.57 → 0.59 → 0.59 (T6 retrocede a 0.56 por incidente de despliegue).
-- **mAP@50-95 progresa**: 0.26 → 0.26 → 0.27 — la calidad de box mejora con cada cambio de loss.
+- **Export ONNX exitoso**: 9 outputs, opset 13, 4.74 MB, latencia ~4.3–6.1 ms.
+- **Alto potencial de recall**: T4/T5/T7 demuestran que el modelo *ve* ~69% de los objetos; el reto es rankear bien las detecciones.
+- **mAP@50 mejora sostenidamente**: 0.43 → 0.56 → 0.57 → 0.59 → 0.59 → 0.56 → **0.61** (+42% desde T1).
+- **mAP@50-95 progresa**: 0.26 → 0.26 → 0.27 → 0.25 → **0.28** — la calidad de box mejora con `build_fcos_loss`.
 
-### 10.3 Debilidades / Cuellos de Botella
+### 11.4 Debilidades / Cuellos de Botella
 
-- **Trade-off Precision-Recall no resuelto**: T3 es conservador (P=0.66, R=0.63), T4/T5/T6 son permisivos (P≈0.33-0.35, R≈0.66-0.69). Ninguno logra ambos simultáneamente.
-- **FP dominan en T4/T5/T6**: ~722–747 FP para ~377–395 TP. Ratio FP/TP ≈ 1.8–2.0, inaceptable para producción.
+- **Trade-off Precision-Recall no resuelto**: T3 es conservador (P=0.66, R=0.63), T4/T5/T7 son permisivos (P≈0.33-0.37, R≈0.66-0.69). Ninguno logra ambos simultáneamente.
+- **FP dominan en T4/T5/T7**: ~654–725 FP para ~392–395 TP. Ratio FP/TP ≈ 1.7–1.8, mejorado pero aún alto. T7's conf=0.30 ayuda (-10% FP) pero no cierra la brecha con T3 (177 FP).
 - **dog sigue siendo la clase más débil**: AP@50 = 0.44-0.52, menor de las 5 clases en todos los entrenamientos.
 - **Val loss ruidosa**: Con 188 imágenes, oscila enormemente, dificultando checkpoint selection.
-- ~~**Meseta GIoU en Phase 1**~~: Resuelta con warmup SL1 en T5 (no se activó en T6 por incidente).
 - **Augmentación destructiva contraproducente**: CoarseDropout + GaussNoise degradan calibración en modelo de 1.2M params (T5).
 - **HFlip runtime irrenunciable**: Su eliminación (T6) produjo el peor F1 de la serie pese a que el dataset tiene copias estáticas flippeadas.
-- **Pipeline de despliegue frágil**: El versionado fijo del paquete (`2.0.0`) impidió que cambios de código se reflejaran en T6.
+- **Pipeline de despliegue frágil**: Dos incidentes en 7 trains: (1) T6 — cache sdist, (2) T7 — whitelist config_loader. Ninguna funcionalidad nueva (Focal Loss, SL1 warmup) fue testeada exitosamente.
 
-### 10.4 Mejor Configuración Operativa
+### 11.5 Mejor Configuración Operativa
 
-| Objetivo | Mejor Train | Justificación |
-|---|---|---|
-| **Máximo mAP@50** | **T4** (0.5936) | Si solo importa el ranking global de detecciones. |
-| **Máximo mAP@50-95** | **T5** (0.2703) | Mejor calidad geométrica de boxes. |
-| **Producción (F1 balanceado)** | **T3** (F1=0.6438) | Mejor balance precision/recall para uso real. |
-| **Máximo Recall** | **T4** (0.6886) | Si las detecciones perdidas son más costosas que los FP. |
-| **Máxima Precisión** | **T3** (0.6609) | Mínimos falsos positivos (177 FP en test). |
+| Objetivo | Mejor Train | Valor | Justificación |
+|---|---|---|---|
+| **Máximo mAP@50** | **T7** (0.6120) | ★ | Mejor ranking de detecciones de la serie. |
+| **Máximo mAP@50-95** | **T7** (0.2824) | ★ | Mejor calidad geométrica de boxes. |
+| **Producción (F1 balanceado)** | **T3** (F1=0.6438) | ★ | Mejor balance precision/recall para uso real. |
+| **Máximo Recall** | **T4** (0.6886) | | Si las detecciones perdidas son más costosas que los FP. |
+| **Máxima Precisión** | **T3** (0.6609) | | Mínimos falsos positivos (177 FP en test). |
 
-> **Recomendación**: T3 sigue siendo el mejor modelo operativo. T5 validó que el warmup SL1→GIoU funciona. Para el próximo train, usar T3 como base + warmup + Focal Loss, asegurando despliegue correcto (version bump).
+> **Recomendación final**: **T3 para producción** (F1 óptimo, precisión más alta, FP mínimos). **T7 como referencia de ranking** (mejor mAP@50 y mAP@50-95, ideal para benchmarks y papers). El modelo seleccionado para despliegue en ESP32-S3 será T3.
 
-### 10.5 Oportunidades de Mejora (Candidatas para Train 7+)
+### 11.6 Oportunidades de Mejora No Exploradas
 
-1. ~~**Threshold sweep post-NMS** — COMPLETADO (§6)~~: Scoring T4 descartado.
-2. ~~**Max detections per image** — DESCARTADO~~: Problema estructural, no de cantidad.
-3. ~~**Revertir a ctr_power=1.0, conf=0.20** — DESCARTADO~~: Confirmado por sweep.
-4. ~~**Warmup de loss híbrido** — COMPLETADO (§7, T5)~~: Funciona. Elimina meseta GIoU, mejora mAP@50-95. **Mantener en futuros trains.**
-5. ~~**Augmentación más agresiva** — COMPLETADO (§7, T5) — DESCARTADO~~: CoarseDropout+GaussNoise+GaussianBlur destruyen calibración. Revertir a augmentación base de T3.
-6. ~~**Resolución final mayor** — DESCARTADO~~: Se mantiene 224px por restricción del target (ESP32-S3).
-7. ~~**Focal Loss tuning — PENDIENTE RE-RUN**~~: γ=3, α=0.25. No se activó en T6 por incidente de despliegue. **→ EN CURSO (T7)**.
-8. ~~**Sin HFlip runtime** — COMPLETADO (§8, T6) — DESCARTADO~~: Eliminar HFlip runtime produce peor F1 de la serie. **Mantener HFlip p=0.5 en futuros trains.**
-9. ~~**Phase 1 extendida (40ep)** — COMPLETADO (§8, T6) — DESCARTADO~~: Sin warmup SL1, 10 epochs extras desperdiciados en meseta GIoU. Revertir a 30 ep.
-10. ~~**T7 = T3 + warmup SL1 + Focal Loss γ=3 + HFlip p=0.5** — EN CURSO~~:
+Las siguientes técnicas **nunca fueron probadas exitosamente** debido a los incidentes de despliegue:
 
-**T7 — Configuración Final Preparada:**
+1. **Focal Loss (γ=2-3)**: Podría mejorar la discriminación de la cabeza cls, especialmente para clases difíciles (dog). Requiere corregir el bug de whitelist en `config_loader.py`.
+2. **SL1 warmup real**: La eliminación de la meseta GIoU debería mejorar convergencia en Phase 1. Requiere añadir `reg_warmup_epochs` a `_FCOS_DEFAULTS`.
+3. **conf_threshold fino**: T7 mostró que 0.30 reduce FP sin perder TP. Un sweep 0.30-0.40 en T3 podría mejorar su F1 sin reentrenar.
+4. **Ensemble T3+T7**: Combinar la precision de T3 con el recall de T7 mediante NMS-merge.
 
-| Parámetro | Valor | Origen |
-|---|---|---|
-| Phase 1 epochs | 30 | T3 (revert T6) |
-| Phase 2 epochs | 80 | T3 |
-| Scoring | conf=0.30, ctr^1.0 | T3 base + subida leve para reducir FP |
-| HFlip | p=0.5 | T3 (restored, T6 lesson) |
-| SL1 warmup | 10 epochs | T5 (validated) |
-| Focal Loss | γ=3, α=0.25 | NEW (failed to deploy in T6) |
-| Aug base | brightness/contrast=0.2 | T3 |
-| Package version | 2.1.0 | Fix T6 deploy bug |
-| Verificación | `🔍 DEPLOY VERIFICATION` al inicio del log | NEW |
+### 11.7 Fix Aplicado en config_loader.py (v2.2.0)
 
-**Archivos modificados:**
-- `setup.py` → version `2.0.0` → `2.1.0` (fuerza invalidación de pip cache)
-- `vertex_ai/configs/fcos_v3s_v1.yaml` → phase1=30, HFlip=0.5, comments T7
-- `trainer/task_fcos.py` → bloque `DEPLOY VERIFICATION` que imprime focal_gamma, reg_warmup y aug_hflip al inicio del training
-
-**Verificación pre-launch:**
-- [x] `_sigmoid_focal_loss()` presente en sdist (`utils_train.py:217`)
-- [x] `build_fcos_loss()` con `focal_gamma`/`focal_alpha` params (`utils_train.py:250`)
-- [x] `task_fcos.py` pasa `focal_gamma`/`focal_alpha`/`reg_warmup_epochs` a `build_fcos_loss()`
-- [x] `DEPLOY VERIFICATION` block en `task_fcos.py` confirma valores en runtime
-- [x] Test build local: `tfm_trainer-2.1.0.tar.gz` (67 KB) contiene todos los archivos
-
-**Lanzamiento:**
-```bash
-./vertex_ai/build_and_launch.sh fcos_v3s_v1
+**Opción B aplicada** en `config_loader.py` líneas 70-76. Se reemplazó el bucle whitelist por:
+```python
+family_kwargs = dict(family_section)  # pasar TODAS las claves del YAML
 ```
+
+**Verificación**: Script `_t8_verify.py` simuló el pipeline completo y confirmó que las 36 claves YAML llegan a `family_config`, incluyendo `focal_gamma=3.0`, `reg_warmup_epochs=10` y `conf_threshold=0.35`.
+
+---
+
+## 12. Train 8 — Plan de Ejecución
+
+### 12.1 Objetivo
+
+Primer test real de **Focal Loss** (γ=3.0, α=0.25) y **SL1→GIoU warmup** (10 epochs), que nunca funcionaron en T4-T7 debido al bug de whitelist en `config_loader.py`. Adicionalmente, elevar `conf_threshold` de 0.30 a 0.35 tras los buenos resultados de T7.
+
+### 12.2 Cambios Respecto a T7
+
+| Cambio | T7 (v2.1.0) | T8 (v2.2.0) | Impacto |
+|---|---|---|---|
+| **config_loader.py** | Whitelist: solo 27 claves de `_FCOS_DEFAULTS` | **Option B**: todas las claves YAML pasan | Focal Loss y SL1 warmup ahora activos |
+| **conf_threshold** | 0.30 | **0.35** | Filtro más agresivo para reducir FP |
+| **focal_gamma** | 3.0 (YAML) → 0.0 (default, bug) | 3.0 (YAML) → **3.0 (real)** | Focal Loss activa por primera vez |
+| **reg_warmup_epochs** | 10 (YAML) → 0 (default, bug) | 10 (YAML) → **10 (real)** | SL1→GIoU transición activa |
+| **Paquete** | tfm_trainer-2.1.0 | **tfm_trainer-2.2.0** | Evita cache sdist |
+| **DEPLOY VERIFICATION** | v2.1.0 | **v2.2.0** | Confirma paquete correcto en logs |
+
+### 12.3 Configuración Completa T8
+
+```yaml
+# fcos_v3s_v1.yaml — Train 8 (v2.2.0)
+backbone: mobilenet_v3_small
+fpn_channels: 64
+head_depth: 4
+strides: [8, 16, 32]
+phase1_epochs: 30          # freeze backbone
+phase2_epochs: 80          # full fine-tune
+phase1_lr: 1.0e-03
+phase2_lr: 1.0e-04
+focal_gamma: 3.0           # ◀ Focal Loss ACTIVA (primera vez real)
+focal_alpha: 0.25
+reg_warmup_epochs: 10      # ◀ SL1→GIoU warmup ACTIVO (primera vez real)
+cls_weight: 1.0
+reg_weight: 1.5
+centerness_weight: 1.0
+conf_threshold: 0.35       # ◀ Subido de 0.30
+nms_iou_threshold: 0.50
+score_thresh_train: 0.05
+topk_candidates: 1000
+detections_per_img: 100
+aug_hflip_prob: 0.5
+aug_brightness_limit: 0.2
+aug_contrast_limit: 0.2
+# Destructivas OFF: aug_gaussian_noise, aug_coarse_dropout, aug_blur NO presentes
+```
+
+### 12.4 Hipótesis y Métricas Esperadas
+
+| Hipótesis | Mecanismo | Señal Esperada |
+|---|---|---|
+| Focal Loss reduce FP | γ=3.0 penaliza ejemplos fáciles, fuerza la cabeza cls a discriminar mejor | FP < 600 (vs T7=654), Precision > 0.40 |
+| SL1 warmup mejora P1 | Transición suave SL1→GIoU evita meseta de reg_loss en Phase 1 | reg_loss < 3.0 al final de P1 (vs T7≈3.6) |
+| conf=0.35 reduce FP sin perder TP | Filtro más estricto elimina detecciones débiles | TP ≥ 380, FP < T7 |
+| Combinación sinérgica | Los tres cambios trabajan juntos | F1 > 0.55, mAP@50 > 0.60 |
+
+### 12.5 Riesgos
+
+- **Focal Loss γ=3.0 podría ser agresivo**: Si degrada Recall, considerar γ=2.0 en T9.
+- **conf=0.35 podría perder TP marginales**: Si TP baja significativamente, revertir a 0.30.
+- **Interacción focal + warmup desconocida**: Primera vez que ambos se aplican simultáneamente.
+
+### 12.6 Estado de Preparación
+
+- [x] `config_loader.py` — Fix Option B aplicado y verificado
+- [x] `setup.py` — Version 2.2.0 con changelog
+- [x] `task_fcos.py` — DEPLOY VERIFICATION v2.2.0
+- [x] `fcos_v3s_v1.yaml` — conf_threshold=0.35, comentarios T8
+- [x] `_t8_verify.py` — Script de verificación ejecutado (ALL CHECKS PASSED)
+- [x] `dist/tfm_trainer-2.2.0.tar.gz` — Paquete construido (67 KB), contenido verificado
+
 ---
 
 *Documento generado y mantenido como parte del pipeline MLOps del TFM — Detección de Objetos para Asistencia Visual.*

@@ -9,7 +9,7 @@ Build::
     cd 02_ING_MODELOS/Train_MLOps/
     python setup.py sdist --formats=gztar
 
-The resulting ``dist/tfm_trainer-2.1.0.tar.gz`` is uploaded to GCS
+The resulting ``dist/tfm_trainer-2.2.0.tar.gz`` is uploaded to GCS
 by ``vertex_ai/build_and_launch.sh``.
 
 Changes from v1.0.0:
@@ -22,13 +22,18 @@ Changes from v2.0.0:
     - Added Sigmoid Focal Loss (γ, α params) for FCOS cls head
     - Added Smooth L1 → GIoU regression warmup in build_fcos_loss
     - Version bump forces pip cache invalidation on Vertex AI
+
+Changes from v2.1.0:
+    - Fixed config_loader.py whitelist bug: now passes ALL YAML keys
+      (was silently dropping focal_gamma, reg_warmup_epochs, etc.)
+    - conf_threshold raised to 0.35 for T8
 """
 
 from setuptools import setup, find_packages
 
 setup(
     name="tfm-trainer",
-    version="2.1.0",
+    version="2.2.0",
     description=(
         "TFM — Entrenamiento de modelos de detección de objetos "
         "para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)"
