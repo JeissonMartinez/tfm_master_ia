@@ -414,8 +414,8 @@ def main():
     parser = argparse.ArgumentParser(description="FCOS Post-NMS Threshold Sweep")
     parser.add_argument(
         "--output-dir", type=str,
-        default="outputs/fcos_v3s_v1-1771695807",
-        help="Path to the FCOS training output directory",
+        default="outputs/fcos_v3s_v1-1771690809",
+        help="Path to the FCOS training output directory (default: T3)",
     )
     parser.add_argument(
         "--dataset-dir", type=str,
@@ -424,7 +424,7 @@ def main():
     )
     parser.add_argument(
         "--thresholds", type=float, nargs="+",
-        default=[0.10, 0.15, 0.20, 0.25, 0.30],
+        default=[0.15, 0.20, 0.25, 0.30, 0.35, 0.40],
         help="Confidence thresholds to sweep",
     )
     parser.add_argument(
@@ -442,7 +442,7 @@ def main():
     ckpt_path = output_dir / "checkpoints" / "best_fcos.pt"
     assert ckpt_path.exists(), f"Checkpoint not found: {ckpt_path}"
 
-    sweep_dir = output_dir / "threshold_sweep"
+    sweep_dir = output_dir / "conf_threshold_sweep_t3"
     sweep_dir.mkdir(exist_ok=True)
 
     # Auto-detect dataset
@@ -453,14 +453,14 @@ def main():
         assert candidate.exists(), f"Dataset not found at {candidate}"
         dataset_dir = candidate
 
-    # ----- Config (matches Train 4 — T4) -----
+    # ----- Config (matches Train 3 — T3, inline code regime) -----
     CLASS_NAMES = ["dog", "door", "obstacle", "person", "stair"]
     IMG_SIZE = 224
     BATCH_SIZE = 32
     STRIDES = [8, 16, 32]
     NMS_THR = 0.45
-    CTR_POWER = 0.5
-    IOU_AWARE = True
+    CTR_POWER = 1.0      # T3 default — no centerness softening
+    IOU_AWARE = False     # T3 did not use IoU-aware scoring
 
     # ----- Device -----
     if args.device:

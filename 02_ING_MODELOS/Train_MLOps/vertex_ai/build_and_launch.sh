@@ -81,6 +81,7 @@ echo "════════════════════════�
 
 python "$SCRIPT_DIR/launch_job.py" \
     --config "$CONFIG_FILE" \
+    --package-uri "$GCS_PACKAGE" \
     "$@"
 
 echo ""

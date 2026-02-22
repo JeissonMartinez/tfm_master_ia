@@ -20,8 +20,8 @@ Uso::
 
 Requisitos previos:
     1. ``gcloud auth application-default login``
-    2. El sdist ``tfm-trainer-2.0.0.tar.gz`` ya subido al bucket
-       (usa ``vertex_ai/build_and_launch.sh`` para automatizar).
+    2. Usar ``vertex_ai/build_and_launch.sh`` que empaqueta, sube y
+       pasa --package-uri automáticamente.
 """
 from __future__ import annotations
 
@@ -44,8 +44,8 @@ CONTAINER_PYTORCH = (
     "us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest"
 )
 
-# ── Paquete en GCS ───────────────────────────────────────────────────
-PACKAGE_GCS_URI = f"{BUCKET_URI}/packages/tfm_trainer-2.0.0.tar.gz"
+# ── Paquete en GCS (fallback; preferir --package-uri de build_and_launch.sh) ─
+DEFAULT_PACKAGE_GCS_URI = f"{BUCKET_URI}/packages/tfm_trainer-2.2.0.tar.gz"
 
 # ── Mapeo familia → módulo Python ────────────────────────────────────
 FAMILY_MAP: dict[str, str] = {
@@ -81,6 +81,10 @@ def parse_args() -> argparse.Namespace:
         help="Número de GPUs (default: 1)",
     )
     parser.add_argument(
+        "--package-uri", default=None,
+        help="URI GCS del paquete sdist (si se omite, usa DEFAULT_PACKAGE_GCS_URI)",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Solo muestra la configuración sin lanzar el job",
     )
@@ -91,6 +95,9 @@ def main() -> None:
     args = parse_args()
 
     # ── 1. Leer YAML para determinar familia ─────────────────────────
+    # ── 0. Resolver URI del paquete ──────────────────────────────────
+    package_gcs_uri = args.package_uri or DEFAULT_PACKAGE_GCS_URI
+
     config_path = Path(args.config)
     if not config_path.exists():
         raise FileNotFoundError(f"Config no encontrado: {config_path}")
@@ -146,7 +153,7 @@ def main() -> None:
     print(f"  Contenedor:    {container_uri}")
     print(f"  Máquina:       {args.machine_type}")
     print(f"  GPU:           {args.accelerator_type} x{args.accelerator_count}")
-    print(f"  Paquete:       {PACKAGE_GCS_URI}")
+    print(f"  Paquete:       {package_gcs_uri}")
     print(f"  Config GCS:    {config_gcs_uri}")
     print(f"  Job Dir:       {job_dir}")
     print(f"  Args:          {job_args}")
@@ -176,7 +183,7 @@ def main() -> None:
     # ── 8. Crear y lanzar Custom Job ─────────────────────────────────
     job = aiplatform.CustomPythonPackageTrainingJob(
         display_name=display_name,
-        python_package_gcs_uri=PACKAGE_GCS_URI,
+        python_package_gcs_uri=package_gcs_uri,
         python_module_name=python_module,
         container_uri=container_uri,
     )

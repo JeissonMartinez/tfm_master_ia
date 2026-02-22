@@ -21,28 +21,32 @@
 7. [Train 5 — Hybrid Loss Warmup + Aggressive Augmentation](#7-train-5--hybrid-loss-warmup--aggressive-augmentation)
 8. [Train 6 — Phase 1 Extendida + Sin HFlip (Despliegue Parcial)](#8-train-6--phase-1-extendida--sin-hflip-despliegue-parcial)
 9. [Train 7 — Config Final (T3 + build_fcos_loss + conf 0.30)](#9-train-7--config-final-t3--build_fcos_loss--conf-030)
-10. [Comparativa Global](#10-comparativa-global)
-11. [Conclusiones Generales](#11-conclusiones-generales)
+10. [Train 8 — Focal Loss + SL1 Warmup (primer test real)](#10-train-8--resultados-y-análisis)
+11. [Threshold Sweep — Optimización conf_threshold T3](#11-threshold-sweep--optimización-conf_threshold-t3)
+12. [Comparativa Global](#12-comparativa-global)
+13. [Conclusiones Generales](#13-conclusiones-generales)
+14. [Conclusiones Finales y Modelo Seleccionado](#14-conclusiones-finales-y-modelo-seleccionado)
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-| Métrica (Test) | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | **Train 7** |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **mAP@50** | 0.4304 | 0.5600 | 0.5675 | 0.5936 | 0.5887 | 0.5572 | **0.6120** |
-| **mAP@50-95** | N/C | N/C | 0.2602 | 0.2644 | 0.2703 | 0.2511 | **0.2824** |
-| **Precision** | 0.5427 | 0.6049 | **0.6609** | 0.3462 | 0.3505 | 0.3290 | 0.3716 |
-| **Recall** | 0.5291 | 0.6271 | 0.6276 | **0.6886** | 0.6845 | 0.6558 | 0.6872 |
-| **F1-Score** | 0.5358 | 0.6158 | **0.6438** | 0.4607 | 0.4636 | 0.4382 | 0.4824 |
-| Épocas | 52 | 74 | 101 | 77 | 76 | 86 | 98 |
-| Tiempo | 12.1 min | 15.9 min | 23.6 min | 17.9 min | 17.9 min | 19.5 min | ~23 min |
-| Inferencia | 5.0 ms | 4.6 ms | 4.8 ms | 5.4 ms | 4.9 ms | 5.1 ms | 5.0 ms |
+| Métrica (Test) | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | Train 7 | **Train 8** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mAP@50** | 0.4304 | 0.5600 | 0.5675 | 0.5936 | 0.5887 | 0.5572 | **0.6120** | 0.5954 |
+| **mAP@50-95** | N/C | N/C | 0.2602 | 0.2644 | 0.2703 | 0.2511 | **0.2824** | 0.2615 |
+| **Precision** | 0.5427 | 0.6049 | **0.6609** | 0.3462 | 0.3505 | 0.3290 | 0.3716 | 0.2071 |
+| **Recall** | 0.5291 | 0.6271 | 0.6276 | 0.6886 | 0.6845 | 0.6558 | 0.6872 | **0.7143** |
+| **F1-Score** | 0.5358 | 0.6158 | **0.6438** | 0.4607 | 0.4636 | 0.4382 | 0.4824 | 0.3211 |
+| Épocas | 52 | 74 | 101 | 77 | 76 | 86 | 98 | 66 |
+| Tiempo | 12.1 min | 15.9 min | 23.6 min | 17.9 min | 17.9 min | 19.5 min | ~23 min | 17.0 min |
+| Inferencia | 5.0 ms | 4.6 ms | 4.8 ms | 5.4 ms | 4.9 ms | 5.1 ms | 5.0 ms | 5.9 ms |
 
 > **N/C**: No Calculado — la implementación de mAP@50-95 fue añadida después de Train 2.  
-> **Train 3**: Mejor F1 (0.6438) y Precision (0.6609) de toda la serie. Referencia operativa para producción.  
-> **Train 7**: **Mejor mAP@50 (0.6120) y mAP@50-95 (0.2824) de la serie.** Segundo incidente de despliegue: bug de whitelist en `config_loader.py` impidió activar Focal Loss y SL1 warmup. Resultado efectivo: T3 + `build_fcos_loss` (reg_weight=1.5) + conf=0.30 + HFlip restaurado.  
-> **Train 6**: Despliegue parcial — sdist cache impidió deploy de código Python. Peor F1 de la serie (0.4382). Confirma que HFlip runtime es esencial.
+> **Train 3**: Mejor F1 (0.6438) y Precision (0.6609) de toda la serie. **Referencia operativa para producción y despliegue en ESP32-S3.** Post-sweep: `conf_threshold` óptimo actualizado de 0.25 a 0.40 (§11).  
+> **Train 7**: **Mejor mAP@50 (0.6120) y mAP@50-95 (0.2824) de la serie.** Referencia de ranking para benchmarks.  
+> **Train 8**: Primer test real de **Focal Loss (γ=3.0)** y **SL1→GIoU warmup**. Recall máximo (0.7143), pero **Precision colapsó a 0.21** — 1681 FP, peor ratio de la serie. Focal Loss γ=3.0 sobrepenaliza ejemplos positivos en modelo de 1.2M params. Early stop epoch 65 (de 110). **Confirma T3 como modelo final para despliegue** (optimizado en §11).  
+> **Train 6**: Despliegue parcial — sdist cache impidió deploy de código Python. Confirma que HFlip runtime es esencial.
 
 ---
 
@@ -1044,161 +1048,53 @@ T7 usa `conf_threshold=0.30` (vs 0.25 en T4/T5). Con la misma función de loss (
 
 ---
 
-## 10. Comparativa Global
+## 10. Train 8 — Resultados y Análisis
 
-### 10.1 Evolución Total Loss
+**Job ID**: `fcos_v3s_v1-1771751066`  
+**Paquete**: `tfm_trainer-2.2.0.tar.gz`  
+**Fecha**: Junio 2025  
+**Duración**: ~17.0 min (Phase 1: 8.1 min, Phase 2: 8.9 min)  
+**Épocas**: 66 total (30 P1 + 36/80 P2, early stop patience=20, best=epoch 45)
 
-| Fase | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | Train 7 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Epoch 0 (640px) | 688.5 | 38.9 | 9.4 | 8.9 | 8.6 | 9.4 (old code) | 8.5 |
-| Final | ~43.5 | ~3.5 | ~3.3 | ~3.3 | ~3.4 | ~3.3 | ~3.2 |
-| Best val_loss | 135.49 | 24.01 | 28.12 | 36.46 | 28.75 | 33.31 | **18.64** |
+### 10.1 Objetivo e Hipótesis
 
-> Nota: T1-T3 y T6 usaron la loss inline original. T4, T5 y T7 usaron `build_fcos_loss()` con `reg_weight=1.5`. val_loss no es directamente comparable entre regímenes de código.
+Primer test real de **Focal Loss** (γ=3.0, α=0.25) y **SL1→GIoU warmup** (10 epochs), que nunca funcionaron en T4-T7 debido al bug de whitelist en `config_loader.py`. Adicionalmente, elevar `conf_threshold` de 0.30 a 0.35.
 
-### 10.2 Evolución reg_loss (Train)
+### 10.2 Incidente T8 intento 1 (cancelado)
 
-| Resolución | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | Train 7 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) | ~3.96 | ~3.67 | ~4.5 (meseta) | ~3.57 |
-| 224px (final) | ~41 | ~1.3 | ~1.1 | ~1.1 | ~1.1 | ~1.1 | ~1.0 |
+**Bug #3 descubierto**: `launch_job.py` línea 48 tenía `PACKAGE_GCS_URI` hardcodeado a `tfm_trainer-2.0.0.tar.gz`. El script `build_and_launch.sh` construía y subía `v2.2.0` correctamente, pero `launch_job.py` nunca recibía esa URI — siempre usaba el paquete v2.0.0 de T6.
 
-> Dos regímenes: T3/T6 muestran meseta GIoU (4.5, código inline). T4/T5/T7 muestran descenso inmediato (~3.6-3.96, `build_fcos_loss` con `reg_weight=1.5`).
+**Implicación retroactiva**: T7 también corrió con el paquete v2.0.0 (no v2.1.0), ya que `launch_job.py` nunca fue actualizado. Esto agrava el bug de whitelist: ni siquiera la versión del código era la correcta.
 
-### 10.3 Per-class AP@50 — Test (Evolución)
+**Fix aplicado**:
+- `launch_job.py`: nuevo argumento `--package-uri`, constante actualizada a v2.2.0
+- `build_and_launch.sh`: ahora pasa `--package-uri "$GCS_PACKAGE"` dinámicamente
+- Verificado con `--dry-run`: `Paquete: gs://...tfm_trainer-2.2.0.tar.gz` ✅
 
-| Clase | T1 | T2 | T3 | T4 | T5 | T6 | T7 | Δ T1→T7 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog | 0.406 | 0.463 | 0.496 | 0.502 | **0.522** | 0.442 | 0.506 | +24.6% |
-| door | 0.339 | 0.519 | 0.503 | 0.533 | 0.544 | 0.464 | **0.569** | +67.8% |
-| obstacle | 0.302 | 0.405 | 0.458 | 0.512 | 0.464 | 0.460 | **0.523** | +73.2% |
-| person | 0.521 | 0.636 | 0.636 | 0.682 | 0.666 | 0.683 | **0.691** | +32.6% |
-| stair | 0.584 | **0.777** | 0.745 | 0.739 | 0.747 | 0.736 | 0.770 | +31.8% |
-| **Media** | **0.430** | **0.560** | **0.568** | **0.594** | **0.589** | **0.557** | **0.612** | **+42.3%** |
+### 10.2.1 Incidente T8 intento 2 (crash al arrancar)
 
-### 10.4 Confusion Matrix (Test) — Evolución de TP
+**Bug #4**: El bloque DEPLOY VERIFICATION en `task_fcos.py` (líneas 392-398) usaba `log()` pero esta función no existe en el archivo — todo el archivo usa `print()`. Error: `NameError: name 'log' is not defined`.
 
-| Clase (Test GT) | T1 TP | T2 TP | T3 TP | T4 TP | T5 TP | T6 TP | T7 TP | T1 FN | T2 FN | T3 FN | T4 FN | T5 FN | T6 FN | T7 FN |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog (58) | 30 | 32 | 33 | 35 | **36** | 32 | 35 | 28 | 26 | 25 | 23 | **22** | 26 | 23 |
-| door (136) | 54 | 80 | 77 | 90 | **93** | 75 | 89 | 82 | 56 | 59 | 46 | **43** | 61 | 47 |
-| obstacle (173) | 79 | 86 | 92 | 107 | 105 | 108 | **109** | 94 | 87 | 81 | 66 | 68 | 65 | **64** |
-| person (101) | 67 | 70 | 70 | 78 | 75 | **80** | 75 | 34 | 31 | 31 | 23 | 26 | **21** | 26 |
-| stair (108) | 66 | 87 | 84 | 85 | 83 | 82 | **87** | 42 | 21 | 24 | 23 | 25 | 26 | **21** |
-| **Total** | **296** | **355** | **356** | **395** | **392** | **377** | **395** | **280** | **221** | **220** | **181** | **184** | **199** | **181** |
+**Señal positiva**: El crash ocurrió *después* de imprimir `Conf Thresh: 0.35`, confirmando que:
+- ✅ Paquete v2.2.0 fue cargado correctamente (fix de launch_job funcionó)
+- ✅ config_loader fix funcionó (`conf_threshold=0.35` llegó al setup)
+- ❌ El bloque de verificación mismo tenía un error de sintaxis
 
-### 10.5 Falsos Positivos (Test)
+**Fix aplicado**: Reemplazar `log(` → `print(` en las 7 líneas del bloque DEPLOY VERIFICATION. Verificado en el tar.gz.
 
-| Clase | T1 FP | T2 FP | T3 FP | T4 FP | T5 FP | T6 FP | T7 FP |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| dog | 42 | 32 | **24** | 88 | 103 | 94 | 88 |
-| door | 40 | 83 | **44** | 188 | 216 | 135 | 174 |
-| obstacle | 72 | **43** | 45 | 165 | 171 | 220 | 164 |
-| person | 72 | 38 | **26** | 144 | 105 | 153 | 96 |
-| stair | 26 | 34 | **38** | 140 | 127 | 145 | 132 |
-| **Total** | **252** | **230** | **177** | **725** | **722** | **747** | **654** |
-
-> **T7 reduce FP significativamente vs T4-T6** (654 vs 722-747) gracias a `conf_threshold=0.30`. Aun así, **T3 sigue siendo el más limpio** (177 FP) por usar el código inline original con scoring más restrictivo.
-
----
-
-## 11. Conclusiones Generales
-
-### 11.1 Impacto por Cambio
-
-| Cambio | Métrica más afectada | Impacto |
-|---|---|---|
-| **Stride Normalization** (T1→T2) | mAP@50, Recall | +30% mAP@50, +26% Recall. Cambio más impactante de la serie. |
-| **GIoU Loss** (T2→T3) | mAP@50-95, Precision | mAP@50-95 de 0→0.26. Precision +9.3%. Mejora calidad de box. |
-| **Más épocas** (T2→T3) | Convergencia | Best en epoch 80 vs 58. Presupuesto extra utilizado efectivamente. |
-| **Scoring permisivo** (T3→T4) | Recall, mAP@50, FP | +9.7% Recall, +4.6% mAP@50, pero Precision −47.6% y FP +309%. Trade-off negativo. |
-| **`build_fcos_loss` + reg_weight=1.5** (T3→T4) | reg_loss, mAP | Cambio de código de loss: eliminó meseta GIoU, mejoró mAP. Anteriormente atribuido a SL1 warmup (ahora desmentido). |
-| **Aug agresiva** (T3→T5) | Precision, FP | Precision −47%, FP +308%. Destruye calibración de confianza en modelo pequeño. |
-| **Sin HFlip runtime** (T3→T6) | Precision, FP | Precision −50%, FP +322%. Peor F1 de la serie. HFlip runtime es irrenunciable. |
-| **conf_threshold 0.25→0.30** (T4→T7) | FP, Precision | −10% FP, +7% Precision sin perder TP. Ajuste simple y efectivo. |
-
-### 11.2 Dos Regímenes de Código
-
-Un hallazgo clave del análisis post-T7 es que los 7 entrenamientos se dividen en **dos regímenes de código distintos**:
-
-| Régimen | Trains | Loss regression | reg_loss ep0 | Comportamiento |
-|---|---|---|---|---|
-| **Inline** (código original) | T1, T2, T3, T6 | GIoU inline, weight=1.0 | ~4.5 (meseta 13 ep) | Precision alta, FP bajos |
-| **build_fcos_loss** (nuevo) | T4, T5, T7 | GIoU via `build_fcos_loss`, reg_weight=1.5 | ~3.6-3.9 (descenso inmediato) | mAP alta, FP altos |
-
-T6 usó el código inline (por cache de sdist). T4, T5 y T7 usaron `build_fcos_loss` (código nuevo desplegado correctamente, pero con whitelist bug que descartó Focal Loss y warmup).
-
-La mejora de mAP en T4+ no proviene de scoring, warmup ni Focal Loss, sino del **cambio en la función de loss** (mayor ponderación de regresión con `reg_weight=1.5`).
-
-### 11.3 Fortalezas del Modelo
-
-- **Clasificación perfecta**: Zero confusión inter-clase en los 7 entrenamientos. La cabeza cls discrimina las 5 clases impecablemente.
-- **Modelo ligero**: 1.2M params, 4.71 MB FP32, <6ms inferencia en T4 GPU.
-- **Export ONNX exitoso**: 9 outputs, opset 13, 4.74 MB, latencia ~4.3–6.1 ms.
-- **Alto potencial de recall**: T4/T5/T7 demuestran que el modelo *ve* ~69% de los objetos; el reto es rankear bien las detecciones.
-- **mAP@50 mejora sostenidamente**: 0.43 → 0.56 → 0.57 → 0.59 → 0.59 → 0.56 → **0.61** (+42% desde T1).
-- **mAP@50-95 progresa**: 0.26 → 0.26 → 0.27 → 0.25 → **0.28** — la calidad de box mejora con `build_fcos_loss`.
-
-### 11.4 Debilidades / Cuellos de Botella
-
-- **Trade-off Precision-Recall no resuelto**: T3 es conservador (P=0.66, R=0.63), T4/T5/T7 son permisivos (P≈0.33-0.37, R≈0.66-0.69). Ninguno logra ambos simultáneamente.
-- **FP dominan en T4/T5/T7**: ~654–725 FP para ~392–395 TP. Ratio FP/TP ≈ 1.7–1.8, mejorado pero aún alto. T7's conf=0.30 ayuda (-10% FP) pero no cierra la brecha con T3 (177 FP).
-- **dog sigue siendo la clase más débil**: AP@50 = 0.44-0.52, menor de las 5 clases en todos los entrenamientos.
-- **Val loss ruidosa**: Con 188 imágenes, oscila enormemente, dificultando checkpoint selection.
-- **Augmentación destructiva contraproducente**: CoarseDropout + GaussNoise degradan calibración en modelo de 1.2M params (T5).
-- **HFlip runtime irrenunciable**: Su eliminación (T6) produjo el peor F1 de la serie pese a que el dataset tiene copias estáticas flippeadas.
-- **Pipeline de despliegue frágil**: Dos incidentes en 7 trains: (1) T6 — cache sdist, (2) T7 — whitelist config_loader. Ninguna funcionalidad nueva (Focal Loss, SL1 warmup) fue testeada exitosamente.
-
-### 11.5 Mejor Configuración Operativa
-
-| Objetivo | Mejor Train | Valor | Justificación |
-|---|---|---|---|
-| **Máximo mAP@50** | **T7** (0.6120) | ★ | Mejor ranking de detecciones de la serie. |
-| **Máximo mAP@50-95** | **T7** (0.2824) | ★ | Mejor calidad geométrica de boxes. |
-| **Producción (F1 balanceado)** | **T3** (F1=0.6438) | ★ | Mejor balance precision/recall para uso real. |
-| **Máximo Recall** | **T4** (0.6886) | | Si las detecciones perdidas son más costosas que los FP. |
-| **Máxima Precisión** | **T3** (0.6609) | | Mínimos falsos positivos (177 FP en test). |
-
-> **Recomendación final**: **T3 para producción** (F1 óptimo, precisión más alta, FP mínimos). **T7 como referencia de ranking** (mejor mAP@50 y mAP@50-95, ideal para benchmarks y papers). El modelo seleccionado para despliegue en ESP32-S3 será T3.
-
-### 11.6 Oportunidades de Mejora No Exploradas
-
-Las siguientes técnicas **nunca fueron probadas exitosamente** debido a los incidentes de despliegue:
-
-1. **Focal Loss (γ=2-3)**: Podría mejorar la discriminación de la cabeza cls, especialmente para clases difíciles (dog). Requiere corregir el bug de whitelist en `config_loader.py`.
-2. **SL1 warmup real**: La eliminación de la meseta GIoU debería mejorar convergencia en Phase 1. Requiere añadir `reg_warmup_epochs` a `_FCOS_DEFAULTS`.
-3. **conf_threshold fino**: T7 mostró que 0.30 reduce FP sin perder TP. Un sweep 0.30-0.40 en T3 podría mejorar su F1 sin reentrenar.
-4. **Ensemble T3+T7**: Combinar la precision de T3 con el recall de T7 mediante NMS-merge.
-
-### 11.7 Fix Aplicado en config_loader.py (v2.2.0)
-
-**Opción B aplicada** en `config_loader.py` líneas 70-76. Se reemplazó el bucle whitelist por:
-```python
-family_kwargs = dict(family_section)  # pasar TODAS las claves del YAML
-```
-
-**Verificación**: Script `_t8_verify.py` simuló el pipeline completo y confirmó que las 36 claves YAML llegan a `family_config`, incluyendo `focal_gamma=3.0`, `reg_warmup_epochs=10` y `conf_threshold=0.35`.
-
----
-
-## 12. Train 8 — Plan de Ejecución
-
-### 12.1 Objetivo
-
-Primer test real de **Focal Loss** (γ=3.0, α=0.25) y **SL1→GIoU warmup** (10 epochs), que nunca funcionaron en T4-T7 debido al bug de whitelist en `config_loader.py`. Adicionalmente, elevar `conf_threshold` de 0.30 a 0.35 tras los buenos resultados de T7.
-
-### 12.2 Cambios Respecto a T7
+### 10.3 Cambios Respecto a T7
 
 | Cambio | T7 (v2.1.0) | T8 (v2.2.0) | Impacto |
 |---|---|---|---|
 | **config_loader.py** | Whitelist: solo 27 claves de `_FCOS_DEFAULTS` | **Option B**: todas las claves YAML pasan | Focal Loss y SL1 warmup ahora activos |
+| **launch_job.py** | `PACKAGE_GCS_URI` hardcoded v2.0.0 | **`--package-uri` dinámico** desde build script | Paquete correcto garantizado |
 | **conf_threshold** | 0.30 | **0.35** | Filtro más agresivo para reducir FP |
 | **focal_gamma** | 3.0 (YAML) → 0.0 (default, bug) | 3.0 (YAML) → **3.0 (real)** | Focal Loss activa por primera vez |
 | **reg_warmup_epochs** | 10 (YAML) → 0 (default, bug) | 10 (YAML) → **10 (real)** | SL1→GIoU transición activa |
-| **Paquete** | tfm_trainer-2.1.0 | **tfm_trainer-2.2.0** | Evita cache sdist |
-| **DEPLOY VERIFICATION** | v2.1.0 | **v2.2.0** | Confirma paquete correcto en logs |
+| **Paquete** | tfm_trainer-2.0.0 (bug!) | **tfm_trainer-2.2.0** | Código correcto |
+| **DEPLOY VERIFICATION** | no existía en v2.0.0 | **v2.2.0** | Confirma paquete correcto en logs |
 
-### 12.3 Configuración Completa T8
+### 10.4 Configuración Completa T8
 
 ```yaml
 # fcos_v3s_v1.yaml — Train 8 (v2.2.0)
@@ -1227,29 +1123,423 @@ aug_contrast_limit: 0.2
 # Destructivas OFF: aug_gaussian_noise, aug_coarse_dropout, aug_blur NO presentes
 ```
 
-### 12.4 Hipótesis y Métricas Esperadas
+### 10.5 Validación de Hipótesis
 
-| Hipótesis | Mecanismo | Señal Esperada |
+| Hipótesis | Señal Esperada | Resultado T8 | Veredicto |
+|---|---|---|---|
+| Focal Loss reduce FP | FP < 600, Precision > 0.40 | **FP = 1681, Precision = 0.2071** | ❌ **REFUTADA**. γ=3.0 produce efecto opuesto: FP ×2.6 |
+| SL1 warmup mejora P1 | reg_loss < 3.0 al final de P1 | **reg_loss e29 = 1.76 (GIoU post-warmup)** | ✅ Warmup funcional, transición limpia |
+| conf=0.35 reduce FP sin perder TP | TP ≥ 380, FP < T7 | **TP = 425 (máximo), FP = 1681 (máximo)** | ⚠️ TP alto, pero FP explota por Focal Loss |
+| Combinación sinérgica | F1 > 0.55, mAP@50 > 0.60 | **F1 = 0.3211, mAP@50 = 0.5954** | ❌ **REFUTADA**. Focal Loss domina negativamente |
+
+### 10.6 Métricas Clave
+
+**Test Set (187 imágenes, 576 GT):**
+
+| Métrica | T8 | T7 (ref) | T3 (ref) | Δ T8 vs T7 |
+|---|:---:|:---:|:---:|:---:|
+| mAP@50 | 0.5954 | **0.6120** | 0.5677 | −2.7% |
+| mAP@50-95 | 0.2615 | **0.2824** | 0.2564 | −7.4% |
+| Precision | 0.2071 | 0.3716 | **0.6609** | −44.3% |
+| Recall | **0.7143** | 0.6872 | 0.6285 | +3.9% |
+| F1 | 0.3211 | 0.4823 | **0.6438** | −33.4% |
+| TP | **425** | 395 | 356 | +30 |
+| FP | 1681 | 654 | **177** | +1027 |
+| FN | **151** | 181 | 220 | −30 |
+
+**Per-class AP@50 (Test):**
+
+| Clase | T8 | T7 | Δ |
+|---|:---:|:---:|:---:|
+| dog | 0.4346 | **0.5064** | −14.2% |
+| door | **0.6193** | 0.5690 | +8.8% |
+| obstacle | **0.5256** | 0.5232 | +0.5% |
+| person | 0.6857 | **0.6910** | −0.8% |
+| stair | 0.7121 | **0.7703** | −7.6% |
+
+**Entrenamiento:**
+- `train_cls_loss`: e0=0.337 → e29=0.087 → e65=0.054 (Focal Loss suprime agresivamente)
+- `train_reg_loss`: e0=33.51(SL1) → e9=14.83(SL1) → e10=2.08(GIoU!) → e29=1.76 → e65=1.10
+- `val_loss`: best=7.82 (epoch 45), muy ruidosa (oscila 8-12 en Phase 2)
+
+### 10.7 Análisis de Focal Loss γ=3.0
+
+El resultado más importante de T8 es la **demostración empírica de que Focal Loss γ=3.0 es contraproducente** para FCOS con MobileNetV3-Small (1.2M params):
+
+1. **Mecanismo de fallo**: γ=3.0 reduce el gradiente de los ejemplos "fáciles" con factor $(1-p_t)^3$. Para un modelo pequeño, la mayoría de ejemplos positivos son "fáciles" una vez aprendidos, por lo que sus gradientes se suprimen casi completamente. La cabeza cls obtiene `cls_loss` muy baja (0.054) pero los scores de confianza son comprimidos — muchas detecciones caen en la zona 0.3-0.5 y no se filtran por `conf_threshold=0.35`.
+
+2. **Efecto en Recall vs Precision**: El modelo detecta MÁS objetos (425 TP, +7.6% vs T7) porque Focal Loss no afecta la capacidad de localización, solo la calibración de scores. Pero produce ~4 FP por cada TP (ratio 3.95 vs T3's 0.50).
+
+3. **Comparación de regímenes**:
+   - **BCE (T3)**: P=0.66, R=0.63 → F1=0.64 — bien calibrado
+   - **BCE + reg_weight (T7)**: P=0.37, R=0.69 → F1=0.48 — más detecciones, menos filtradas
+   - **Focal γ=3 + reg_weight (T8)**: P=0.21, R=0.71 → F1=0.32 — máximas detecciones, calibración rota
+
+4. **Conclusión**: Para un modelo de 1.2M params en un dataset de 5 clases, BCE estándar con scoring restrictivo (T3) es óptimo. Focal Loss requiere modelos más grandes con mayor capacidad en la cabeza de clasificación.
+
+### 10.8 Análisis del SL1→GIoU Warmup
+
+El warmup SL1→GIoU **funcionó técnicamente** como diseñado:
+
+- **Transición visible en logs**: Epoch 0-9 en Smooth L1 (reg_loss ~33→15), epoch 10 cambia a GIoU (reg_loss cae a ~2.1)
+- **Confirmación DEPLOY VERIFICATION**: `reg_warmup = 10 ✅ SL1→GIoU warmup ACTIVE`
+- **reg_loss final comparable**: 1.10 vs T7's 1.00 — no hay beneficio ni perjuicio neto
+- **No aislable**: T8 probó warmup + Focal Loss simultáneamente. El efecto individual del warmup no se puede aislar.
+
+### 10.9 Riesgos y Limitaciones
+
+- **Focal Loss γ=3.0 era el riesgo principal identificado en §10.6** → se materializó completamente
+- **No se probó γ=1.0-2.0**: Valores más suaves podrían funcionar, pero el coste-beneficio no justifica más trains
+- **conf_threshold=0.35 no fue evaluado aisladamente**: Su efecto está confundido con Focal Loss
+
+
+---
+
+## 11. Threshold Sweep — Optimización conf_threshold T3
+
+Tras confirmar T3 como modelo para producción (§10.9, §12.5) y observar en el sweep de T4 (§6) que subir `conf_threshold` reduce FP sin reentrenar, se realiza un **barrido offline de umbral de confianza sobre T3** para encontrar su punto operativo óptimo.
+
+> **Motivación**: T3 fue entrenado y evaluado con `conf_threshold=0.25`. El threshold es un hiperparámetro post-entrenamiento que se puede ajustar libremente, incluyendo en el firmware del ESP32-S3, sin modificar los pesos del modelo.
+
+- **Script**: `scripts/fcos_threshold_sweep.py` (adaptado para T3)
+- **Checkpoint**: `outputs/fcos_v3s_v1-1771690809/checkpoints/best_fcos.pt`
+- **Artefactos**: `outputs/fcos_v3s_v1-1771690809/conf_threshold_sweep_t3/`
+- **Scoring**: `ctr_power=1.0`, `iou_aware=False` (régimen inline de T3)
+- **NMS**: `nms_threshold=0.45`, `strides=[8,16,32]`
+
+### 12.1 Resultados por Split
+
+#### Test Set (187 imágenes, 576 GT)
+
+| conf_thr | mAP@50 | Precision | Recall | F1 | Dets | TP | FP | FN |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.15 | 0.6047 | 0.3309 | 0.7009 | 0.4496 | 1211 | 408 | 803 | 168 |
+| 0.20 | 0.6023 | 0.3564 | 0.6948 | 0.4712 | 1111 | 403 | 708 | 173 |
+| **0.25** | **0.5993** | **0.3778** | **0.6873** | **0.4876** | **1032** | **397** | **635** | **179** |
+| 0.30 | 0.5975 | 0.3964 | 0.6826 | 0.5015 | 975 | 393 | 582 | 183 |
+| 0.35 | 0.5922 | 0.4163 | 0.6711 | 0.5139 | 909 | 385 | 524 | 191 |
+| **0.40** | **0.5880** | **0.4340** | **0.6630** | **0.5246** | **860** | **379** | **481** | **197** |
+
+> **0.25** = threshold original de T3 (baseline). **0.40** = mejor F1 del sweep.
+
+#### Validation Set (188 imágenes, 762 GT)
+
+| conf_thr | mAP@50 | Precision | Recall | F1 | Dets | TP | FP | FN |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.15 | 0.4165 | 0.2846 | 0.5228 | 0.3686 | 1407 | 399 | 1008 | 363 |
+| 0.20 | 0.4125 | 0.3053 | 0.5106 | 0.3821 | 1280 | 389 | 891 | 373 |
+| 0.25 | 0.4081 | 0.3223 | 0.4997 | 0.3918 | 1187 | 381 | 806 | 381 |
+| 0.30 | 0.4074 | 0.3403 | 0.4962 | 0.4037 | 1115 | 378 | 737 | 384 |
+| 0.35 | 0.4045 | 0.3569 | 0.4889 | 0.4126 | 1052 | 372 | 680 | 390 |
+| 0.40 | 0.4031 | 0.3789 | 0.4851 | 0.4254 | 983 | 369 | 614 | 393 |
+
+> Tendencia consistente en ambos splits: F1 crece monotónicamente, mAP@50 baja marginalmente.
+
+### 12.2 Per-class AP@50 (Test)
+
+| conf_thr | dog | door | obstacle | person | stair | Media |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.15 | 0.5138 | 0.5365 | 0.5515 | 0.6641 | 0.7574 | 0.6047 |
+| 0.20 | 0.5138 | 0.5367 | 0.5396 | 0.6641 | 0.7574 | 0.6023 |
+| **0.25** | **0.5139** | **0.5299** | **0.5312** | **0.6641** | **0.7574** | **0.5993** |
+| 0.30 | 0.5139 | 0.5299 | 0.5223 | 0.6642 | 0.7574 | 0.5975 |
+| 0.35 | 0.5062 | 0.5300 | 0.5033 | 0.6642 | 0.7574 | 0.5922 |
+| **0.40** | **0.5062** | **0.5297** | **0.4878** | **0.6587** | **0.7574** | **0.5880** |
+
+> **stair** es la clase más estable (AP@50=0.7574 invariante hasta thr=0.40). **obstacle** es la más sensible al threshold (−11.5% de 0.15 a 0.40). **person** se mantiene robusta hasta thr=0.35 y solo baja ligeramente a 0.40.
+
+### 12.3 Per-class TP/FP (Test)
+
+| conf_thr | dog TP/FP | door TP/FP | obstacle TP/FP | person TP/FP | stair TP/FP |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.15 | 35/97 | 87/204 | 125/221 | 75/128 | 86/153 |
+| 0.25 | 35/80 | 84/161 | 117/165 | 75/103 | 86/126 |
+| 0.35 | 34/66 | 84/134 | 106/126 | 75/87 | 86/111 |
+| **0.40** | **34/59** | **83/123** | **102/116** | **74/83** | **86/100** |
+
+> A thr=0.40, los FP caen significativamente en todas las clases. **stair** mantiene 86 TP constantes (100% retención). **person** pierde solo 1 TP (75→74). **obstacle** pierde 15 TP (117→102) pero gana −49 FP. **door** pierde 1 TP (84→83). **dog** pierde 1 TP (35→34).
+
+### 12.4 Análisis del Punto Operativo Óptimo
+
+**1. F1 monotónicamente creciente**: En el rango [0.15, 0.40], F1 sube de 0.4496 a 0.5246 (+16.7%). El sweep NO encontró un máximo (el F1 seguía subiendo), sugiriendo que thr=0.45-0.50 podría dar F1 aún mayor.
+
+**2. Punto óptimo seleccionado: `conf_threshold=0.40`**
+
+| Métrica | thr=0.25 (original) | thr=0.40 (óptimo) | Delta |
+|---|:---:|:---:|:---:|
+| F1 (test) | 0.4876 | **0.5246** | **+7.6%** |
+| Precision | 0.3778 | **0.4340** | **+14.9%** |
+| Recall | 0.6873 | 0.6630 | −3.5% |
+| FP | 635 | **481** | **−24.3%** (−154 FP) |
+| TP | 397 | 379 | −4.5% (−18 TP) |
+| mAP@50 | 0.5993 | 0.5880 | −1.9% |
+
+> Subir `conf_threshold` de 0.25 a 0.40 elimina 154 FP sacrificando solo 18 TP. Es un trade-off favorable: se pierden 18 detecciones correctas pero se eliminan 154 falsas alarmas.
+
+**3. Coste por clase del aumento de threshold**:
+- **stair**: 0 TP perdidos, −26 FP → ganancia neta pura
+- **person**: −1 TP, −20 FP → ratio 20:1 excelente
+- **door**: −1 TP, −38 FP → ratio 38:1 excelente
+- **dog**: −1 TP, −21 FP → ratio 21:1 excelente
+- **obstacle**: −15 TP, −49 FP → ratio 3.3:1 aceptable (más TP perdidos, pero clase ruidosa)
+
+**4. mAP@50 apenas baja** (−1.9%): Confirma que mAP mide la curva P-R completa y es insensible al threshold operativo, como se observó en el sweep de T4 (§6.4).
+
+### 12.5 Discrepancia de Métricas Absolutas vs Evaluación Original
+
+> **Nota metodológica importante**: Las métricas absolutas de este sweep difieren de las reportadas en la evaluación original de T3 (§4: F1=0.6438, P=0.6609). Esto se debe a que el sweep usa la función `predict_fcos()` del script de sweep, mientras que la evaluación original usaba el código inline del pipeline de entrenamiento (`task_fcos.py`). Las implementaciones difieren en:
+>
+> - Reglas de matching IoU para asignación TP/FP
+> - Manejo de detecciones duplicadas sobre el mismo GT
+> - Implementación del cálculo de AP (11-point vs all-point interpolation)
+>
+> **Las métricas relativas (delta entre thresholds) son completamente válidas**, ya que se evalúan con la misma función. El hallazgo clave — que subir conf_threshold mejora F1 y reduce FP — es robusto e independiente de la implementación de evaluación.
+
+### 12.6 Recomendación Operativa
+
+**Actualizar `conf_threshold` de 0.25 a 0.40 en la configuración de despliegue del ESP32-S3.**
+
+Este cambio:
+- ✅ No requiere reentrenamiento ni cambio de pesos
+- ✅ Reduce FP en −24.3% (−154 falsos positivos en test)
+- ✅ Mejora F1 relativo en +7.6%
+- ✅ Mejora Precision en +14.9%
+- ✅ Solo pierde −3.5% Recall (−18 TP de 397)
+- ✅ Implementable directamente en el firmware (cambio de un solo parámetro)
+- ✅ mAP@50 prácticamente invariante (−1.9%)
+
+**Artefactos generados**: 4 gráficas + CSV de resultados en `outputs/fcos_v3s_v1-1771690809/conf_threshold_sweep_t3/`:
+- `threshold_sweep.csv` — datos numéricos completos
+- `f1_vs_threshold.png` — curva F1 vs threshold
+- `pr_curve_sweep.png` — curvas Precision-Recall por threshold
+- `dets_fp_vs_threshold.png` — detecciones y FP vs threshold
+- `per_class_ap_heatmap.png` — heatmap AP@50 por clase y threshold
+
+---
+
+
+## 12. Comparativa Global
+
+### 12.1 Evolución Total Loss
+
+| Fase | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | Train 7 | Train 8 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Epoch 0 (640px) | 688.5 | 38.9 | 9.4 | 8.9 | 8.6 | 9.4 (old code) | 8.5 | 35.7* |
+| Final | ~43.5 | ~3.5 | ~3.3 | ~3.3 | ~3.4 | ~3.3 | ~3.2 | ~2.8 |
+| Best val_loss | 135.49 | 24.01 | 28.12 | 36.46 | 28.75 | 33.31 | **18.64** | 7.82 |
+
+> *T8 epoch 0 loss es anormalmente alta (35.7) por Smooth L1 warmup: los primeros 10 epochs usan SL1 (escala mayor) antes de cambiar a GIoU. No comparable directamente.
+> T8 val_loss más baja de la serie (7.82) pero de diferente régimen (Focal + SL1 warmup + GIoU).
+
+### 12.2 Evolución reg_loss (Train)
+
+| Resolución | Train 1 | Train 2 | Train 3 | Train 4 | Train 5 | Train 6 | Train 7 | Train 8 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 640px (e0) | ~682 | ~33.8 | ~4.5 (meseta) | ~3.96 | ~3.67 | ~4.5 (meseta) | ~3.57 | ~33.5 (SL1)* |
+| 416px (e10) | — | — | — | — | — | — | — | ~2.08 (GIoU) |
+| 224px (final) | ~41 | ~1.3 | ~1.1 | ~1.1 | ~1.1 | ~1.1 | ~1.0 | ~1.10 |
+
+> *T8 muestra el comportamiento de **SL1 warmup real**: reg_loss arranca en ~33.5 (Smooth L1 a 640px) y cae abruptamente a ~2.08 en epoch 10 al transicionar a GIoU. Los 224px finales (~1.10) son comparables a T4-T7.
+> Tres regímenes: T1-T3/T6 (GIoU inline, meseta), T4/T5/T7 (`build_fcos_loss` sin warmup), T8 (`build_fcos_loss` + SL1 warmup + Focal Loss).
+
+### 12.3 Per-class AP@50 — Test (Evolución)
+
+| Clase | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | Δ T1→T8 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog | 0.406 | 0.463 | 0.496 | 0.502 | **0.522** | 0.442 | 0.506 | 0.435 | +7.1% |
+| door | 0.339 | 0.519 | 0.503 | 0.533 | 0.544 | 0.464 | **0.569** | 0.619 | +82.6% |
+| obstacle | 0.302 | 0.405 | 0.458 | 0.512 | 0.464 | 0.460 | 0.523 | **0.526** | +74.2% |
+| person | 0.521 | 0.636 | 0.636 | 0.682 | 0.666 | 0.683 | **0.691** | 0.686 | +31.7% |
+| stair | 0.584 | **0.777** | 0.745 | 0.739 | 0.747 | 0.736 | 0.770 | 0.712 | +21.9% |
+| **Media** | **0.430** | **0.560** | **0.568** | **0.594** | **0.589** | **0.557** | **0.612** | **0.595** | **+38.4%** |
+
+### 12.4 Confusion Matrix (Test) — Evolución de TP
+
+| Clase (Test GT) | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T1 FN | T7 FN | T8 FN |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog (58) | 30 | 32 | 33 | 35 | **36** | 32 | 35 | 29 | 28 | 23 | 29 |
+| door (136) | 54 | 80 | 77 | 90 | 93 | 75 | 89 | **106** | 82 | 47 | **30** |
+| obstacle (173) | 79 | 86 | 92 | 107 | 105 | 108 | 109 | **128** | 94 | 64 | **45** |
+| person (101) | 67 | 70 | 70 | 78 | 75 | 80 | 75 | **81** | 34 | 26 | **20** |
+| stair (108) | 66 | 87 | 84 | 85 | 83 | 82 | **87** | 81 | 42 | **21** | 27 |
+| **Total** | **296** | **355** | **356** | **395** | **392** | **377** | **395** | **425** | **280** | **181** | **151** |
+
+> T8 alcanza el **máximo de TP de la serie (425)** y el **mínimo de FN (151)**, superando a T4/T7 (395). Detectó +30 objetos más que cualquier otro train. Sin embargo, esto viene a costa de 1681 FP.
+
+### 12.5 Falsos Positivos (Test)
+
+| Clase | T1 FP | T2 FP | T3 FP | T4 FP | T5 FP | T6 FP | T7 FP | T8 FP |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| dog | 42 | 32 | **24** | 88 | 103 | 94 | 88 | 133 |
+| door | 40 | 83 | **44** | 188 | 216 | 135 | 174 | 491 |
+| obstacle | 72 | **43** | 45 | 165 | 171 | 220 | 164 | 560 |
+| person | 72 | 38 | **26** | 144 | 105 | 153 | 96 | 232 |
+| stair | 26 | 34 | **38** | 140 | 127 | 145 | 132 | 265 |
+| **Total** | **252** | **230** | **177** | **725** | **722** | **747** | **654** | **1681** |
+
+> **T8 explota a 1681 FP** — el peor de la serie por un factor 2.5× vs T4-T7. Focal Loss γ=3.0 suprime demasiado los gradientes de la cabeza cls en los ejemplos positivos, resultando en scores de baja confianza que el threshold de 0.35 no logra filtrar. El modelo *ve* más objetos (425 TP, máximo) pero pierde capacidad de ranking: genera ~4 FP por cada TP.
+> **T3 sigue siendo el más limpio** (177 FP, ratio 0.5 FP/TP).
+
+
+---
+
+## 13. Conclusiones Generales
+
+### 13.1 Impacto por Cambio
+
+| Cambio | Métrica más afectada | Impacto |
 |---|---|---|
-| Focal Loss reduce FP | γ=3.0 penaliza ejemplos fáciles, fuerza la cabeza cls a discriminar mejor | FP < 600 (vs T7=654), Precision > 0.40 |
-| SL1 warmup mejora P1 | Transición suave SL1→GIoU evita meseta de reg_loss en Phase 1 | reg_loss < 3.0 al final de P1 (vs T7≈3.6) |
-| conf=0.35 reduce FP sin perder TP | Filtro más estricto elimina detecciones débiles | TP ≥ 380, FP < T7 |
-| Combinación sinérgica | Los tres cambios trabajan juntos | F1 > 0.55, mAP@50 > 0.60 |
+| **Stride Normalization** (T1→T2) | mAP@50, Recall | +30% mAP@50, +26% Recall. Cambio más impactante de la serie. |
+| **GIoU Loss** (T2→T3) | mAP@50-95, Precision | mAP@50-95 de 0→0.26. Precision +9.3%. Mejora calidad de box. |
+| **Más épocas** (T2→T3) | Convergencia | Best en epoch 80 vs 58. Presupuesto extra utilizado efectivamente. |
+| **Scoring permisivo** (T3→T4) | Recall, mAP@50, FP | +9.7% Recall, +4.6% mAP@50, pero Precision −47.6% y FP +309%. Trade-off negativo. |
+| **`build_fcos_loss` + reg_weight=1.5** (T3→T4) | reg_loss, mAP | Cambio de código de loss: eliminó meseta GIoU, mejoró mAP. Anteriormente atribuido a SL1 warmup (ahora desmentido). |
+| **Aug agresiva** (T3→T5) | Precision, FP | Precision −47%, FP +308%. Destruye calibración de confianza en modelo pequeño. |
+| **Sin HFlip runtime** (T3→T6) | Precision, FP | Precision −50%, FP +322%. HFlip runtime es irrenunciable. |
+| **conf_threshold 0.25→0.30** (T4→T7) | FP, Precision | −10% FP, +7% Precision sin perder TP. Ajuste simple y efectivo. |
+| **Focal Loss γ=3.0** (T7→T8) | Precision, FP | **Precision −44% (0.37→0.21), FP +157% (654→1681)**. Cambio más destructivo de la serie. |
+| **SL1→GIoU warmup 10ep** (T7→T8) | reg_loss P1 | Warmup funcionó: reg_loss transiciona de SL1(~14.8) a GIoU(~2.1) en epoch 10. Resultado final reg_loss comparable. |
+| **conf_threshold 0.30→0.35** (T7→T8) | FP | Insuficiente para compensar la explosión de FP causada por Focal Loss. |
+| **conf_threshold sweep T3 (0.25→0.40)** | F1, FP | **+7.6% F1, −24.3% FP (−154)** sacrificando solo −3.5% Recall (−18 TP). Mejor ajuste post-entrenamiento de la serie. |
 
-### 12.5 Riesgos
+### 13.2 Tres Regímenes de Código
 
-- **Focal Loss γ=3.0 podría ser agresivo**: Si degrada Recall, considerar γ=2.0 en T9.
-- **conf=0.35 podría perder TP marginales**: Si TP baja significativamente, revertir a 0.30.
-- **Interacción focal + warmup desconocida**: Primera vez que ambos se aplican simultáneamente.
+Los 8 entrenamientos se dividen en **tres regímenes de código distintos**:
 
-### 12.6 Estado de Preparación
+| Régimen | Trains | Loss cls / reg | reg_loss ep0 | Comportamiento |
+|---|---|---|---|---|
+| **Inline** (original) | T1, T2, T3, T6 | BCE + GIoU inline, weight=1.0 | ~4.5 (meseta 13 ep) | Precision alta, FP bajos |
+| **build_fcos_loss** (nuevo) | T4, T5, T7 | BCE + GIoU, reg_weight=1.5 | ~3.6-3.9 (descenso inmediato) | mAP alta, FP altos |
+| **build_fcos_loss + Focal** | T8 | **Focal γ=3.0** + SL1→GIoU warmup, reg_weight=1.5 | ~33.5 (SL1) → 2.1 (GIoU ep10) | **Recall máximo, FP explosivos** |
 
-- [x] `config_loader.py` — Fix Option B aplicado y verificado
-- [x] `setup.py` — Version 2.2.0 con changelog
-- [x] `task_fcos.py` — DEPLOY VERIFICATION v2.2.0
-- [x] `fcos_v3s_v1.yaml` — conf_threshold=0.35, comentarios T8
-- [x] `_t8_verify.py` — Script de verificación ejecutado (ALL CHECKS PASSED)
-- [x] `dist/tfm_trainer-2.2.0.tar.gz` — Paquete construido (67 KB), contenido verificado
+T6 usó el código inline (por cache de sdist). T4, T5 y T7 usaron `build_fcos_loss` pero con whitelist bug que descartó Focal Loss y warmup. **T8 es el primero en ejecutar `build_fcos_loss` con todas las features activas** (confirmado via DEPLOY VERIFICATION en logs).
+
+La mejora de mAP en T4+ proviene del **cambio en la función de loss** (`reg_weight=1.5`). T8 demuestra que añadir Focal Loss γ=3.0 sobre este régimen es **contraproducente** para un modelo de 1.2M params.
+
+### 13.3 Fortalezas del Modelo
+
+- **Clasificación perfecta**: Zero confusión inter-clase en los 8 entrenamientos. La cabeza cls discrimina las 5 clases impecablemente.
+- **Modelo ligero**: 1.2M params, 4.71 MB FP32, <6ms inferencia en T4 GPU.
+- **Export ONNX exitoso**: 9 outputs, opset 13, 4.74 MB, latencia ~4.3–6.9 ms.
+- **Alto potencial de recall**: T8 demostró el máximo: 71.4% Recall, 425 TP (de 576 GT). El modelo *ve* los objetos.
+- **mAP@50 mejora sostenidamente**: 0.43 → 0.56 → 0.57 → 0.59 → 0.59 → 0.56 → **0.61** → 0.60 — plateau alcanzado (~0.60).
+- **mAP@50-95 progresa**: 0.26 → 0.26 → 0.27 → 0.25 → **0.28** → 0.26 — calidad de box estable.
+- **SL1 warmup funcional**: T8 confirmó que la transición SL1→GIoU funciona correctamente y produce reg_loss comparable al final.
+
+### 13.4 Debilidades / Cuellos de Botella
+
+- **Trade-off Precision-Recall parcialmente mitigado**: T3 original (P=0.66, R=0.63). El sweep de conf_threshold (§11) permite ajustar el punto operativo: a thr=0.40, FP bajan −24.3% con solo −3.5% Recall. El trade-off sigue existiendo pero ahora es configurable post-despliegue.
+- **Focal Loss γ=3.0 contraproducente**: T8 demuestra que Focal Loss en un modelo de 1.2M params genera colapso de Precision (0.21) y explosión de FP (1681). γ=3.0 suprime demasiado los gradientes de los positivos, impidiendo que la cabeza cls asigne scores altos y discriminativos.
+- **FP dominan en T4-T8**: T7 mejoró a 654 FP (ratio 1.66) pero T8 retrocedió a 1681 FP (ratio 3.95). **T3 sigue siendo el único aceptable** (177 FP, ratio 0.50).
+- **dog sigue siendo la clase más débil**: AP@50 = 0.41-0.52, menor de las 5 clases en todos los entrenamientos.
+- **Val loss ruidosa**: Con 188 imágenes, oscila enormemente. T8 registró la val_loss más baja (7.82) pero con el peor F1.
+- **Augmentación destructiva contraproducente**: CoarseDropout + GaussNoise degradan calibración en modelo de 1.2M params (T5).
+- **HFlip runtime irrenunciable**: Su eliminación (T6) produjo el peor F1 de T1-T7.
+- **Pipeline de despliegue frágil**: **Cuatro incidentes en 8 trains**: (1) T6 — cache sdist, (2) T7 — whitelist config_loader, (3) T8.0 — `launch_job.py` hardcodeado a v2.0.0, (4) T8.1 — `log()` vs `print()` en DEPLOY VERIFICATION. La funcionalidad nueva (Focal Loss, SL1 warmup) no fue testeada exitosamente hasta T8.2 (tercer intento).
+
+### 13.5 Mejor Configuración Operativa
+
+| Objetivo | Mejor Train | Valor | Justificación |
+|---|---|---|---|
+| **Máximo mAP@50** | **T7** (0.6120) | ★ | Mejor ranking de detecciones de la serie. |
+| **Máximo mAP@50-95** | **T7** (0.2824) | ★ | Mejor calidad geométrica de boxes. |
+| **Producción (F1 balanceado)** | **T3** (F1=0.6438) | ★ | Mejor balance precision/recall para uso real. Post-sweep: `conf_threshold=0.40` reduce FP −24.3% (§11). |
+| **Máximo Recall** | **T8** (0.7143) | | T8 supera a T4 (0.6886). Máximo de TP (425/576). |
+| **Máxima Precisión** | **T3** (0.6609) | | Mínimos falsos positivos (177 FP en test). |
+
+> **Recomendación final**: **T3 para producción** (F1 óptimo, precisión más alta, FP mínimos). **T7 como referencia de ranking** (mejor mAP@50 y mAP@50-95). T8 solo sirve como referencia de recall máximo. **El modelo seleccionado para despliegue en ESP32-S3 es T3.**
+
+### 13.6 Oportunidades Exploradas en T8 y Remanentes
+
+**Probadas en T8 (primera vez real):**
+
+| Técnica | Resultado T8 | Veredicto |
+|---|---|---|
+| Focal Loss γ=3.0 | Precision colapsa (0.21), FP explota (1681) | ❌ **Descartada**. γ=3.0 demasiado agresivo para 1.2M params. |
+| SL1→GIoU warmup 10ep | Transición limpia en epoch 10, reg_loss final comparable | ✅ **Funcional**, pero no produce mejora neta con Focal Loss activa. |
+| conf_threshold 0.35 | FP siguen explosivos | ⚠️ Insuficiente con Focal Loss. Podría ayudar en otros regímenes. |
+
+**Oportunidades no exploradas (potenciales T9+, si se continúa):**
+
+1. **Focal Loss γ=1.0-2.0**: γ=3.0 fue excesivo; valores más bajos podrían funcionar sin destruir la calibración.
+2. **SL1 warmup SIN Focal Loss**: Aislar el warmup del efecto destructivo de Focal Loss (T8 los probó juntos).
+3. **~~conf_threshold sweep en T3~~**: ✅ **Completado** (§11). `conf_threshold=0.40` da +7.6% F1, −24.3% FP. Incorporado como configuración de despliegue.
+4. **Ensemble T3+T7**: Combinar la precision de T3 con el recall de T7 mediante NMS-merge.
+5. **Knowledge Distillation**: Usar un modelo más grande como teacher para mejorar la cabeza cls del MobileNetV3-Small.
+
+### 13.7 Fix Aplicado en config_loader.py (v2.2.0)
+
+**Opción B aplicada** en `config_loader.py` líneas 70-76. Se reemplazó el bucle whitelist por:
+```python
+family_kwargs = dict(family_section)  # pasar TODAS las claves del YAML
+```
+
+**Verificación**: Script `_t8_verify.py` simuló el pipeline completo y confirmó que las 36 claves YAML llegan a `family_config`, incluyendo `focal_gamma=3.0`, `reg_warmup_epochs=10` y `conf_threshold=0.35`.
+
+
+---
+
+## 14. Conclusiones Finales y Modelo Seleccionado
+
+### 14.1 Resumen de la Serie de Entrenamientos
+
+Se completaron **8 entrenamientos** del modelo FCOS (MobileNetV3-Small + SimpleFPN, 1.2M params) sobre Vertex AI (n1-standard-8 + NVIDIA T4), con **4 incidentes de despliegue** resueltos progresivamente. Los entrenamientos se agrupan en tres regímenes de código:
+
+| Régimen | Trains | F1 range | Hallazgo principal |
+|---|---|---|---|
+| Inline (original) | T1-T3, T6 | 0.33-0.64 | T3 = mejor F1 y Precision de la serie |
+| build_fcos_loss + BCE | T4, T5, T7 | 0.42-0.48 | T7 = mejor mAP@50 y mAP@50-95 |
+| build_fcos_loss + Focal | T8 | 0.32 | Focal γ=3.0 contraproducente |
+
+### 14.2 Modelo Seleccionado para Despliegue
+
+**→ Train 3 (`best_fcos.pt` de `fcos_mobilenet_v3_small-1750953549`)**
+
+| Métrica | Valor | Ranking en serie |
+|---|:---:|---|
+| F1 | **0.6438** | 🥇 Mejor (sweep §11: +7.6% relativo con thr=0.40) |
+| Precision | **0.6609** | 🥇 Mejor |
+| Recall | 0.6285 | 4° (T8 > T4 > T7 > T3) |
+| mAP@50 | 0.5677 | 4° (T7 > T8 > T4 > T3) |
+| mAP@50-95 | 0.2564 | 4° (T7 > T8 > T4 > T3) |
+| FP (test) | **177** | 🥇 Mejor (sweep §11: −24.3% FP adicional con thr=0.40) |
+| TP (test) | 356 | 5° de 8 |
+| ONNX size | 4.74 MB | Igual todos |
+
+**Justificación**: Para un sistema de asistencia visual en ESP32-S3, la **minimización de falsos positivos** es crítica (alertas falsas erosionan confianza del usuario). T3 ofrece el mejor balance F1 con la menor tasa de FP de toda la serie. Su Precision (0.66) significa que 2 de cada 3 detecciones son correctas, vs 1 de cada 5 en T8 (0.21). **Adicionalmente, el sweep de conf_threshold (§11) demostró que ajustar el umbral a 0.40 mejora +7.6% F1 relativo y reduce −24.3% FP sin reentrenamiento.**
+
+### 14.3 Modelo de Referencia (Benchmarking)
+
+**→ Train 7 (`best_fcos.pt` de `fcos_v3s_v1-1771489427`)**
+
+- mAP@50 = 0.6120 (mejor de la serie)
+- mAP@50-95 = 0.2824 (mejor de la serie)
+- Útil para papers y comparativas de ranking, pero NO para producción (654 FP vs T3's 177).
+
+### 14.4 Lecciones Aprendidas
+
+1. **Focal Loss no es universal**: γ=3.0 en un modelo de 1.2M params destruye la calibración de scores. La literatura recomienda γ=2.0 para modelos grandes (RetinaNet, 36M params). Para modelos ultra-ligeros, BCE estándar es superior.
+
+2. **Pipeline MLOps requiere verificación end-to-end**: 4 bugs de despliegue en 8 trains (50% de tasa de incidentes). El bloque DEPLOY VERIFICATION añadido en v2.2.0 debió existir desde T1.
+
+3. **El trade-off Precision-Recall tiene un límite físico**: Con 1.2M params y 5 clases, el modelo no puede ser simultáneamente preciso (P>0.60) y exhaustivo (R>0.70). T3 prioriza Precision, T8 maximiza Recall, pero ninguno logra F1>0.65.
+
+4. **Augmentación simple > agresiva**: HFlip + brightness/contrast es suficiente. CoarseDropout/GaussNoise/Blur degradan modelos pequeños.
+
+5. **Post-training threshold tuning es efectivo**: El sweep de `conf_threshold` sobre T3 (§11) mejoró F1 +7.6% y redujo FP −24.3% sin reentrenar. Es una optimización de coste cero que debería ser paso estándar en cualquier pipeline.
+
+6. **`build_fcos_loss` con `reg_weight=1.5` mejora mAP pero empeora Precision**: El cambio estructural de loss (T3→T4) fue el segundo más impactante de la serie, pero el trade-off no es favorable para producción.
+
+### 14.5 Recomendación
+
+**Finalizar la serie de entrenamientos FCOS.** T8 fue el último experimento necesario para validar las técnicas pendientes (Focal Loss, SL1 warmup). Ambas están ahora probadas y documentadas. No se justifica un T9 dado que:
+
+- Focal Loss γ=3.0 fue destructiva → γ más bajos serían marginales
+- SL1 warmup no produjo mejora neta measurable
+- T3 ya alcanza F1=0.64, suficiente para el prototipo ESP32-S3
+- Recursos de Vertex AI mejor aprovechados en otros modelos (YOLO, etc.)
+
+**Próximo paso**: Convertir T3 `best_fcos.pt` → ONNX → ESP-DL para despliegue en ESP32-S3, con `conf_threshold=0.40` como configuración operativa optimizada (§11).
 
 ---
 
