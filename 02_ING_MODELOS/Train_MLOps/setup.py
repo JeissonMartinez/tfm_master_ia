@@ -9,7 +9,7 @@ Build::
     cd 02_ING_MODELOS/Train_MLOps/
     python setup.py sdist --formats=gztar
 
-The resulting ``dist/tfm_trainer-2.2.0.tar.gz`` is uploaded to GCS
+The resulting ``dist/tfm_trainer-2.6.0.tar.gz`` is uploaded to GCS
 by ``vertex_ai/build_and_launch.sh``.
 
 Changes from v1.0.0:
@@ -43,13 +43,23 @@ Changes from v2.4.0:
     - task_espdet: DEPLOY VERIFICATION block (lesson from FCOS T8)
     - task_espdet: BUG FIX — aug_config was not passed to IODCDataset
     - Version bump forces pip cache invalidation on Vertex AI
+
+Changes from v2.5.0:
+    - ESPDet-Pico v2: Official Espressif architecture (0.36M params)
+    - Replaced custom DepthwiseSeparableConv + SimpleFPN architecture
+      with official DSConv/DSC3k2/ESPBlock/ESPDetectHead from esp-detection
+    - New espdet_modules/ sub-package with official blocks
+    - Strides changed [4,8,16] → [8,16,32] (official)
+    - Transfer learning from espdet_pico_224_224_cat.pt (cat detection, nc=1)
+    - ONNX export: interleaved (box0,score0,box1,score1,box2,score2) for esp-ppq
+    - Version bump forces pip cache invalidation on Vertex AI
 """
 
 from setuptools import setup, find_packages
 
 setup(
     name="tfm-trainer",
-    version="2.5.0",
+    version="2.6.0",
     description=(
         "TFM — Entrenamiento de modelos de detección de objetos "
         "para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)"

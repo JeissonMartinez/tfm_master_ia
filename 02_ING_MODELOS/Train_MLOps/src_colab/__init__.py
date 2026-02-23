@@ -67,8 +67,6 @@ from .utils_model import (                                  # noqa: F401
     YOLO26_CUSTOM_SPECS,
     # ESPDet
     ESPDetPico,
-    ESPDetPicoBackbone,
-    ESPDetPicoHead,
     build_espdet_pico,
     ESPDET_SPECS,
     # Utilities

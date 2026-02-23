@@ -1,50 +1,58 @@
 # Task ESPDet-Pico — Anchor-Free Micro-Detector
 
 > **Entry-point:** `trainer.task_espdet`  
-> **YAML:** `vertex_ai/configs/espdet_pico_v1.yaml`  
-> **Contenedor:** `pytorch-gpu.2-4.py310:latest`
+> **YAML:** `vertex_ai/configs/espdet_pico_v2.yaml`  
+> **Contenedor:** `pytorch-gpu.2-4.py310:latest`  
+> **Paquete:** `tfm_trainer-2.6.0.tar.gz`
 
 ---
 
 ## Arquitectura del Modelo
 
-Diseñado desde cero para ESP32-S3 (~0.36M parámetros).
+Reimplementación fiel de la arquitectura oficial ESPDet-Pico del repositorio
+`espressif/esp-detection` (AGPL-3.0). Scale `n`: [depth=0.50, width=0.25, max_ch=512].
 
 ```
 Input (B, 3, H, W)
     │
     ▼
-ESPDetPicoBackbone (width_mult=0.5)
-    │ DepthwiseSeparableConv stages
+Backbone (layers 0-10) — Official Espressif Topology
+    │ Conv(3→16,s=2) → DSConv(16→32,s=2) → ESPBlockLite(32→64)
+    │ → DSConv(64→64,s=2) → DSC3k2(64→64) → SCDown(64→64)
+    │ → DSC3k2(64→64,c3k) → SCDown(64→128) → DSC3k2(128→128,c3k)
+    │ → SPPF(128→128) → DSConv(128→128,k=7)
     │
-    ├── Stage 1 (stride 4)  → C2 features [16 ch]
-    ├── Stage 2 (stride 8)  → C3 features [32 ch]
-    └── Stage 3 (stride 16) → C4 features [64 ch]
-    │
-    ▼
-SimpleFPN (32 channels)
-    │
-    ├── P2 (H/4,  W/4,  32)
-    ├── P3 (H/8,  W/8,  32)
-    └── P4 (H/16, W/16, 32)
+    ├── P3/8  (64 ch)  ← layer4 output
+    ├── P4/16 (64 ch)  ← layer6 output
+    └── P5/32 (128 ch) ← layer10 output
     │
     ▼
-ESPDetPicoHead (anchor-free, reg_max=1)
-    ├── cls_tower (2 × DWConv + BN + ReLU) → cls_logits (C)
-    └── reg_tower (2 × DWConv + BN + ReLU) → reg_pred (4)
+Neck — Top-down + Bottom-up FPN
+    │ Top-down: Upsample → Concat → ESPBlock (×2)
+    │ Bottom-up: DSConv(s=2) → Concat → ESPBlock (×2)
+    │
+    ├── P3/8  (32 ch)  ← layer16 output
+    ├── P4/16 (128 ch) ← layer19 output
+    └── P5/32 (128 ch) ← layer22 output
+    │
+    ▼
+ESPDetectHead (anchor-free, reg_max=1)
+    ├── cv2 (box):  DSConv → DSConv → Conv2d(4×reg_max) per level
+    └── cv3 (cls):  [DWConv+Conv] → [DWConv+Conv] → Conv2d(nc) per level
 ```
 
 ### Parámetros del Modelo
 
 | Parámetro | Valor |
 |---|---|
-| Backbone | ESPDetPicoBackbone (custom) |
-| Width multiplier | 0.5 |
-| FPN channels | 32 |
-| Strides | [4, 8, 16] |
+| Backbone | Official Espressif (DSConv, ESPBlockLite, DSC3k2, SCDown, SPPF) |
+| Scale | `n` = [depth=0.50, width=0.25, max_ch=512] |
+| Strides | [8, 16, 32] (P3, P4, P5) |
+| Detection head | ESPDetectHead (cv2=box, cv3=cls) |
 | reg_max | 1 |
-| Head convs | 2 (depthwise separable) |
-| Params | ~0.36M |
+| Params | **~0.36M** |
+| Pretrained | `espdet_pico_224_224_cat.pt` (cat detection, nc=1) |
+| Transfer | ~99.97% params transferidos (strict=False) |
 | Tamaño ONNX est. | ~1.5 MB |
 
 > **Nota:** reg_max=1 significa regresión directa de 4 distancias (l, t, r, b),
@@ -54,30 +62,27 @@ ESPDetPicoHead (anchor-free, reg_max=1)
 
 ## Estrategia de Entrenamiento
 
-### Fase 1 — Backbone Congelado
+### Fase 1 — Backbone Congelado (layers 0-10)
 
-- **Epochs:** 40
+- **Epochs:** 50
 - **Optimizer:** AdamW (lr=1e-3, wd=1e-4)
 - **Scheduler:** Cosine
-- **Objetivo:** Head convergence rápida
+- **Objetivo:** Adaptar neck + head a las 5 clases IODC sobre features pretrained
 
 ### Fase 2 — Todo Descongelado
 
-- **Epochs:** 80
-- **Optimizer:** AdamW (lr=5e-5, wd=1e-5)
+- **Epochs:** 100
+- **Optimizer:** AdamW (lr=1e-4, wd=1e-5)
 - **Scheduler:** Cosine
-- **Objetivo:** End-to-end con LR conservador (modelo pequeño)
+- **Objetivo:** End-to-end fine-tuning conservador
 
-> **Total:** 120 epochs (40 + 80), patience=20
+> **Total:** 150 epochs (50 + 100), patience=25
 
-### Redimensionado Progresivo
+### Redimensionado
 
 | Epoch | Resolución |
 |---|---|
-| 0 | 640×640 |
-| 15 | 416×416 |
-| 30 | 320×320 |
-| 40 | 224×224 |
+| 0-149 | 224×224 (fijo, match pretrained) |
 
 ---
 
@@ -136,8 +141,8 @@ Bloque 8 — Save+Upload   : ONNX export + GCS upload
 ```bash
 python vertex_ai/launch_job.py \
   --family ESPDet \
-  --config-name espdet_pico_v1.yaml \
-  --run-name espdet_pico_v1-run1
+  --config-name espdet_pico_v2.yaml \
+  --run-name espdet_pico_v2-run1
 ```
 
 ---
@@ -146,10 +151,10 @@ python vertex_ai/launch_job.py \
 
 | Métrica | Target |
 |---|---|
-| Val mAP@50 | > 0.15 (model muy pequeño) |
-| Test mAP@50 | > 0.12 |
+| Val mAP@50 | > 0.25 (transfer learning desde cat-detection) |
+| Test mAP@50 | > 0.20 |
 | ONNX size | < 2 MB |
-| Training time (T4) | ~2h (más epochs) |
+| Training time (T4) | ~3h (150 epochs) |
 | Latencia ESP32-S3 | < 500ms (objetivo) |
 
 ---
@@ -160,5 +165,6 @@ ESPDet-Pico es el modelo más pequeño de los 3, diseñado para:
 
 1. **Evaluación de límites:** ¿Cuánto mAP se puede obtener con ~0.36M params?
 2. **Despliegue directo:** Cabe holgadamente en la Flash/PSRAM del ESP32-S3
-3. **Comparación de arquitecturas:** Backbone custom (DSConv) vs MobileNet (FCOS) vs YOLO
-4. **Latencia mínima:** Strides más pequeños [4, 8, 16] para objetos cercanos
+3. **Comparación de arquitecturas:** Backbone oficial Espressif (DSConv) vs MobileNet (FCOS) vs YOLO
+4. **Transfer learning:** Cat-detection weights como punto de partida (~99.97% params transferidos)
+5. **Compatibilidad nativa:** ONNX interleaved → esp-ppq → .espdl sin conversiones extra

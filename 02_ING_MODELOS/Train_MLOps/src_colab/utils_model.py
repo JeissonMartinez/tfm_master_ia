@@ -2,7 +2,7 @@
 
 Supports: FCOS (MobileNetV3-Small + FPN + FCOS head),
           YOLO26_CUSTOM (Ultralytics backbone, manual training loop),
-          ESPDet (ESPDet-Pico, custom Espressif-inspired architecture).
+          ESPDet (ESPDet-Pico, official Espressif architecture v2.6).
 """
 from __future__ import annotations
 
@@ -41,9 +41,10 @@ YOLO26_CUSTOM_SPECS: Dict[str, Dict[str, Any]] = {
 ESPDET_SPECS: Dict[str, Dict[str, Any]] = {
     "espdet_pico": {
         "params_est": "~0.36M",
-        "target_size_kb": "< 500 KB INT8",
+        "target_size_kb": "< 1.5 MB ONNX",
         "reg_max": 1,
-        "description": "Ultra-light anchor-free head, custom for ESP32-S3",
+        "strides": [8, 16, 32],
+        "description": "Official Espressif architecture (esp-detection repo)",
     },
 }
 
@@ -220,134 +221,356 @@ def get_yolo26_custom_torch_model(yolo_obj: Any) -> nn.Module:
 
 
 # =====================================================================
-#  ESPDet-Pico — Ultra-light anchor-free detector
+#  ESPDet-Pico — Official Espressif Architecture (0.36M params)
+# =====================================================================
+#
+# Faithful reimplementation of the ESPDet-Pico topology from
+# https://github.com/espressif/esp-detection (AGPL-3.0).
+#
+# Architecture YAML reference: cfg/models/espdet_pico.yaml
+#   scale 'n': [depth=0.50, width=0.25, max_channels=512]
+#
+# Channel computation: each YAML arg is scaled by width (0.25) and
+# made divisible by 8 via ``make_divisible``.  Depth (0.50) affects
+# repeat counts (rounded up to 1).
+#
+# Strides: P3/8, P4/16, P5/32 (official, NOT the old [4,8,16]).
 # =====================================================================
 
-class DepthwiseSeparableConv(nn.Module):
-    """Depthwise separable convolution block."""
-
-    def __init__(self, in_ch: int, out_ch: int, kernel: int = 3,
-                 stride: int = 1, act: bool = True):
-        super().__init__()
-        self.dw = nn.Conv2d(in_ch, in_ch, kernel, stride, kernel // 2,
-                            groups=in_ch, bias=False)
-        self.bn1 = nn.BatchNorm2d(in_ch)
-        self.pw = nn.Conv2d(in_ch, out_ch, 1, bias=False)
-        self.bn2 = nn.BatchNorm2d(out_ch)
-        self.act = nn.ReLU6(inplace=True) if act else nn.Identity()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.act(self.bn1(self.dw(x)))
-        x = self.act(self.bn2(self.pw(x)))
-        return x
+def _make_divisible(v: int, divisor: int = 8) -> int:
+    """Equivalent to ultralytics ``make_divisible``."""
+    return max(divisor, int(v + divisor / 2) // divisor * divisor)
 
 
-class ESPDetPicoBackbone(nn.Module):
-    """Ultra-light backbone for ESPDet-Pico (~0.36M params total)."""
-
-    def __init__(self, width_mult: float = 0.5):
-        super().__init__()
-        # Channel list scaled by width multiplier
-        def ch(c: int) -> int:
-            return max(8, int(c * width_mult))
-
-        self.stem = nn.Sequential(
-            nn.Conv2d(3, ch(16), 3, 2, 1, bias=False),
-            nn.BatchNorm2d(ch(16)),
-            nn.ReLU6(inplace=True),
-        )
-        self.stage1 = nn.Sequential(
-            DepthwiseSeparableConv(ch(16), ch(32), stride=2),
-            DepthwiseSeparableConv(ch(32), ch(32)),
-        )
-        self.stage2 = nn.Sequential(
-            DepthwiseSeparableConv(ch(32), ch(64), stride=2),
-            DepthwiseSeparableConv(ch(64), ch(64)),
-        )
-        self.stage3 = nn.Sequential(
-            DepthwiseSeparableConv(ch(64), ch(128), stride=2),
-            DepthwiseSeparableConv(ch(128), ch(128)),
-        )
-        self.out_channels = [ch(32), ch(64), ch(128)]
-
-    def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
-        x = self.stem(x)
-        c1 = self.stage1(x)   # stride 4
-        c2 = self.stage2(c1)  # stride 8
-        c3 = self.stage3(c2)  # stride 16
-        return [c1, c2, c3]
-
-
-class ESPDetPicoHead(nn.Module):
-    """Anchor-free detection head with minimal reg_max."""
-
-    def __init__(self, in_channels: int, num_classes: int, reg_max: int = 1):
-        super().__init__()
-        self.num_classes = num_classes
-        self.reg_max = reg_max
-
-        self.cls_conv = DepthwiseSeparableConv(in_channels, in_channels)
-        self.reg_conv = DepthwiseSeparableConv(in_channels, in_channels)
-        self.cls_out = nn.Conv2d(in_channels, num_classes, 1)
-        self.reg_out = nn.Conv2d(in_channels, 4 * (reg_max + 1), 1)
-
-        nn.init.constant_(self.cls_out.bias, -math.log(99))
-
-    def forward(self, feat: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        cls = self.cls_out(self.cls_conv(feat))
-        reg = self.reg_out(self.reg_conv(feat))
-        return cls, reg
+def _ch(yaml_ch: int, width: float = 0.25, max_ch: int = 512) -> int:
+    """Scale a YAML channel arg by width multiplier (ESPDet-Pico 'n' scale)."""
+    return _make_divisible(min(yaml_ch, max_ch) * width)
 
 
 class ESPDetPico(nn.Module):
-    """ESPDet-Pico: ultra-lightweight detector for ESP32-S3."""
+    """ESPDet-Pico: official Espressif ultra-light detector (0.36M params).
 
-    def __init__(
-        self,
-        num_classes: int = 5,
-        width_mult: float = 0.5,
-        reg_max: int = 1,
-    ):
+    Topology assembled manually from the YAML definition to avoid
+    depending on Ultralytics ``DetectionModel`` / ``parse_model``.
+
+    Strides: [8, 16, 32]  (P3, P4, P5)
+    """
+
+    def __init__(self, nc: int = 5):
         super().__init__()
-        self.backbone = ESPDetPicoBackbone(width_mult)
-        self.num_classes = num_classes
+        from ultralytics.nn.modules.conv import Conv
+        from ultralytics.nn.modules.block import SPPF
+        from ultralytics.nn.modules.head import Detect  # only for SCDown
+        # SCDown is in ultralytics.nn.modules.block for recent versions
+        try:
+            from ultralytics.nn.modules.block import SCDown
+        except ImportError:
+            from ultralytics.nn.modules import SCDown  # type: ignore
 
-        # Simple FPN for multi-scale fusion
-        ch_list = self.backbone.out_channels
-        fpn_ch = ch_list[0]  # smallest channel as FPN dim
-        self.fpn = SimpleFPN(ch_list, fpn_ch)
-        self.heads = nn.ModuleList([
-            ESPDetPicoHead(fpn_ch, num_classes, reg_max) for _ in ch_list
-        ])
+        from .espdet_modules import (
+            DSConv, DSC3k2, ESPBlockLite, ESPBlock,
+        )
+        from .espdet_modules.esp_head import ESPDetectHead
 
-    def forward(self, x: torch.Tensor) -> Dict[str, List[Tuple[torch.Tensor, torch.Tensor]]]:
-        features = self.backbone(x)
-        fpn_feats = self.fpn(features)
-        outputs = [head(feat) for head, feat in zip(self.heads, fpn_feats)]
-        return {
-            "cls": [o[0] for o in outputs],
-            "reg": [o[1] for o in outputs],
-        }
+        self.nc = nc
+        w = 0.25   # width multiplier for 'n' scale
+        mx = 512   # max_channels
+
+        # ── Backbone (layers 0-10) ──────────────────────────────
+        #  0: Conv(3 → 64*w=16, k=3, s=2)            → P1/2
+        self.layer0 = Conv(3, _ch(64, w, mx), 3, 2)
+        #  1: DSConv(16 → 128*w=32, k=3, s=2)         → P2/4
+        self.layer1 = DSConv(_ch(64, w, mx), _ch(128, w, mx), 3, 2)
+        #  2: ESPBlockLite(32 → 256*w=64, n=1*0.5→1, c3k=False)
+        self.layer2 = ESPBlockLite(_ch(128, w, mx), _ch(256, w, mx),
+                                   n=max(1, round(1 * 0.5)))
+        #  3: DSConv(64 → 256*w=64, k=3, s=2)         → P3/8
+        self.layer3 = DSConv(_ch(256, w, mx), _ch(256, w, mx), 3, 2)
+        #  4: DSC3k2(64 → 256*w=64, n=2*0.5→1, c3k=False)
+        self.layer4 = DSC3k2(_ch(256, w, mx), _ch(256, w, mx),
+                             n=max(1, round(2 * 0.5)), c3k=False)
+        #  5: SCDown(64 → 256*w=64, k=3, s=2)         → P4/16
+        self.layer5 = SCDown(_ch(256, w, mx), _ch(256, w, mx), 3, 2)
+        #  6: DSC3k2(64 → 256*w=64, n=2*0.5→1, c3k=True)
+        self.layer6 = DSC3k2(_ch(256, w, mx), _ch(256, w, mx),
+                             n=max(1, round(2 * 0.5)), c3k=True)
+        #  7: SCDown(64 → 512*w=128, k=3, s=2)        → P5/32
+        self.layer7 = SCDown(_ch(256, w, mx), _ch(512, w, mx), 3, 2)
+        #  8: DSC3k2(128 → 512*w=128, n=2*0.5→1, c3k=True)
+        self.layer8 = DSC3k2(_ch(512, w, mx), _ch(512, w, mx),
+                             n=max(1, round(2 * 0.5)), c3k=True)
+        #  9: SPPF(128 → 512*w=128, k=5)
+        self.layer9 = SPPF(_ch(512, w, mx), _ch(512, w, mx), 5)
+        # 10: DSConv(128 → 512*w=128, k=7, s=1, p=3)
+        self.layer10 = DSConv(_ch(512, w, mx), _ch(512, w, mx), 7, 1, 3)
+
+        # ── Neck — Top-down ─────────────────────────────────────
+        # 11: Upsample (layer10 output → 2×)
+        self.up11 = nn.Upsample(scale_factor=2, mode="nearest")
+        # 12: Concat(up11, layer6) → 128+64=192 ch  (implicit in forward)
+        # 13: ESPBlock(192 → 256*w=64, n=2*0.5→1)
+        _cat12 = _ch(512, w, mx) + _ch(256, w, mx)  # concat channels
+        self.layer13 = ESPBlock(_cat12, _ch(256, w, mx),
+                                n=max(1, round(2 * 0.5)))
+
+        # 14: Upsample (layer13 output → 2×)
+        self.up14 = nn.Upsample(scale_factor=2, mode="nearest")
+        # 15: Concat(up14, layer4) → 64+64=128 ch
+        _cat15 = _ch(256, w, mx) + _ch(256, w, mx)
+        # 16: ESPBlock(128 → 128*w=32, n=2*0.5→1)  — P3/8 output
+        self.layer16 = ESPBlock(_cat15, _ch(128, w, mx),
+                                n=max(1, round(2 * 0.5)))
+
+        # ── Neck — Bottom-up ────────────────────────────────────
+        # 17: DSConv(32 → 128*w=32, k=3, s=2)
+        self.layer17 = DSConv(_ch(128, w, mx), _ch(128, w, mx), 3, 2)
+        # 18: Concat(layer17, layer13) → 32+64=96 ch
+        _cat18 = _ch(128, w, mx) + _ch(256, w, mx)
+        # 19: ESPBlock(96 → 512*w=128, n=2*0.5→1) — P4/16 output
+        self.layer19 = ESPBlock(_cat18, _ch(512, w, mx),
+                                n=max(1, round(2 * 0.5)))
+
+        # 20: DSConv(128 → 256*w=64, k=3, s=2)
+        self.layer20 = DSConv(_ch(512, w, mx), _ch(256, w, mx), 3, 2)
+        # 21: Concat(layer20, layer10) → 64+128=192 ch
+        _cat21 = _ch(256, w, mx) + _ch(512, w, mx)
+        # 22: ESPBlock(192 → 512*w=128, n=2*0.5→1) — P5/32 output
+        self.layer22 = ESPBlock(_cat21, _ch(512, w, mx),
+                                n=max(1, round(2 * 0.5)))
+
+        # ── Detection Head ──────────────────────────────────────
+        # Channel list for P3, P4, P5
+        self.det_ch = (_ch(128, w, mx), _ch(512, w, mx), _ch(512, w, mx))
+        self.head = ESPDetectHead(nc=nc, ch=self.det_ch)
+
+        # flag for export mode
+        self._export_mode = False
+
+    def set_export_mode(self, mode: bool = True):
+        """Toggle ONNX export mode (interleaved box/score output)."""
+        self._export_mode = mode
+
+    def forward(self, x: torch.Tensor):
+        # ── Backbone ────────────────────────────────────────────
+        x0 = self.layer0(x)        # P1/2   — 16ch
+        x1 = self.layer1(x0)       # P2/4   — 32ch
+        x2 = self.layer2(x1)       #         — 64ch
+        x3 = self.layer3(x2)       # P3/8   — 64ch
+        x4 = self.layer4(x3)       #         — 64ch  ← skip to neck top-down
+        x5 = self.layer5(x4)       # P4/16  — 64ch
+        x6 = self.layer6(x5)       #         — 64ch  ← skip to neck top-down
+        x7 = self.layer7(x6)       # P5/32  — 128ch
+        x8 = self.layer8(x7)       #         — 128ch
+        x9 = self.layer9(x8)       #         — 128ch
+        x10 = self.layer10(x9)     #         — 128ch ← skip to neck bottom-up
+
+        # ── Neck — Top-down ─────────────────────────────────────
+        up11 = self.up11(x10)               # 128ch, P4 resolution
+        cat12 = torch.cat([up11, x6], 1)    # 128+64 = 192ch
+        x13 = self.layer13(cat12)           # 64ch
+
+        up14 = self.up14(x13)               # 64ch, P3 resolution
+        cat15 = torch.cat([up14, x4], 1)    # 64+64 = 128ch
+        x16 = self.layer16(cat15)           # 32ch   ← P3/8 detect
+
+        # ── Neck — Bottom-up ────────────────────────────────────
+        x17 = self.layer17(x16)             # 32ch, P4 resolution
+        cat18 = torch.cat([x17, x13], 1)    # 32+64 = 96ch
+        x19 = self.layer19(cat18)           # 128ch  ← P4/16 detect
+
+        x20 = self.layer20(x19)             # 64ch, P5 resolution
+        cat21 = torch.cat([x20, x10], 1)    # 64+128 = 192ch
+        x22 = self.layer22(cat21)           # 128ch  ← P5/32 detect
+
+        # ── Head ────────────────────────────────────────────────
+        feats = [x16, x19, x22]
+        if self._export_mode:
+            return self.head.export_onnx_forward(feats)
+        return self.head(feats)
+
+
+def _convert_ultralytics_espdet_weights(
+    ultralytics_state: dict,
+    target_model: ESPDetPico,
+) -> Tuple[dict, List[str], List[str]]:
+    """Convert Ultralytics ESPDetPico state_dict keys to our naming.
+
+    The Ultralytics model stores layers as ``model.{N}.{submodule}``
+    where N is the layer index from the YAML (0-22 backbone+neck, 23 head).
+
+    Our model uses ``layer{N}`` for backbone/neck and ``head.cv2/cv3``
+    for the detection head.
+
+    Returns:
+        (converted_state_dict, matched_keys, unmatched_keys)
+    """
+    # Build mapping: ultralytics key prefix → our key prefix
+    # Backbone layers 0-10
+    prefix_map = {}
+    for i in range(11):
+        prefix_map[f"model.{i}."] = f"layer{i}."
+
+    # Neck layers
+    # 11 = Upsample (no params)
+    # 12 = Concat (no params)
+    prefix_map["model.13."] = "layer13."
+    # 14 = Upsample (no params)
+    # 15 = Concat (no params)
+    prefix_map["model.16."] = "layer16."
+    prefix_map["model.17."] = "layer17."
+    # 18 = Concat (no params)
+    prefix_map["model.19."] = "layer19."
+    prefix_map["model.20."] = "layer20."
+    # 21 = Concat (no params)
+    prefix_map["model.22."] = "layer22."
+
+    # Head (layer 23 in Ultralytics)
+    prefix_map["model.23.cv2."] = "head.cv2."
+    prefix_map["model.23.cv3."] = "head.cv3."
+
+    converted = {}
+    matched = []
+    unmatched = []
+
+    for key, value in ultralytics_state.items():
+        found = False
+        for old_prefix, new_prefix in prefix_map.items():
+            if key.startswith(old_prefix):
+                new_key = key.replace(old_prefix, new_prefix, 1)
+                converted[new_key] = value
+                matched.append(f"{key} → {new_key}")
+                found = True
+                break
+        if not found:
+            unmatched.append(key)
+
+    return converted, matched, unmatched
+
+
+def _load_ultralytics_espdet_pt(pt_path: str) -> dict:
+    """Load a .pt from Ultralytics YOLO format and extract the raw state_dict.
+
+    Ultralytics .pt files contain a pickled dict with key 'model' holding
+    the full DetectionModel.  We extract its ``state_dict()``.
+
+    The esp-detection repo pickles models with a local ``nn`` module namespace.
+    We add shims so that ``torch.load`` can resolve the classes.
+    """
+    import sys as _sys
+
+    # Shim: esp-detection pickle uses 'nn' as top-level module
+    # which maps to ultralytics.nn (or the esp-detection nn extension)
+    _shims_added = []
+    try:
+        import ultralytics.nn as _unn
+        for mod_name in ["nn", "nn.modules", "nn.modules.conv",
+                         "nn.modules.block", "nn.modules.head",
+                         "nn.modules.transformer", "nn.modules.utils"]:
+            if mod_name not in _sys.modules:
+                # Map nn.X → ultralytics.nn.X
+                ul_name = "ultralytics." + mod_name
+                src = _sys.modules.get(ul_name)
+                if src is not None:
+                    _sys.modules[mod_name] = src
+                    _shims_added.append(mod_name)
+
+        # Shim: esp-detection custom modules (esp_conv, esp_block, esp_head)
+        # Map nn.modules.esp_conv → our espdet_modules.esp_conv, etc.
+        from . import espdet_modules
+        from .espdet_modules import esp_conv, esp_block, esp_head
+        for name, mod in [("nn.modules.esp_conv", esp_conv),
+                          ("nn.modules.esp_block", esp_block),
+                          ("nn.modules.esp_head", esp_head)]:
+            if name not in _sys.modules:
+                _sys.modules[name] = mod
+                _shims_added.append(name)
+    except ImportError:
+        pass
+
+    try:
+        checkpoint = torch.load(pt_path, map_location="cpu", weights_only=False)
+    finally:
+        # Clean up shims to avoid polluting sys.modules
+        for mod_name in _shims_added:
+            _sys.modules.pop(mod_name, None)
+
+    if isinstance(checkpoint, dict) and "model" in checkpoint:
+        model_obj = checkpoint["model"]
+        if hasattr(model_obj, "state_dict"):
+            state = model_obj.float().state_dict()
+        elif isinstance(model_obj, dict):
+            state = model_obj
+        else:
+            state = model_obj
+    elif hasattr(checkpoint, "state_dict"):
+        state = checkpoint.state_dict()
+    elif isinstance(checkpoint, dict):
+        state = checkpoint
+    else:
+        raise ValueError(f"Cannot extract state_dict from {pt_path}")
+
+    return state
 
 
 def build_espdet_pico(
     num_classes: int = 5,
-    width_mult: float = 0.5,
-    reg_max: int = 1,
     pretrained_weights: Optional[str] = None,
     device: str = "cpu",
 ) -> ESPDetPico:
-    """Build an ESPDet-Pico model."""
-    model = ESPDetPico(num_classes, width_mult, reg_max)
-    if pretrained_weights:
-        state = torch.load(pretrained_weights, map_location="cpu", weights_only=True)
-        model.load_state_dict(state, strict=False)
-        log(f"✅ Pesos pre-entrenados cargados: {pretrained_weights}")
+    """Build an ESPDet-Pico model with official Espressif architecture.
+
+    Args:
+        num_classes: Number of detection classes (default 5 for IODC).
+        pretrained_weights: Path to Ultralytics .pt file (e.g. cat detection
+            checkpoint from esp-detection repo).  Loaded with strict=False;
+            only the final cls Conv2d layers won't match if nc differs.
+        device: Target device.
+
+    Returns:
+        ESPDetPico model on the requested device.
+    """
+    model = ESPDetPico(nc=num_classes)
+
+    if pretrained_weights and pretrained_weights.lower() not in ("none", "null", ""):
+        log(f"🔄 Cargando pesos pretrained: {pretrained_weights}")
+        raw_state = _load_ultralytics_espdet_pt(pretrained_weights)
+        converted, matched, unmatched = _convert_ultralytics_espdet_weights(
+            raw_state, model
+        )
+
+        # Filter out shape-mismatched params (e.g. nc=1 → nc=5 in cls head).
+        # strict=False only skips missing/unexpected keys, NOT size mismatches.
+        model_state = model.state_dict()
+        skipped_shape = []
+        filtered = {}
+        for k, v in converted.items():
+            if k in model_state and model_state[k].shape != v.shape:
+                skipped_shape.append(k)
+            else:
+                filtered[k] = v
+
+        load_info = model.load_state_dict(filtered, strict=False)
+        n_loaded = len(filtered) - len(load_info.unexpected_keys)
+        n_total = sum(1 for _ in model.named_parameters())
+        log(f"  ✅ Transfer learning: {n_loaded} param groups cargados")
+        if skipped_shape:
+            log(f"  ℹ️  Shape mismatch (random init): {skipped_shape}")
+        if load_info.missing_keys:
+            log(f"  ℹ️  Missing keys (random init): {load_info.missing_keys[:10]}")
+        if load_info.unexpected_keys:
+            log(f"  ⚠️  Unexpected keys (ignored): {load_info.unexpected_keys[:10]}")
+        if unmatched:
+            log(f"  ℹ️  Ultralytics keys sin mapping ({len(unmatched)}): "
+                f"{unmatched[:5]}")
+    else:
+        log("ℹ️  Sin pesos pretrained — inicialización aleatoria")
+
     model = model.to(device)
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    log(f"✅ ESPDet-Pico construido: {total:,} params ({trainable:,} trainable)")
-    log(f"   Width mult: {width_mult} | reg_max: {reg_max} | Classes: {num_classes}")
+    log(f"✅ ESPDet-Pico (oficial) construido: {total:,} params "
+        f"({trainable:,} trainable)")
+    log(f"   Strides: [8, 16, 32] | Classes: {num_classes}")
     return model
 
 
@@ -371,8 +594,10 @@ def freeze_backbone(model: nn.Module, family: str) -> int:
                 param.requires_grad = False
                 frozen += param.numel()
     elif family == "ESPDet":
+        # Backbone = layers 0-10 in the official ESPDet-Pico topology
+        backbone_prefixes = tuple(f"layer{i}." for i in range(11))
         for name, param in model.named_parameters():
-            if "backbone" in name:
+            if name.startswith(backbone_prefixes):
                 param.requires_grad = False
                 frozen += param.numel()
 

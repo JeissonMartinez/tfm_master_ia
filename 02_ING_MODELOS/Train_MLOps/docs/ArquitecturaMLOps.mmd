@@ -1,0 +1,74 @@
+graph TB
+    %% --- 1. DEFINICIÓN DE ESTILOS ---
+    classDef local fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#01579b;
+    classDef gcp_storage fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#e65100;
+    classDef gcp_compute fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#4a148c;
+    classDef process fill:#ffffff,stroke:#666,stroke-width:1px,stroke-dasharray: 5 5;
+
+    %% --- 2. ESTRUCTURA (SUBGRAFOS Y NODOS) ---
+    
+    subgraph SG_LOCAL ["Entorno Local / Estación de Trabajo"]
+        LocalData["Dataset IODC (YOLO format)"]
+        LaunchScript["Orquestador<br/>(launch_job.py / build_and_launch.sh)"]
+    end
+
+    subgraph SG_GCS_IN ["Google Cloud Storage (Bucket de Datos/Configs)"]
+        GCS_Input_Bucket[("gs://...-tfm-data/")]
+        subgraph SG_CONTENT_IN ["Contenido Input"]
+            InputZip["Datasets (iodc_yolo.zip)"]
+            InputCfg["Configs (*.yaml)"]
+            InputCode["Source Pkg (tfm_trainer-2.0.0.tar.gz)"]
+        end
+    end
+
+    subgraph SG_VERTEX ["Google Cloud Vertex AI (MLOps)"]
+        CustomJob["Custom Training Job (T4 GPU)"]
+
+        subgraph SG_EXEC ["Entorno de Ejecución (Container)"]
+            BaseImage["Base Image:<br/>pytorch-gpu.2-4.py310"]
+            InstalledPkg["App Install:<br/>tfm-trainer-2.0.0"]
+        end
+
+        subgraph SG_PIPELINE ["Pipeline de Entrenamiento Interno"]
+            direction LR
+            P1["1. Setup"] --> P2["2. Verify"]
+            P2 --> P3["3. Build"]
+            P3 --> P4["4. Train"]
+            P4 --> P5["5. Curves"]
+            P5 --> P6["6. Val"]
+            P6 --> P7["7. Test"]
+            P7 --> P8["8. Save"]
+        end
+    end
+
+    subgraph SG_GCS_OUT ["Google Cloud Storage (Bucket de Artefactos)"]
+        GCS_Output_Bucket[("gs://...-tfm-data/output/")]
+        subgraph SG_CONTENT_OUT ["Contenido Output"]
+            OutModel["Model Weights"]
+            OutExport["Exported Model"]
+            OutMetrics["Metrics"]
+            OutViz["Visualizations"]
+        end
+    end
+
+    %% --- 3. RELACIONES (FLECHAS) ---
+    LocalData -- "gsutil cp" --> GCS_Input_Bucket
+    LaunchScript -- "Vertex AI SDK" --> CustomJob
+    GCS_Input_Bucket -.-> SG_CONTENT_IN
+    SG_CONTENT_IN -- "Descarga" --> P1
+    BaseImage --> InstalledPkg
+    InstalledPkg -.-> P3
+    P8 -- "Upload" --> GCS_Output_Bucket
+    GCS_Output_Bucket -.-> SG_CONTENT_OUT
+
+    %% --- 4. ASIGNACIÓN DE ESTILOS (CLASES) ---
+    %% Nodos individuales
+    class LocalData,LaunchScript local
+    class GCS_Input_Bucket,GCS_Output_Bucket gcp_storage
+    class CustomJob gcp_compute
+    
+    %% Subgrafos
+    class SG_LOCAL local
+    class SG_GCS_IN,SG_GCS_OUT gcp_storage
+    class SG_VERTEX gcp_compute
+    class SG_CONTENT_IN,SG_CONTENT_OUT,SG_EXEC,SG_PIPELINE process

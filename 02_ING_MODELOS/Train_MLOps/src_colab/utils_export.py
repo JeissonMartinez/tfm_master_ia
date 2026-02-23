@@ -93,6 +93,11 @@ def export_pytorch_to_onnx(
     with torch.no_grad():
         sample_out = model(dummy)
 
+    # Check if model supports esp-ppq interleaved ONNX export
+    # ESPDetPico exposes set_export_mode() which switches forward()
+    # to return interleaved (box0, score0, box1, score1, ...) tuples.
+    has_espdet_export = hasattr(model, "set_export_mode")
+
     # Build dynamic axes
     dynamic_axes = {}
     if dynamic_batch:
@@ -100,7 +105,22 @@ def export_pytorch_to_onnx(
 
     # Generate output names
     output_names = []
-    if isinstance(sample_out, dict):
+    if has_espdet_export:
+        # ESPDet interleaved format: (box0, score0, box1, score1, box2, score2)
+        # for esp-ppq / ESPDetPostProcessor compatibility
+        model.set_export_mode(True)
+        with torch.no_grad():
+            espdet_out = model(dummy)
+        model.set_export_mode(False)
+        n_levels = len(espdet_out) // 2
+        for i in range(n_levels):
+            box_name = f"box{i}"
+            score_name = f"score{i}"
+            output_names.extend([box_name, score_name])
+            if dynamic_batch:
+                dynamic_axes[box_name] = {0: "batch"}
+                dynamic_axes[score_name] = {0: "batch"}
+    elif isinstance(sample_out, dict):
         for key in ["cls", "reg", "centerness"]:
             if key in sample_out:
                 for i, t in enumerate(sample_out[key]):
@@ -125,11 +145,17 @@ def export_pytorch_to_onnx(
 
     # Flatten dict output for tracing
     class _Wrapper(torch.nn.Module):
-        def __init__(self, m):
+        def __init__(self, m, use_export_mode: bool = False):
             super().__init__()
             self.m = m
+            self.use_export_mode = use_export_mode
 
         def forward(self, x):
+            if self.use_export_mode and hasattr(self.m, "set_export_mode"):
+                self.m.set_export_mode(True)
+                out = self.m(x)
+                self.m.set_export_mode(False)
+                return out
             out = self.m(x)
             if isinstance(out, dict):
                 flat = []
@@ -140,7 +166,7 @@ def export_pytorch_to_onnx(
                 return tuple(flat)
             return out
 
-    wrapper = _Wrapper(model)
+    wrapper = _Wrapper(model, use_export_mode=has_espdet_export)
     wrapper.eval()
 
     torch.onnx.export(

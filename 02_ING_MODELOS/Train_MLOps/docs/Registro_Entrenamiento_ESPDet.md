@@ -1,14 +1,15 @@
 # Registro de Entrenamiento — ESPDet-Pico (Custom PyTorch Loop)
 
 > **Modelo**: `espdet_pico` — ESPDet-Pico anchor-free micro-detector  
-> **Parámetros**: ~22.8K (FP32: 0.09 MB | INT8 est.: 0.02 MB)  
+> **Arquitectura v1 (Train 1)**: Custom simplificada — ~22.8K params (0.09 MB)  
+> **Arquitectura v2 (Train 2+)**: Oficial Espressif — ~0.36M params (1.5 MB est.)  
 > **Dataset**: IODC YOLO — 5 clases (dog, door, obstacle, person, stair)  
 > **Splits**: Train 1470 | Val 188 | Test 187  
 > **Infraestructura**: Google Vertex AI Custom Job — `n1-standard-8` + NVIDIA Tesla T4  
 > **Contenedor**: `us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest`  
 > **Entry-point**: `trainer.task_espdet`  
-> **Paquete base**: `tfm_trainer-2.5.0.tar.gz`  
-> **Última actualización**: 23 de febrero de 2026 (Train 1 completado)  
+> **Paquete base**: `tfm_trainer-2.6.0.tar.gz`  
+> **Última actualización**: 23 de febrero de 2026 (v2.6.0 — arquitectura oficial)  
 
 ---
 
@@ -47,42 +48,45 @@
 
 Parámetros comunes a todos los entrenamientos de esta serie, salvo modificación explícita.
 
-### 2.1 Arquitectura
+> **⚠️ NOTA IMPORTANTE**: La configuración base cambió radicalmente entre Train 1 (v1, custom) y Train 2+ (v2, oficial). La sección §2 refleja la configuración **v2 vigente**. Para la configuración v1 usada en Train 1, ver §3.2.
+
+### 2.1 Arquitectura (v2 — Official Espressif)
 
 | Parámetro | Valor |
 |---|---|
-| Familia | ESPDet (Custom PyTorch) |
+| Familia | ESPDet (Custom PyTorch Loop) |
 | Variante | espdet_pico |
-| Backbone | ESPDetPicoBackbone (3 stages, DepthwiseSeparableConv) |
-| width_mult | 0.5 |
-| Backbone channels | Base [16, 32, 64] × 0.5 → **[8, 16, 32]** |
-| FPN | SimpleFPN (fpn_ch=ch_list[0]=**8**) |
-| Head | 2× DSConv por nivel → cls_out (nc) + reg_out (4 × reg_max) |
-| Niveles FPN | 3 (strides [4, 8, 16]) |
+| Arquitectura | **Oficial Espressif** (`espressif/esp-detection`, AGPL-3.0) |
+| Scale | `n` = [depth=0.50, width=0.25, max_ch=512] |
+| Backbone | 11 layers: Conv→DSConv→ESPBlockLite→DSConv→DSC3k2→SCDown→DSC3k2(c3k)→SCDown→DSC3k2(c3k)→SPPF→DSConv(k=7) |
+| Neck | Top-down: Upsample→Concat→ESPBlock (×2). Bottom-up: DSConv(s=2)→Concat→ESPBlock (×2) |
+| Head | ESPDetectHead: cv2 (box) DSConv→DSConv→Conv2d(4). cv3 (cls) [DWConv+Conv]²→Conv2d(nc) |
+| Niveles FPN | 3 (strides **[8, 16, 32]** — P3/P4/P5) |
+| P3 channels | 32 |
+| P4 channels | 128 |
+| P5 channels | 128 |
 | reg_max | 1 |
-| Params totales | **22,839** (~0.023M) |
-| Backbone params | 10,592 (46.4%) |
-| Head params | 12,247 (53.6%) |
-| Pretrained | **None** (entrenamiento desde cero) |
+| Params totales | **~360K** (~0.36M) |
+| Pretrained | **`espdet_pico_224_224_cat.pt`** (cat-detection, nc=1, ~99.97% transferred) |
 | Input size (export) | 224 |
 | ONNX opset | 13 |
+| ONNX format | Interleaved: (box0, score0, box1, score1, box2, score2) |
 | Clases | 5 (dog, door, obstacle, person, stair) |
 
-> **Contexto de escala**: ESPDet-Pico tiene **54× menos** parámetros que FCOS (1.23M) y **113× menos** que YOLO26 (2.58M). Diseñado para despliegue ultra-eficiente en ESP32-S3 (8 MB PSRAM).
+> **Cambio vs v1**: La arquitectura pasó de custom (DepthwiseSeparableConv + SimpleFPN, 22.8K params, strides [4,8,16]) a la **implementación oficial** del repo Espressif (0.36M params, strides [8,16,32]). El cambio fue necesario tras el fracaso de Train 1 (mAP@50=0.01) y la incompatibilidad detectada con los pesos pretrained.
 
-### 2.2 Estrategia de 2 Fases
+### 2.2 Estrategia de 2 Fases (v2)
 
 | Parámetro | Phase 1 (Freeze) | Phase 2 (Full) |
 |---|---|---|
-| Epochs | 40 | 80 |
-| LR | 1e-3 | 5e-5 |
+| Epochs | 50 | 100 |
+| LR | 1e-3 | 1e-4 |
 | Weight Decay | 1e-4 | 1e-5 |
 | Optimizer | AdamW | AdamW |
 | Scheduler | Cosine | Cosine |
-| Warmup | 3 epochs | 0 |
-| Params trainable | 12,247 (53.6%) | 22,839 (100%) |
+| Frozen | Backbone (layers 0-10) | Nada |
 
-**Total: 120 epochs (40 + 80), patience=20**
+**Total: 150 epochs (50 + 100), patience=25**
 
 ### 2.3 Optimización
 
@@ -94,14 +98,13 @@ Parámetros comunes a todos los entrenamientos de esta serie, salvo modificació
 | Batch size | 32 |
 | Workers | 4 |
 
-### 2.4 Redimensionado Progresivo
+### 2.4 Redimensionado (v2)
 
 | Epoch | Resolución | Fase |
 |---|---|---|
-| 0 | 640 | Phase 1 |
-| 15 | 416 | Phase 1 |
-| 30 | 320 | Phase 1 |
-| 40+ | 224 | Phase 2 |
+| 0-149 | 224 (fijo) | Phase 1 + Phase 2 |
+
+> **Cambio vs v1**: Eliminado progressive resizing (640→416→320→224). Match con pretrained resolution.
 
 ### 2.5 Loss
 
@@ -116,13 +119,13 @@ Parámetros comunes a todos los entrenamientos de esta serie, salvo modificació
 
 | Transform | Parámetro efectivo | Controlado por |
 |---|---|---|
-| HorizontalFlip | p=0.5 | `_ESPDET_DEFAULTS` (`aug_hflip_prob`) |
-| BrightnessContrast | limit=0.2, p=0.5 | `_ESPDET_DEFAULTS` (`aug_brightness_limit`) |
-| HueSaturationValue | H=20, S=30, V=20, p=0.5 | `_ESPDET_DEFAULTS` |
-| Affine (rotate/scale/shift) | ±15°, scale=0.2, shift=0.1, p=0.5 | `_ESPDET_DEFAULTS` (`aug_rotate_limit`) |
-| GaussNoise | std=(0.01, 0.05), p=0.3 | YAML `aug_gaussian_noise: 0.3` |
+| HorizontalFlip | p=0.5 | YAML `aug_hflip_prob: 0.5` |
+| BrightnessContrast | brightness=0.3, contrast=0.3, p=0.5 | YAML `aug_brightness_limit: 0.3` + `aug_contrast_limit: 0.3` |
+| HueSaturationValue | H=20, S=30, V=20, p=0.5 | `_ESPDET_DEFAULTS` (hue/sat/val shift) |
+| Affine (rotate/scale/shift) | ±15°, scale=0.2, shift=0.1, p=0.5 | YAML `aug_rotate_limit: 15` + defaults |
+| GaussNoise | std=(0.01, 0.05), p=0.2 | YAML `aug_gaussian_noise: 0.2` |
 
-> ⚠️ **Naming mismatch detectado**: Los keys del YAML (`aug_horizontal_flip`, `aug_brightness_contrast`, `aug_rotation_limit`) NO coinciden con los keys que `IODCDataset._build_transforms()` busca (`aug_hflip_prob`, `aug_brightness_limit`, `aug_rotate_limit`). Los defaults de `_ESPDET_DEFAULTS` proveen los keys correctos, por lo que la augmentación funciona con valores por defecto. Los valores personalizados del YAML son **efectivamente ignorados**. Se recomienda alinear nomenclatura para Train 2+.
+> ✅ **Naming mismatch corregido** (v2.6.0): Los keys del YAML v2 ahora coinciden con los que `IODCDataset._build_transforms()` busca (`aug_hflip_prob`, `aug_brightness_limit`, `aug_contrast_limit`, `aug_rotate_limit`, `aug_gaussian_noise`). Los valores personalizados del YAML se aplican correctamente.
 
 ### 2.7 Inferencia / Evaluación
 
@@ -135,16 +138,23 @@ Parámetros comunes a todos los entrenamientos de esta serie, salvo modificació
 
 | Lección | Aplicación en ESPDet |
 |---|---|
-| FCOS T6 — pip cache | Version bump a `tfm_trainer-2.5.0` ✅ |
+| FCOS T6 — pip cache | Version bump a `tfm_trainer-2.6.0` ✅ |
 | FCOS T7/T8 — whitelist config_loader | Ya corregido en v2.2.0 (todas las claves YAML pasan) ✅ |
 | FCOS T8 — launch_job hardcoded | `build_and_launch.sh` pasa `--package-uri` dinámico ✅ |
-| FCOS T8 — DEPLOY VERIFICATION | Bloque de verificación en Bloque 3 (`v2.5.0`) ✅ |
+| FCOS T8 — DEPLOY VERIFICATION | Bloque de verificación en Bloque 3 (`v2.6.0`) ✅ |
 | FCOS T8 — `log()` vs `print()` | Entry-point usa exclusivamente `print()` ✅ |
 | Bug nuevo — aug_config missing | Fix en v2.5.0: `aug_config` se extrae de fc y se pasa a IODCDataset ✅ |
+| T1 lección — arquitectura custom | v2.6.0: Reimplementación con arquitectura oficial Espressif ✅ |
+| T1 lección — sin pretrained | v2.6.0: Transfer learning desde `espdet_pico_224_224_cat.pt` ✅ |
+| T1 lección — strides incorrectos | v2.6.0: Strides [8,16,32] (oficial) en vez de [4,8,16] ✅ |
 
 ---
 
-## 3. Train 1 — Baseline
+## 3. Train 1 — Baseline (⚠️ Arquitectura Custom v1 — OBSOLETA)
+
+> **NOTA**: Train 1 usó la **arquitectura custom simplificada** (v1), no la oficial Espressif.  
+> Resultados no son comparables con Train 2+ (arquitectura oficial v2).  
+> Causa raíz del fracaso: 22.8K params insuficientes + sin transfer learning + strides [4,8,16] incorrectos.
 
 ### 3.1 Identificador
 
@@ -338,7 +348,7 @@ Bug fix de `aug_config` confirmado: 16 aug keys presentes (vs 0 sin el fix).
 | **Sin pretraining** | ALTA | YOLO26 arranca con COCO pretrained (mAP50=0.75); ESPDet arranca de cero |
 | **BCE sin Focal Loss** | MEDIA | Masivo desbalance background/foreground no mitigado |
 | **Progressive resizing innecesario** | MEDIA | 640px con canales de 8: feature maps inútilmente grandes; spike en epoch 40 pierde 17 epochs |
-| **Naming mismatch aug** | BAJA | YAML aug values ignorados, pero defaults razonables aplican |
+| **Naming mismatch aug** | BAJA | ✅ Corregido v2.6.0 — YAML keys alineados con `_build_transforms()` |
 
 #### Training dynamics
 
@@ -362,7 +372,7 @@ Bug fix de `aug_config` confirmado: 16 aug keys presentes (vs 0 sin el fix).
 
 2. **DEPLOY VERIFICATION funcionó correctamente** — Confirmó paquete v2.5.0, todos los parámetros correctos, y el fix de aug_config. Primera vez que un modelo ESPDet se lanza sin bugs de despliegue.
 
-3. **Bug de aug_config corregido, pero naming mismatch preexiste** — `aug_config` se pasa correctamente al dataset (fix v2.5.0), pero los keys del YAML no coinciden con los que `IODCDataset._build_transforms()` busca. Funciona por casualidad (defaults proveen los keys correctos con valores razonables).
+3. **Bug de aug_config corregido, y naming mismatch resuelto** — `aug_config` se pasa correctamente al dataset (fix v2.5.0). En v2.6.0, los keys del YAML v2 (`aug_hflip_prob`, `aug_brightness_limit`, etc.) coinciden con los que `IODCDataset._build_transforms()` busca. Los valores personalizados del YAML ahora se aplican correctamente.
 
 4. **Progressive resizing es contraproducente para este modelo** — El spike de epoch 40 y la recuperación lenta sugieren que este modelo micro no maneja bien los cambios de resolución. Entrenar directamente a 224px simplificaría el proceso.
 
@@ -389,9 +399,9 @@ Bug fix de `aug_config` confirmado: 16 aug keys presentes (vs 0 sin el fix).
 
 - **`fpn_channels: 32`**: YAML lo define pero `build_espdet_pico()` no acepta el parámetro. FPN usa `ch_list[0]=8` del backbone.
 - **`num_head_convs: 2`**: YAML lo define pero no se pasa al constructor.
-- **`aug_horizontal_flip`, `aug_brightness_contrast`, `aug_rotation_limit`**: YAML keys no coinciden con los que `IODCDataset` busca (`aug_hflip_prob`, `aug_brightness_limit`, `aug_rotate_limit`). Defaults cubren los keys correctos.
-- **Impacto**: Ninguno en T1 (defaults son razonables), pero impide personalización vía YAML.
-- **Acción recomendada**: Refactorizar para T2+ si se necesita control granular de augmentación y parámetros de FPN/Head.
+- **`aug_horizontal_flip`, `aug_brightness_contrast`, `aug_rotation_limit`**: YAML keys no coincidían con los que `IODCDataset` busca (`aug_hflip_prob`, `aug_brightness_limit`, `aug_rotate_limit`). Defaults cubrían los keys correctos.
+- **Impacto**: Ninguno en T1 (defaults son razonables), pero impedía personalización vía YAML.
+- **Acción**: ✅ Corregido en v2.6.0 — YAML v2 usa keys alineados.
 
 ### Train 1 — Warnings benignos (sin impacto)
 
@@ -403,85 +413,46 @@ Bug fix de `aug_config` confirmado: 16 aug keys presentes (vs 0 sin el fix).
 
 ## 4. Backlog de Propuestas
 
-> Propuestas identificadas durante el análisis de Train 1, priorizadas por impacto esperado.
+> Propuestas identificadas durante el análisis de Train 1. **Actualizadas tras reimplementación v2.6.0.**
 
-### PROPUESTA A — Aumento de Capacidad (CRÍTICA, Train 2)
+### ✅ PROPUESTA EJECUTADA — Reimplementación Arquitectura Oficial (v2.6.0)
 
-**Objetivo**: Salir de la crisis de capacidad. 22.8K params → mínimo ~90K-360K.
+**Objetivos cumplidos**: Reemplazar arquitectura custom (22.8K params) por oficial Espressif (0.36M params).
 
-| Parámetro | Train 1 (v1) | Propuesto | Efecto estimado |
+| Aspecto | Train 1 (v1) | Train 2 (v2) | Estado |
 |---|---|---|---|
-| `width_mult` | 0.5 | **2.0** | ~365K params (16×). Canales backbone [32, 64, 128], FPN=32 |
-| `pretrained_weights` | None | **None** (mantener) | Baseline sin pretrain, comparar después |
+| Arquitectura | Custom (DepthwiseSeparable + SimpleFPN) | **Oficial Espressif** (DSConv, DSC3k2, ESPBlock, ESPDetectHead) | ✅ |
+| Params | 22,839 | **~360,000** (16×) | ✅ |
+| Strides | [4, 8, 16] | **[8, 16, 32]** (oficial) | ✅ |
+| Pretrained | None | **espdet_pico_224_224_cat.pt** (~99.97% transferred) | ✅ |
+| Resize | Progressive 640→224 | **Fijo 224** | ✅ |
+| Phase 1 | 40 ep | **50 ep** | ✅ |
+| Phase 2 | 80 ep, lr=5e-5 | **100 ep, lr=1e-4** | ✅ |
+| Patience | 20 | **25** | ✅ |
+| ONNX format | Grouped (cls0,cls1,cls2,reg0,...) | **Interleaved (box0,score0,box1,score1,box2,score2)** | ✅ |
+| Paquete | tfm_trainer-2.5.0 | **tfm_trainer-2.6.0** | ✅ |
 
-**Alternativa conservadora**: `width_mult=1.0` (~91K params, 4×). Canales backbone [16, 32, 64], FPN=16.
+> Esta propuesta unificada subsume las Propuestas A (capacidad), B (224px fijo), y D (más epochs) del backlog original.
 
-**Justificación**: El cls_loss final (3.05) está apenas un 12% por debajo de random (3.47). El modelo no tiene suficiente capacidad representativa. Multiplicar canales por 4× es el cambio de mayor impacto posible.
+### PROPUESTA C — Reducir conf_threshold evaluación
 
-**Riesgo**: Con 365K params FP32 (0.35 MB), el modelo sigue siendo extremadamente pequeño para ESP32-S3. ONNX estimado ~0.5 MB INT8.
-
-### PROPUESTA B — Entrenar directamente a 224px (Train 2)
-
-**Objetivo**: Eliminar el spike de resolución y epochs desperdiciados en recuperación.
-
-| Parámetro | Train 1 (v1) | Propuesto | Justificación |
-|---|---|---|---|
-| `resize_schedule` | {0:640, 15:416, 30:320, 40:224} | **{0: 224}** | Evitar spike P2; 21% de Phase 2 perdido en recuperación |
-
-**Justificación**: El modelo target funciona a 224px. Con canales tan pequeños, feature maps a 640px no aportan información útil (stride-16 feature map = 40×40 con solo 32 canales en el mejor caso). Entrenar siempre a 224px genera features consistentes con el target.
-
-### PROPUESTA C — Reducir conf_threshold evaluación (Train 2)
-
-**Objetivo**: Evaluar el modelo con un umbral más permisivo para entender mejor su capacidad real.
-
-| Parámetro | Train 1 (v1) | Propuesto | Justificación |
-|---|---|---|---|
-| `conf_threshold` | 0.25 | **0.10** | 107K detecciones @0.25 indica que sigmoid outputs son muy altos. Pero las pocas detecciones correctas podrían estar en el rango 0.10-0.25 |
-
-### PROPUESTA D — Más epochs y más paciencia (Train 2)
-
-**Objetivo**: Dar más tiempo al modelo para converger.
-
-| Parámetro | Train 1 (v1) | Propuesto | Justificación |
-|---|---|---|---|
-| `phase1_epochs` | 40 | **60** | Más tiempo para la cabeza |
-| `phase2_epochs` | 80 | **120** | Modelo seguía mejorando al final |
-| `patience` | 20 | **30** | Early stopping más tolerante |
+**Estado**: ⏳ Pendiente — evaluar con v2. Si el modelo con 0.36M params produce menos FP spam, puede no ser necesario bajar a 0.10.
 
 ### PROPUESTA E — Focal Loss (Train 3+)
 
-**Objetivo**: Mitigar el desbalance background/foreground extremo.
-
-| Parámetro | Train 1 | Propuesto | Justificación |
-|---|---|---|---|
-| cls_loss | BCE | **Focal Loss (γ=2.0, α=0.25)** | El modelo no suprime background. Focal Loss reduciría la contribución de los fáciles (background) |
-
-**Prerequisito**: Modificar `build_espdet_loss()` para soportar focal_gamma/focal_alpha (similar a `build_fcos_loss()`). Dejar después de confirmar que la Propuesta A resuelve el problema de capacidad.
+**Estado**: ⏳ Pendiente — evaluar después de Train 2 (v2). Si transfer learning resuelve el background suppression, Focal Loss no es necesario.
 
 ### PROPUESTA F — Alinear naming de augmentación (Mejora código)
 
-**Objetivo**: Que las claves YAML controlen realmente la augmentación.
+**Estado**: ✅ **Corregido en v2.6.0** — YAML `espdet_pico_v2.yaml` usa keys alineados con `_build_transforms()` (`aug_hflip_prob`, `aug_brightness_limit`, `aug_contrast_limit`, `aug_rotate_limit`, `aug_gaussian_noise`). Eliminados keys muertos (`aug_horizontal_flip`, `aug_brightness_contrast`, `aug_rotation_limit`, `aug_hue_sat_val`, `aug_random_gamma`, `aug_clahe`).
 
-- Opción 1: Renombrar claves en YAML para que coincidan con `IODCDataset` (`aug_hflip_prob`, `aug_rotate_limit`, etc.)
-- Opción 2: Añadir mapeo en `task_espdet.py` que traduzca `aug_horizontal_flip` → `aug_hflip_prob`
-- Opción 3: Modificar `IODCDataset._build_transforms()` para aceptar ambos nombres
+### Planificación Actualizada
 
-### PROPUESTA G — fpn_channels y num_head_convs como parámetros reales
-
-**Objetivo**: Que `build_espdet_pico()` acepte `fpn_channels` y `num_head_convs` desde el YAML.
-
-**Justificación**: YAML ya define `fpn_channels: 32` pero el code lo ignora. Permitir esto daría más flexibilidad para experimentar con configuraciones de FPN sin cambiar código.
-
-### Planificación
-
-| Train | Propuestas | Prioridad | Estado |
+| Train | Config | Cambios | Estado |
 |---|---|---|---|
-| Train 1 | Baseline (ninguna) | — | ✅ Completado |
-| Train 2 | **A** (width_mult=2.0) + **B** (224px fijo) + **C** (conf=0.10) + **D** (más epochs) | CRÍTICA | ⏳ Pendiente |
-| Train 3 | A+B+C+D + **E** (Focal Loss, si aún necesario) | MEDIA | ⏳ Pendiente |
-| Train N | **F** + **G** (mejoras código, no entrenan por sí solas) | BAJA | ⏳ Pendiente |
-
-> La Propuesta A es la intervención individual más importante. Sin capacidad suficiente, ninguna otra mejora producirá resultados significativos.
+| Train 1 | espdet_pico_v1.yaml | Baseline (arq. custom, sin pretrained) | ✅ Completado (FRACASO) |
+| Train 2 | **espdet_pico_v2.yaml** | **Arq. oficial + transfer learning + strides oficiales** | ⏳ Preparado |
+| Train 3 | espdet_pico_v3.yaml | Focal Loss (si necesario post-T2) | ⏳ Pendiente |
 
 ---
 
@@ -511,17 +482,17 @@ El factor limitante es exclusivamente la **capacidad del modelo** (22.8K params)
 
 ## 6. Conclusiones Generales
 
-1. **Train 1 establece un baseline técnicamente correcto pero funcionalmente inviable** — El pipeline completo (paquete, despliegue, entrenamiento, evaluación, exportación ONNX) funciona sin errores. El DEPLOY VERIFICATION confirma que todas las lecciones de FCOS/YOLO26 fueron aplicadas. El problema es exclusivamente de capacidad del modelo.
+1. **Train 1 usó una arquitectura custom incorrecta** — La implementación original (22.8K params con DepthwiseSeparableConv + SimpleFPN) NO correspondía a la arquitectura oficial Espressif. Esto causó: capacidad insuficiente (16× menos params que el diseño oficial), incompatibilidad total con pesos pretrained, y strides incorrectos [4,8,16] vs [8,16,32].
 
-2. **22.8K parámetros es el piso absoluto verificado empíricamente** — Con width_mult=0.5, el modelo no puede distinguir 5 clases de objetos. cls_loss apenas supera la clasificación aleatoria (3.05 vs 3.47). Este dato es útil como cota inferior para el TFM.
+2. **v2.6.0 reimplementa la arquitectura oficial** — Se importaron los bloques reales del repo `espressif/esp-detection` (DSConv, DSC3k2, ESPBlock, ESPBlockLite, ESPDetectHead) y se ensambló la topología exacta del YAML oficial con scale `n`=[0.50, 0.25, 512]. Resultado: 0.36M params, strides [8,16,32].
 
-3. **El micro-tamaño sí se logra** — ONNX de 112 KB, cabe holgadamente en la Flash del ESP32-S3 (16 MB). Latencia de inferencia CPU de 0.76 ms. Si el modelo aprende a detectar, el despliegue en hardware es trivial.
+3. **Transfer learning ahora es posible** — Los pesos `espdet_pico_224_224_cat.pt` (cat-detection, nc=1) transfieren ~99.97% de parámetros al nuevo modelo. Solo las capas finales de clasificación (Conv2d nc=1→5) son random. Esto debería proporcionar features de backbone de altísima calidad desde el inicio.
 
-4. **Acción inmediata: Train 2 con width_mult=2.0** — Aumentar 16× la capacidad (22.8K → ~365K params, ~0.5 MB ONNX) manteniendo el modelo en orden de magnitud menor que FCOS (1.23M). Esto es la Propuesta A y es el cambio más crítico.
+4. **ONNX export compatible con esp-ppq** — El formato interleaved `(box0, score0, box1, score1, box2, score2)` es directamente compatible con ESPDetPostProcessor para la conversión a `.espdl` para el ESP32-S3.
 
-5. **El naming mismatch de augmentación y la dead config (fpn_channels, num_head_convs) son deudas técnicas menores** — No impactaron T1 pero deben resolverse antes de que se necesite personalización granular.
+5. **Pipeline MLOps sigue maduro** — v2.6.0 mantiene todas las protecciones (DEPLOY VERIFICATION, version bump, aug_config fix, print() en entry-point). La reimplementación arquitectónica fue posible sin cambios en el pipeline de entrenamiento (2 fases, progressive resize, loss, evaluación).
 
-6. **Pipeline MLOps maduro** — Cero bugs de despliegue en T1 (vs 4 bugs en los primeros 8 trains de FCOS). Las lecciones acumuladas (version bump, DEPLOY VERIFICATION, aug_config fix, print vs log) funcionaron. Tasa de éxito al primer intento: 100%.
+6. **Acción inmediata: Lanzar Train 2 con `espdet_pico_v2.yaml`** — Todo el código y configuración están listos. El entrenamiento debería mostrar mejoras dramáticas sobre Train 1 gracias a: 16× más parámetros, transfer learning, y strides correctos.
 
 ---
 

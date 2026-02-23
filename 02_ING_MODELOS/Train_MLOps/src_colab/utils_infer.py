@@ -217,7 +217,7 @@ def predict_espdet(
     conf_threshold: float = 0.25,
     nms_threshold: float = 0.45,
     class_names: Optional[List[str]] = None,
-    strides: List[int] = [4, 8, 16],
+    strides: List[int] = [8, 16, 32],
 ) -> List[List[DetectedObject]]:
     """Run ESPDet-Pico inference on a batch of images.
 

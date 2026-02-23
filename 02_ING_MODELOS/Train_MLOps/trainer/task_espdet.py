@@ -37,7 +37,7 @@ import torch
 
 LOCAL_WORK_DIR = "/tmp/training"
 
-ESPDET_STRIDES = [4, 8, 16]
+ESPDET_STRIDES = [8, 16, 32]
 
 
 def encode_espdet_targets(
@@ -278,11 +278,21 @@ def main() -> None:
     )
 
     num_classes = len(setup.class_names)
+
+    # Download pretrained weights from GCS if specified
+    pretrained_local = None
+    pw = fc.get("pretrained_weights")
+    if pw and pw.lower() not in ("none", "null", ""):
+        if pw.startswith("gs://"):
+            pretrained_local = os.path.join(LOCAL_WORK_DIR, "pretrained_weights.pt")
+            print(f"⬇️  Descargando pesos pretrained: {pw}")
+            download_from_gcs(pw, pretrained_local)
+        else:
+            pretrained_local = pw  # local path
+
     model = build_espdet_pico(
         num_classes=num_classes,
-        width_mult=fc.get("width_mult", 0.5),
-        reg_max=fc.get("reg_max", 1),
-        pretrained_weights=fc.get("pretrained_weights"),
+        pretrained_weights=pretrained_local,
     ).to(device)
 
     freeze_backbone(model, "ESPDet")
@@ -292,9 +302,9 @@ def main() -> None:
     logger.log_params({"model_size_mb": size_info['float32_mb'], **ESPDET_SPECS})
 
     # ── DEPLOY VERIFICATION (lección FCOS T8) ──
-    print("\n🎯 DEPLOY VERIFICATION — ESPDet-Pico v2.5.0")
-    print(f"  width_mult:      {fc.get('width_mult', 0.5)}")
-    print(f"  reg_max:         {fc.get('reg_max', 1)}")
+    print("\n🎯 DEPLOY VERIFICATION — ESPDet-Pico v2.6.0 (Official Architecture)")
+    print(f"  Architecture:    Official Espressif (esp-detection repo)")
+    print(f"  Strides:         [8, 16, 32]")
     print(f"  pretrained:      {fc.get('pretrained_weights', None)}")
     print(f"  Phase 1:         {fc.get('phase1_epochs', 40)} ep, "
           f"LR={fc.get('phase1_lr', 1e-3)}, "
@@ -454,7 +464,7 @@ def main() -> None:
         model.load_state_dict(torch.load(best_ckpt, map_location=device, weights_only=True))
         print(f"✅ Cargado mejor checkpoint: {best_ckpt}")
 
-    strides = fc.get("strides", [4, 8, 16])
+    strides = fc.get("strides", [8, 16, 32])
 
     def espdet_predict_fn(model_ref, images_tensor, conf_threshold=None):
         return predict_espdet(model_ref, images_tensor,
