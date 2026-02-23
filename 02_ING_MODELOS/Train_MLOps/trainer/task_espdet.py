@@ -291,6 +291,30 @@ def main() -> None:
     print(f"📐 Tamaño estimado: {size_info['float32_mb']:.2f} MB (FP32), {size_info['int8_mb']:.2f} MB (INT8)")
     logger.log_params({"model_size_mb": size_info['float32_mb'], **ESPDET_SPECS})
 
+    # ── DEPLOY VERIFICATION (lección FCOS T8) ──
+    print("\n🎯 DEPLOY VERIFICATION — ESPDet-Pico v2.5.0")
+    print(f"  width_mult:      {fc.get('width_mult', 0.5)}")
+    print(f"  reg_max:         {fc.get('reg_max', 1)}")
+    print(f"  pretrained:      {fc.get('pretrained_weights', None)}")
+    print(f"  Phase 1:         {fc.get('phase1_epochs', 40)} ep, "
+          f"LR={fc.get('phase1_lr', 1e-3)}, "
+          f"WD={fc.get('phase1_wd', 1e-4)}")
+    print(f"  Phase 2:         {fc.get('phase2_epochs', 80)} ep, "
+          f"LR={fc.get('phase2_lr', 5e-5)}, "
+          f"WD={fc.get('phase2_wd', 1e-5)}")
+    print(f"  Optimizer:       {fc.get('phase1_optimizer', 'adamw')}")
+    print(f"  cls_weight:      {fc.get('cls_weight', 1.0)}")
+    print(f"  reg_weight:      {fc.get('reg_weight', 2.0)}")
+    print(f"  Conf threshold:  {setup.conf_threshold}")
+    print(f"  IoU threshold:   {setup.iou_threshold}")
+    print(f"  AMP:             {fc.get('amp', True)}")
+    print(f"  Grad clip:       {fc.get('grad_clip', 5.0)}")
+    print(f"  Export imgsz:    {fc.get('export_imgsz', 224)}")
+    print(f"  Batch size:      {fc.get('batch_size', setup.batch_size)}")
+    print(f"  Patience:        {setup.patience}")
+    _aug_keys = [k for k in fc if k.startswith("aug_")]
+    print(f"  Aug keys:        {_aug_keys}")
+
     # ================================================================
     # Bloque 4 — Entrenamiento 2 Fases
     # ================================================================
@@ -305,6 +329,9 @@ def main() -> None:
         build_espdet_loss,
     )
 
+    # Build augmentation config from YAML espdet section
+    aug_config = {k: v for k, v in fc.items() if k.startswith("aug_")}
+
     # Build dataloaders
     initial_size = fc.get("resize_schedule", {0: 640}).get(0, 640) if isinstance(
         fc.get("resize_schedule"), dict
@@ -316,6 +343,7 @@ def main() -> None:
         class_names=setup.class_names,
         img_size=initial_size,
         augment=True,
+        aug_config=aug_config,
     )
     val_ds = IODCDataset(
         dataset_dir=dataset_path,

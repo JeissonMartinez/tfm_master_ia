@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: ESPDet-Pico — v1 (Baseline)
+# ─────────────────────────────────────────────────────────────
+# Custom Job de Vertex AI · Ciclo 2
+# Leído por trainer/config_loader.py → ExperimentSetup
+#
+# ESPDet-Pico: backbone ultra-ligero (~0.36M params)
+# con DepthwiseSeparableConv + SimpleFPN + anchor-free head.
+
+model:
+  family: ESPDet
+  variant: espdet_pico
+  version: v1
+  description: "ESPDet-Pico anchor-free detector optimizado para ESP32-S3"
+
+dataset:
+  name: iodc_yolo
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/iodc_yolo.zip
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 224
+
+common:
+  batch_size: 32
+  patience: 20
+  seed: 42
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+
+espdet:
+  # ── Arquitectura ──────────────────────────────────────────
+  width_mult: 0.5
+  reg_max: 1
+  fpn_channels: 32
+  strides: [4, 8, 16]
+  num_head_convs: 2
+  pretrained_weights: null
+
+  # ── Fase 1 — Backbone congelado ──────────────────────────
+  phase1_epochs: 40
+  phase1_lr: 1.0e-3
+  phase1_wd: 1.0e-4
+  phase1_optimizer: adamw
+  phase1_scheduler: cosine
+
+  # ── Fase 2 — Todo descongelado ───────────────────────────
+  phase2_epochs: 80
+  phase2_lr: 5.0e-5
+  phase2_wd: 1.0e-5
+  phase2_optimizer: adamw
+  phase2_scheduler: cosine
+
+  # ── Redimensionado progresivo ─────────────────────────────
+  resize_schedule:
+    0: 640
+    15: 416
+    30: 320
+    40: 224
+
+  # ── Loss weights ──────────────────────────────────────────
+  cls_weight: 1.0
+  reg_weight: 2.0
+
+  # ── Augmentation (Albumentations — agresivo) ──────────────
+  aug_horizontal_flip: 0.5
+  aug_brightness_contrast: 0.4
+  aug_gaussian_noise: 0.3
+  aug_rotation_limit: 20
+  aug_hue_sat_val: true
+  aug_random_gamma: true
+  aug_clahe: true
+
+  # ── Entrenamiento ─────────────────────────────────────────
+  amp: true
+  grad_clip: 5.0
+  workers: 4
+
+  # ── Export ────────────────────────────────────────────────
+  export_imgsz: 224
+  export_opset: 13

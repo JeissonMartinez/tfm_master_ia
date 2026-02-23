@@ -37,13 +37,19 @@ Changes from v2.3.0:
     - BUG FIX: CSV concatenation in Bloque 4/5 (was using only Phase 1 CSV)
     - BUG FIX: Phase 2 results.csv not uploaded to GCS
     - Train 2 config: MuSGD optimizer (YOLO26 native SGD+Muon hybrid)
+
+Changes from v2.4.0:
+    - ESPDet-Pico training cycle
+    - task_espdet: DEPLOY VERIFICATION block (lesson from FCOS T8)
+    - task_espdet: BUG FIX — aug_config was not passed to IODCDataset
+    - Version bump forces pip cache invalidation on Vertex AI
 """
 
 from setuptools import setup, find_packages
 
 setup(
     name="tfm-trainer",
-    version="2.4.0",
+    version="2.5.0",
     description=(
         "TFM — Entrenamiento de modelos de detección de objetos "
         "para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)"

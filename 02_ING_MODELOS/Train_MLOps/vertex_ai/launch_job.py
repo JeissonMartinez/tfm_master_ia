@@ -45,7 +45,7 @@ CONTAINER_PYTORCH = (
 )
 
 # ── Paquete en GCS (fallback; preferir --package-uri de build_and_launch.sh) ─
-DEFAULT_PACKAGE_GCS_URI = f"{BUCKET_URI}/packages/tfm_trainer-2.4.0.tar.gz"
+DEFAULT_PACKAGE_GCS_URI = f"{BUCKET_URI}/packages/tfm_trainer-2.5.0.tar.gz"
 
 # ── Mapeo familia → módulo Python ────────────────────────────────────
 FAMILY_MAP: dict[str, str] = {
