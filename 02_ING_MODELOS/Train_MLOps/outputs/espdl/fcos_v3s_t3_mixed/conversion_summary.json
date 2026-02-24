@@ -1,0 +1,13 @@
+{
+  "model": "fcos_v3s_t3_mixed",
+  "strategy": "mixed_precision",
+  "fp32_ops": 60,
+  "instancenorm_fp32": 12,
+  "onnx_size_mb": 4.752,
+  "espdl_size_mb": 1.735,
+  "compression_ratio": 2.74,
+  "conversion_time_s": 180.9,
+  "target": "esp32s3",
+  "n_calib_samples": 500,
+  "timestamp": "2026-02-24 11:16:25"
+}

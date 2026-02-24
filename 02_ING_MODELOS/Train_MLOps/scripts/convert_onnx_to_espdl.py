@@ -64,6 +64,14 @@ MODELS = {
         "run_id": "espdet-pico-v4-t4",
         "description": "ESPDet-Pico BCE+NMS tuning — Train 4 (primary ESP32-S3 candidate)",
     },
+    "yolo26n_t2_esp": {
+        "onnx": "outputs/yolo26n_custom_v2-run1/export/best_esp.onnx",
+        "input_shape": [1, 3, 224, 224],  # NCHW
+        "channel_format": "nchw",
+        "family": "YOLO26_ESP",
+        "run_id": "yolo26n_custom_v2-run1",
+        "description": "YOLO26n T2 re-exportado con 6 salidas ESP (box+score separados) — fix cuantización INT8",
+    },
 }
 
 # Salida relativa a Train_MLOps/

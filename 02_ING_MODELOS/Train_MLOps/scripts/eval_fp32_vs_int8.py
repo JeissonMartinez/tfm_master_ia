@@ -81,7 +81,143 @@ MODELS = {
         "nms_threshold": 0.40,
         "label": "ESPDet T4",
     },
+    "yolo26n_t2_esp": {
+        "onnx": str(BASE_DIR / "outputs/yolo26n_custom_v2-run1/export/best_esp.onnx"),
+        "input_name": "images",
+        "input_shape": [1, 3, IMGSZ, IMGSZ],
+        "family": "yolo26_esp",
+        "conf_threshold": 0.25,
+        "nms_threshold": 0.45,
+        "label": "YOLO26 T2 ESP",
+    },
+    "fcos_v3s_t3_mixed": {
+        "onnx": str(BASE_DIR / "outputs/fcos_v3s_v1-1771690809/export/fcos_v3s.onnx"),
+        "input_name": "input",
+        "input_shape": [1, 3, IMGSZ, IMGSZ],
+        "family": "fcos",
+        "conf_threshold": 0.40,
+        "nms_threshold": 0.45,
+        "label": "FCOS T3 Mixed",
+        "mixed_precision": True,
+    },
 }
+
+# ─── Full head + FPN ops to dispatch to FP32 for FCOS mixed-precision ───
+# Strategy: entire detection head + FPN in FP32, backbone stays INT8
+# Rationale: InstanceNorm-only FP32 failed because quantized Conv outputs
+# feeding InstanceNorm already lose precision; the whole head path must be FP32
+FCOS_FP32_OPS = [
+    # ── FPN (10 ops) ──
+    "/m/fpn/lateral_convs.0/Conv",
+    "/m/fpn/lateral_convs.1/Conv",
+    "/m/fpn/lateral_convs.2/Conv",
+    "/m/fpn/Resize",
+    "/m/fpn/Add",
+    "/m/fpn/Resize_1",
+    "/m/fpn/Add_1",
+    "/m/fpn/smooth_convs.0/Conv",
+    "/m/fpn/smooth_convs.1/Conv",
+    "/m/fpn/smooth_convs.2/Conv",
+    # ── Head level 0 (32 ops) ──
+    "/m/head/cls_tower/cls_tower.0/Conv",
+    "/m/head/cls_tower/cls_tower.1/Reshape",
+    "/m/head/cls_tower/cls_tower.1/InstanceNormalization",
+    "/m/head/cls_tower/cls_tower.1/Reshape_1",
+    "/m/head/cls_tower/cls_tower.1/Mul",
+    "/m/head/cls_tower/cls_tower.1/Add",
+    "/m/head/cls_tower/cls_tower.2/Relu",
+    "/m/head/cls_tower/cls_tower.3/Conv",
+    "/m/head/cls_tower/cls_tower.4/Reshape",
+    "/m/head/cls_tower/cls_tower.4/InstanceNormalization",
+    "/m/head/cls_tower/cls_tower.4/Reshape_1",
+    "/m/head/cls_tower/cls_tower.4/Mul",
+    "/m/head/cls_tower/cls_tower.4/Add",
+    "/m/head/cls_tower/cls_tower.5/Relu",
+    "/m/head/reg_tower/reg_tower.0/Conv",
+    "/m/head/reg_tower/reg_tower.1/Reshape",
+    "/m/head/reg_tower/reg_tower.1/InstanceNormalization",
+    "/m/head/reg_tower/reg_tower.1/Reshape_1",
+    "/m/head/reg_tower/reg_tower.1/Mul",
+    "/m/head/reg_tower/reg_tower.1/Add",
+    "/m/head/reg_tower/reg_tower.2/Relu",
+    "/m/head/reg_tower/reg_tower.3/Conv",
+    "/m/head/reg_tower/reg_tower.4/Reshape",
+    "/m/head/reg_tower/reg_tower.4/InstanceNormalization",
+    "/m/head/reg_tower/reg_tower.4/Reshape_1",
+    "/m/head/reg_tower/reg_tower.4/Mul",
+    "/m/head/reg_tower/reg_tower.4/Add",
+    "/m/head/reg_tower/reg_tower.5/Relu",
+    "/m/head/cls_logits/Conv",
+    "/m/head/bbox_pred/Conv",
+    "/m/head/Relu",
+    "/m/head/centerness/Conv",
+    # ── Head level 1 (32 ops) ──
+    "/m/head/cls_tower/cls_tower.0_1/Conv",
+    "/m/head/cls_tower/cls_tower.1_1/Reshape",
+    "/m/head/cls_tower/cls_tower.1_1/InstanceNormalization",
+    "/m/head/cls_tower/cls_tower.1_1/Reshape_1",
+    "/m/head/cls_tower/cls_tower.1_1/Mul",
+    "/m/head/cls_tower/cls_tower.1_1/Add",
+    "/m/head/cls_tower/cls_tower.2_1/Relu",
+    "/m/head/cls_tower/cls_tower.3_1/Conv",
+    "/m/head/cls_tower/cls_tower.4_1/Reshape",
+    "/m/head/cls_tower/cls_tower.4_1/InstanceNormalization",
+    "/m/head/cls_tower/cls_tower.4_1/Reshape_1",
+    "/m/head/cls_tower/cls_tower.4_1/Mul",
+    "/m/head/cls_tower/cls_tower.4_1/Add",
+    "/m/head/cls_tower/cls_tower.5_1/Relu",
+    "/m/head/reg_tower/reg_tower.0_1/Conv",
+    "/m/head/reg_tower/reg_tower.1_1/Reshape",
+    "/m/head/reg_tower/reg_tower.1_1/InstanceNormalization",
+    "/m/head/reg_tower/reg_tower.1_1/Reshape_1",
+    "/m/head/reg_tower/reg_tower.1_1/Mul",
+    "/m/head/reg_tower/reg_tower.1_1/Add",
+    "/m/head/reg_tower/reg_tower.2_1/Relu",
+    "/m/head/reg_tower/reg_tower.3_1/Conv",
+    "/m/head/reg_tower/reg_tower.4_1/Reshape",
+    "/m/head/reg_tower/reg_tower.4_1/InstanceNormalization",
+    "/m/head/reg_tower/reg_tower.4_1/Reshape_1",
+    "/m/head/reg_tower/reg_tower.4_1/Mul",
+    "/m/head/reg_tower/reg_tower.4_1/Add",
+    "/m/head/reg_tower/reg_tower.5_1/Relu",
+    "/m/head/cls_logits_1/Conv",
+    "/m/head/bbox_pred_1/Conv",
+    "/m/head/Relu_1",
+    "/m/head/centerness_1/Conv",
+    # ── Head level 2 (32 ops) ──
+    "/m/head/cls_tower/cls_tower.0_2/Conv",
+    "/m/head/cls_tower/cls_tower.1_2/Reshape",
+    "/m/head/cls_tower/cls_tower.1_2/InstanceNormalization",
+    "/m/head/cls_tower/cls_tower.1_2/Reshape_1",
+    "/m/head/cls_tower/cls_tower.1_2/Mul",
+    "/m/head/cls_tower/cls_tower.1_2/Add",
+    "/m/head/cls_tower/cls_tower.2_2/Relu",
+    "/m/head/cls_tower/cls_tower.3_2/Conv",
+    "/m/head/cls_tower/cls_tower.4_2/Reshape",
+    "/m/head/cls_tower/cls_tower.4_2/InstanceNormalization",
+    "/m/head/cls_tower/cls_tower.4_2/Reshape_1",
+    "/m/head/cls_tower/cls_tower.4_2/Mul",
+    "/m/head/cls_tower/cls_tower.4_2/Add",
+    "/m/head/cls_tower/cls_tower.5_2/Relu",
+    "/m/head/reg_tower/reg_tower.0_2/Conv",
+    "/m/head/reg_tower/reg_tower.1_2/Reshape",
+    "/m/head/reg_tower/reg_tower.1_2/InstanceNormalization",
+    "/m/head/reg_tower/reg_tower.1_2/Reshape_1",
+    "/m/head/reg_tower/reg_tower.1_2/Mul",
+    "/m/head/reg_tower/reg_tower.1_2/Add",
+    "/m/head/reg_tower/reg_tower.2_2/Relu",
+    "/m/head/reg_tower/reg_tower.3_2/Conv",
+    "/m/head/reg_tower/reg_tower.4_2/Reshape",
+    "/m/head/reg_tower/reg_tower.4_2/InstanceNormalization",
+    "/m/head/reg_tower/reg_tower.4_2/Reshape_1",
+    "/m/head/reg_tower/reg_tower.4_2/Mul",
+    "/m/head/reg_tower/reg_tower.4_2/Add",
+    "/m/head/reg_tower/reg_tower.5_2/Relu",
+    "/m/head/cls_logits_2/Conv",
+    "/m/head/bbox_pred_2/Conv",
+    "/m/head/Relu_2",
+    "/m/head/centerness_2/Conv",
+]
 
 
 # =====================================================================
@@ -211,7 +347,7 @@ def quantize_for_evaluation(onnx_path: str, config: dict, calib_data: list):
     Returns:
         (executor, output_names) or (None, None) on failure.
     """
-    from esp_ppq import QuantizationSettingFactory
+    from esp_ppq import QuantizationSettingFactory, TargetPlatform
     from esp_ppq.api import espdl_quantize_onnx
     from esp_ppq.executor import TorchExecutor
 
@@ -224,6 +360,12 @@ def quantize_for_evaluation(onnx_path: str, config: dict, calib_data: list):
     tmp_espdl = str(OUTPUT_DIR / "tmp_eval.espdl")
 
     setting = QuantizationSettingFactory.espdl_setting()
+
+    # Apply mixed-precision dispatching for FCOS
+    if config.get("mixed_precision"):
+        for op_name in FCOS_FP32_OPS:
+            setting.dispatching_table.append(op_name, TargetPlatform.FP32)
+        print(f"    ↳ Mixed-precision: {len(FCOS_FP32_OPS)} ops → FP32")
 
     ppq_graph = espdl_quantize_onnx(
         onnx_import_file=actual_onnx,
@@ -488,6 +630,91 @@ def decode_espdet(
 
 
 # =====================================================================
+#  Decoders — YOLO26 ESP (6 separate outputs, reg_max=16 with DFL)
+# =====================================================================
+
+def _dfl_integral(box_flat: torch.Tensor, reg_max: int) -> torch.Tensor:
+    """Apply DFL (Distribution Focal Loss) integral over raw logits.
+
+    Args:
+        box_flat: [N, reg_max*4] raw logits
+        reg_max: number of bins (16)
+    Returns:
+        [N, 4] decoded distances
+    """
+    box = box_flat.reshape(-1, 4, reg_max)  # [N, 4, reg_max]
+    box = box.softmax(dim=2)  # probability distribution
+    arange = torch.arange(reg_max, dtype=box.dtype, device=box.device)
+    box = (box * arange).sum(dim=2)  # [N, 4] expected distance
+    return box
+
+
+def decode_yolo26_esp(
+    outputs: dict,
+    conf_threshold: float = 0.25,
+    nms_threshold: float = 0.45,
+    is_int8: bool = False,
+) -> List[Tuple[int, float, Tuple[float, float, float, float]]]:
+    """Decode YOLO26 ESP 6-output tensors → detections.
+
+    Outputs: box{0,1,2} [1, 64, H, W] (reg_max=16, 16*4=64)
+             score{0,1,2} [1, 5, H, W] (nc=5, raw logits → need sigmoid)
+    Boxes need DFL integral + dist2bbox decoding.
+    """
+    REG_MAX = 16
+    boxes_all, scores_all, labels_all = [], [], []
+
+    for lvl in range(3):
+        stride = STRIDES[lvl]
+
+        box_t = _to_tensor(outputs.get(f"box{lvl}"))    # [1, 64, H, W]
+        score_t = _to_tensor(outputs.get(f"score{lvl}"))  # [1, 5, H, W]
+
+        if box_t is None or score_t is None:
+            continue
+
+        B, _, H, W = box_t.shape
+        N = H * W
+
+        # Reshape to [N, C] format
+        box_flat = box_t[0].reshape(REG_MAX * 4, N).permute(1, 0)   # [N, 64]
+        score_flat = score_t[0].reshape(NC, N).permute(1, 0)         # [N, 5]
+
+        # DFL integral: [N, 64] → [N, 4] (l, t, r, b distances in stride units)
+        distances = _dfl_integral(box_flat, REG_MAX)  # [N, 4]
+
+        # Generate grid centers
+        grid_y, grid_x = torch.meshgrid(
+            torch.arange(H, dtype=torch.float32),
+            torch.arange(W, dtype=torch.float32),
+            indexing="ij"
+        )
+        cx = (grid_x.flatten() + 0.5) * stride  # [N] pixels
+        cy = (grid_y.flatten() + 0.5) * stride   # [N] pixels
+
+        # dist2bbox: (center ± distance * stride) → xyxy pixels
+        x1 = (cx - distances[:, 0] * stride) / IMGSZ
+        y1 = (cy - distances[:, 1] * stride) / IMGSZ
+        x2 = (cx + distances[:, 2] * stride) / IMGSZ
+        y2 = (cy + distances[:, 3] * stride) / IMGSZ
+
+        # Sigmoid on scores (raw logits)
+        cls_scores = score_flat.sigmoid()  # [N, 5]
+
+        max_scores, max_labels = cls_scores.max(dim=-1)
+        mask = max_scores > conf_threshold
+        if mask.sum() == 0:
+            continue
+
+        boxes = torch.stack([x1, y1, x2, y2], dim=1)[mask].clamp(0, 1)
+        boxes_all.append(boxes)
+        scores_all.append(max_scores[mask])
+        labels_all.append(max_labels[mask])
+
+    return _nms_and_collect(boxes_all, scores_all, labels_all, nms_threshold)
+
+
+# =====================================================================
 #  Shared helpers
 # =====================================================================
 
@@ -568,6 +795,7 @@ DECODERS = {
     "fcos": decode_fcos,
     "yolo26": decode_yolo26,
     "espdet": decode_espdet,
+    "yolo26_esp": decode_yolo26_esp,
 }
 
 

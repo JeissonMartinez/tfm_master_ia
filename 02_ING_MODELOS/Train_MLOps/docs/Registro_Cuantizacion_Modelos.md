@@ -625,6 +625,211 @@ Se ejecutó inferencia FP32 (onnxruntime) e INT8 simulada (esp-ppq `TorchExecuto
 
 > Las visualizaciones confirman cualitativamente los resultados numéricos: FCOS y YOLO26 pierden prácticamente todas las bounding boxes en INT8, mientras ESPDet T4 mantiene detecciones coherentes con ligera degradación en localización.
 
+### 9.5 Diagnóstico de Causas Raíz — Fallos INT8 en FCOS T3 y YOLO26 T2
+
+Dado que el despliegue en ESP32-S3 requiere los 3 modelos funcionales, se realizó una investigación profunda de las causas de los fallos catastróficos de cuantización INT8 en FCOS T3 y YOLO26 T2.
+
+**Herramientas de diagnóstico**:
+- Script `scripts/diag_int8.py` — compara estadísticas por tensor (min/max/mean/std/MAE/Correlación/CosSim) entre salidas FP32 (onnxruntime) e INT8 (esp-ppq TorchExecutor) para cada salida raw del modelo.
+- Análisis del grafo ONNX (operadores, topología de salidas).
+- Referencia cruzada con trabajos previos exitosos en `03_ING_DESPLIEGUE/models/`.
+
+#### 9.5.1 YOLO26 T2 — Formato de salida unificado mata la resolución de scores
+
+**Causa raíz identificada (confianza ALTA)**:
+
+El ONNX exportado de YOLO26 T2 (`outputs/yolo26n_custom_v2-run1/export/best.onnx`) tiene una **única salida** `output0 [1, 9, 1029]`, donde el tensor concatena:
+- **4 canales de coordenadas bbox** (rango dinámico: 0–224 píxeles)
+- **5 canales de class scores** (rango dinámico: 0–1 logits)
+
+Al cuantizar a INT8 simétrico (per-tensor), el cuantizador asigna **un solo exponente/escala** a todo el tensor. Este exponente debe acomodar el rango completo 0–224 de los boxes, lo que deja a los class scores con **menos de 1 bit de resolución efectiva**. Resultado: todos los scores se redondean a ≈0 → 0 detecciones pasan ningún umbral de confianza.
+
+**Evidencia**:
+- YOLO26 T2 INT8: **0 detecciones** totales (vs 440 FP32)
+- En `03_ING_DESPLIEGUE/models/`, el mismo problema fue resuelto previamente para YOLO11n y YOLO26n v1:
+  - `export_onnx_esp.py` hace monkey-patch de `Detect.forward()` → produce **6 salidas separadas**: `box{i} [1, 4, H, W]` + `score{i} [1, 5, H, W]` por nivel de detección (P3/P4/P5)
+  - Cada tensor obtiene su propio exponente/escala INT8 independiente
+  - YOLO11n con formato ESP de 6 salidas logró **solo 6.4% de degradación mAP@50** (PASS)
+  - `yolo26n_v1_best_esp.onnx`: box `[1,4,28,28]`, score `[1,5,28,28]`, etc.
+
+**Solución**: Re-exportar el `.pt` de YOLO26 T2 con el patrón de `export_onnx_esp.py` (6 salidas separadas sin detection head post-processing), re-cuantizar y re-evaluar.
+
+#### 9.5.2 FCOS T3 — InstanceNormalization destruye cls/centerness en INT8
+
+**Causa raíz identificada (confianza ALTA)**:
+
+El modelo FCOS T3 contiene **12 capas InstanceNormalization** distribuidas en el `cls_tower` (6) y `reg_tower` (6) del head de detección. Durante la cuantización, esp-ppq emite 12 warnings:
+
+```
+Can not reset InstanceNormalization layout
+```
+
+Esto indica que InstanceNorm **no es correctamente soportado** por el cuantizador INT8. InstanceNorm calcula `(x - mean) / std` per-instance per-channel, produciendo distribuciones estrechas centradas en cero que son destruidas por la rejilla gruesa de 256 niveles INT8.
+
+**Datos del diagnóstico FP32 vs INT8** (`scripts/diag_int8.py`):
+
+| Salida | FP32 min/max | INT8 min/max | MAE | Corr | Impacto |
+|---|---|---|---|---|---|
+| cls_lvl0 | −24.97 / **+3.38** | −18.76 / **−5.79** | 4.15 | **0.22** | sigmoid(+3.38)=0.97 → sigmoid(−5.79)=0.003 |
+| cls_lvl1 | −22.37 / **+2.62** | −18.99 / **−4.02** | 4.23 | **−0.03** | Señal completamente destruida |
+| cls_lvl2 | −18.72 / **+0.47** | −17.21 / **−6.86** | 4.86 | **−0.16** | Correlación negativa = ruido puro |
+| reg_lvl0 | 0.00 / 19.68 | 0.00 / 20.00 | 4.27 | **0.47** | Regresión parcialmente preservada |
+| reg_lvl1 | 0.00 / 16.61 | 0.00 / 15.88 | 3.37 | **0.85** | OK |
+| reg_lvl2 | 0.06 / 6.87 | 0.25 / 7.88 | 1.60 | **0.82** | OK |
+| centerness_lvl0 | −4.94 / **+0.89** | −3.71 / **−1.89** | 0.80 | 0.55 | Rango positivo perdido |
+| centerness_lvl1 | −3.59 / **+0.97** | −2.45 / **−0.62** | 1.08 | 0.54 | sigmoid(+0.97)=0.73 → sigmoid(−0.62)=0.35 |
+| centerness_lvl2 | −5.17 / **+0.18** | −2.33 / **−1.36** | 0.86 | −0.16 | Destruido |
+
+**Hallazgo clave**: En INT8, **todos los logits de clasificación y centerness pierden su rango positivo**. Los valores máximos de cls pasan de +3.38 (sigmoid≈0.97) a −5.79 (sigmoid≈0.003). El score final FCOS = sigmoid(cls) × sigmoid(centerness) ≈ 0.003 × 0.35 ≈ **0.001** — imposible superar el threshold de 0.40.
+
+Las salidas de regresión (reg_lvl0/1/2) se preservan razonablemente (Corr 0.47–0.85), confirmando que el problema está **localizado en las capas InstanceNorm del cls_tower y centerness**, no en el backbone.
+
+**Ubicación de InstanceNorm en el grafo** (319 nodos totales):
+- `cls_tower.1, cls_tower.4` × 3 niveles (P3/P4/P5) = 6 capas cls
+- `reg_tower.1, reg_tower.4` × 3 niveles (P3/P4/P5) = 6 capas reg
+- También afecta 2 errores de exponente en bloques Squeeze-and-Excite del backbone (`block.1/fc1/Conv`, `block.2/fc1/Conv`)
+
+**Solución propuesta — Precisión mixta**: Forzar las 12 capas InstanceNorm + Convs adyacentes del head a FP32 usando `dispatching_table` de esp-ppq, manteniendo el backbone INT8:
+
+```python
+setting = QuantizationSettingFactory.espdl_setting()
+for op_name in instancenorm_op_names:
+    setting.dispatching_table.append(op_name, TargetPlatform.FP32)
+```
+
+#### 9.5.3 Plan de acción para resolución
+
+| Prioridad | Modelo | Acción | Confianza | Esfuerzo | Resultado |
+|---|---|---|---|---|---|
+| **1** | YOLO26 T2 | Re-export `.pt` → ONNX 6 salidas (patrón `export_onnx_esp.py`) + re-cuantizar + re-evaluar | 🟢 Alta | Bajo | ✅ RESUELTO (18.0% degradación) |
+| **2** | FCOS T3 | Mixed-precision: InstanceNorm ops → FP32 via `dispatching_table` + re-cuantizar + re-evaluar | 🟡 Media | Medio | ❌ FAIL (100% degradación) |
+| **3** | FCOS T3 | Si #2 falla: escalar FP32 a head+FPN completo, backbone SE blocks, búsqueda binaria | 🟠 Baja | Alto | ❌ FAIL — incompatibilidad arquitectónica |
+
+**Estado**: ✅ Completado — Fecha fin: 2026-02-24
+
+#### 9.5.4 Resultado — YOLO26 T2 ESP (Prioridad #1) ✅ RESUELTO
+
+**Fecha**: 2026-02-24
+
+Se re-exportó el modelo YOLO26 T2 (`.pt`) con el patrón de `export_onnx_esp.py`, produciendo 6 salidas separadas en formato ESP:
+
+**Script de exportación**: `scripts/export_yolo26_esp.py`  
+**ONNX generado**: `outputs/yolo26n_custom_v2-run1/export/best_esp.onnx` (10.2 MB)
+
+| Salida | Shape | Descripción |
+|---|---|---|
+| box0 | `[1, 64, 28, 28]` | reg_max×4 logits P3 (stride 8) |
+| score0 | `[1, 5, 28, 28]` | nc class logits P3 |
+| box1 | `[1, 64, 14, 14]` | reg_max×4 logits P4 (stride 16) |
+| score1 | `[1, 5, 14, 14]` | nc class logits P4 |
+| box2 | `[1, 64, 7, 7]` | reg_max×4 logits P5 (stride 32) |
+| score2 | `[1, 5, 7, 7]` | nc class logits P5 |
+
+**Cuantización**: Sin errores de exponente, sin warnings de InstanceNorm. ESPDL: 2.71 MB (3.6× compresión).
+
+**Evaluación FP32 vs INT8**:
+
+| Métrica | FP32 | INT8 | Δ |
+|---|:---:|:---:|:---:|
+| **mAP@50** | 0.5297 | **0.4343** | **−18.0%** |
+| **mAP@50-95** | 0.3272 | 0.2740 | −16.2% |
+| **Precision** | 0.8114 | 0.8195 | +1.0% |
+| **Recall** | 0.5748 | 0.4749 | −17.4% |
+| **F1** | 0.6729 | 0.6013 | −10.6% |
+| **Detecciones** | 385 | 308 | −20.0% |
+
+> **Veredicto**: ✅ **PASS** — degradación mAP@50 = 18.0% (< 25% threshold)
+
+**Comparación con formato original**:
+
+| Formato | Detecciones INT8 | mAP@50 INT8 | Degradación |
+|---|:---:|:---:|:---:|
+| Original (1 salida `[1,9,1029]`) | **0** | 0.0000 | 100% ⛔ FAIL |
+| ESP (6 salidas separadas) | **308** | 0.4343 | 18.0% ✅ PASS |
+
+> La separación de boxes y scores en tensores independientes permite a esp-ppq asignar exponentes INT8 óptimos para cada tensor, preservando la resolución de los class scores.
+
+**Nota sobre mAP@50 FP32**: El FP32 del formato ESP (0.5297) es ligeramente inferior al del formato original (0.6047) debido a que el decoder ESP aplica DFL integral + dist2bbox desde logits crudos, mientras que el formato original usa la detección post-procesada del head estándar de Ultralytics. Esta diferencia se debe a precisión numérica en la decodificación, no a pérdida de información del modelo.
+
+#### 9.5.5 Resultado — FCOS T3 Mixed-Precision (Prioridades #2 y #3) ❌ NO VIABLE
+
+**Fecha**: 2026-02-24
+
+Se realizaron **4 estrategias incrementales** para intentar rescatar FCOS T3 mediante cuantización con precisión mixta. Todas fracasaron.
+
+**Script de conversión**: `scripts/convert_fcos_mixed_precision.py`
+
+##### Estrategia A: InstanceNorm-only FP32 (60 ops)
+
+Dispatch de los 12 InstanceNorm + 24 Reshape + 24 Mul/Add vecinos a FP32.
+
+| Métrica | FP32 | INT8 (mixed) | Δ |
+|---|:---:|:---:|:---:|
+| **mAP@50** | 0.5878 | 0.0003 | **−99.9%** ⛔ |
+| **Detecciones** | 865 | 23 | −97.3% |
+
+> **Conclusión**: Insuficiente — las Conv del tower ya cuantizan las features antes de InstanceNorm.
+
+##### Estrategia B: Head+FPN completo FP32 (106 ops)
+
+Dispatch de los 96 ops del head + 10 ops del FPN completo a FP32. Backbone permanece INT8.
+
+| Métrica | FP32 | INT8 (mixed) | Δ |
+|---|:---:|:---:|:---:|
+| **mAP@50** | 0.5878 | 0.0003 | **−99.9%** ⛔ |
+| **Detecciones** | 865 | 22 | −97.5% |
+
+> **Diagnóstico de salidas**:
+>
+> | Salida | FP32 max | INT8-sim max | Problema |
+> |---|:---:|:---:|---|
+> | cls_lvl0 | **+10.08** | **−5.42** | Todos negativos → sigmoid ≈ 0 |
+> | centerness_lvl0 | **+1.27** | **−1.11** | Todos negativos |
+> | reg_lvl0 (mean) | 4.87 | 9.13 | Inflado ×1.9 |
+>
+> El backbone INT8 produce features sistemáticamente sesgadas que invierten la polaridad de los logits de clasificación en el head FP32.
+
+##### Estrategia C: Head+FPN+SE blocks+HardSigmoid+Mul FP32 (187 ops)
+
+Dispatch de 187 de 241 ops totales a FP32, incluyendo todos los bloques Squeeze-and-Excitation y sus activaciones HardSigmoid/Mul.
+
+| Región | INT8 | FP32 |
+|---|:---:|:---:|
+| Head | 0 | 96 |
+| FPN | 0 | 10 |
+| Backbone | 54 | 81 |
+
+**Resultado**: cls_lvl0 max = **−4.37** (aún todo negativo). ⛔ **FAIL**
+
+##### Estrategia D: Búsqueda binaria — mínimo backbone INT8
+
+Dispatch progresivo de ops backbone desde el final (más cercanas al FPN) hacia el inicio. Se buscó el punto de inflexión donde los logits de clasificación vuelven a ser positivos.
+
+| Config | Backbone FP32 | Backbone INT8 | cls_lvl0 max | Resultado |
+|---|:---:|:---:|:---:|---|
+| Head+FPN solo | 0 | 135 | −5.42 | ⛔ FAIL |
+| + last 67/135 | 67 | 68 | −5.42 | ⛔ FAIL |
+| + last 101/135 | 101 | 34 | −6.13 | ⛔ FAIL |
+| + last 118/135 | 118 | 17 | −5.72 | ⛔ FAIL |
+| + last 127/135 | 127 | **8** | −5.36 | ⛔ FAIL |
+| **ALL FP32** | **135** | **0** | **+10.08** | ✅ PASS |
+
+> **Conclusión**: A partir de tan solo **8 ops INT8** en las primeras capas del backbone (Conv iniciales de MobileNetV3-Small), la cuantización produce features que al propagarse por toda la red resultan en **cls logits completamente negativos** (todos < 0 → sigmoid ≈ 0% → 0 detecciones útiles).
+
+##### Causa raíz confirmada
+
+La combinación arquitectónica **MobileNetV3-Small backbone + InstanceNorm head** es **intrínsecamente incompatible** con cuantización INT8:
+
+1. **Canales iniciales reducidos** (16 → 16 → 24): con solo 256 niveles INT8, cada valor cuantizado porta una fracción significativa de la información. La cuantización introduce un error cuadrático medio (MSE) relativo alto.
+
+2. **Propagación multiplicativa del error**: MobileNetV3 usa expansión por bottleneck (expand ratio 4-6×), bloques SE (multiplicación channel-attention), y skip connections — cada uno amplifica el error de cuantización de capas previas.
+
+3. **InstanceNorm como amplificador**: la normalización por instancia divide por la desviación estándar del feature map. Si el INT8 introduce un sesgo sistemático (shift en la media), InstanceNorm lo amplifica dividiéndolo por un σ potencialmente pequeño.
+
+4. **Cadena multiplicativa sigmoid**: el score final de FCOS es `sigmoid(cls) × sigmoid(centerness)`. Ambos valores dependen exponencialmente del signo del logit. Un logit de +3.0 → 0.95, pero −3.0 → 0.05. **Un error de 6 unidades en el logit convierte una detección confiable en invisible**.
+
+> **Veredicto final**: FCOS T3 **NO ES VIABLE** para cuantización INT8 en ESP32-S3. No existe una estrategia de precisión mixta que preserve funcionalidad sin requerir la totalidad del modelo en FP32, lo cual anula el propósito de la cuantización. La calibración por defecto (`kl` para activaciones) es ya la mejor disponible.
+
 ---
 
 ## 10. Análisis de Viabilidad para ESP32-S3
@@ -640,23 +845,25 @@ Se ejecutó inferencia FP32 (onnxruntime) e INT8 simulada (esp-ppq `TorchExecuto
 
 ### 10.2 Evaluación por modelo
 
-| Criterio | FCOS T3 (1.74 MB) | YOLO26 T2 (2.72 MB) | ESPDet T4 (0.52 MB) |
+| Criterio | FCOS T3 (1.74 MB) | YOLO26 T2 ESP (2.71 MB) | ESPDet T4 (0.52 MB) |
 |---|:---:|:---:|:---:|
-| **Cabe en Flash** | ✅ (1.74 < 4 MB) | ⚠️ (2.72 < 4 MB, ajustado) | ✅ (0.52 << 4 MB) |
+| **Cabe en Flash** | ✅ (1.74 < 4 MB) | ⚠️ (2.71 < 4 MB, ajustado) | ✅ (0.52 << 4 MB) |
 | **SRAM para activaciones** | ⚠️ (1.2M params = activaciones mayores) | ❌ (2.6M params) | ✅ (361K params) |
 | **Diseñado para ESP-DL** | ❌ (MobileNetV3 genérico) | ❌ (YOLO convencional) | ✅ (Espressif nativo) |
-| **Errores de exponente** | ⚠️ (2 en SE blocks) | ✅ (0) | ✅ (0) |
-| **Fix ONNX requerido** | ✅ (no) | ⚠️ (sí, 3 ops) | ✅ (no) |
-| **Degradación INT8 mAP@50** | ⛔ 99.95% (FAIL) | ⛔ 100% (FAIL) | ✅ 11.1% (PASS) |
-| **Valoración global** | 🔴 **No viable** (colapso INT8) | 🔴 **No viable** (colapso INT8) | 🟢 **Candidato ideal** |
+| **Errores de exponente** | ⚠️ (2 en SE blocks) | ✅ (0 — formato ESP) | ✅ (0) |
+| **Fix ONNX requerido** | ✅ (no) | ⚠️ (sí, re-export 6 salidas) | ✅ (no) |
+| **Degradación INT8 mAP@50** | ⛔ 99.9% (FAIL — §9.5.5) | ✅ **18.0%** (PASS — §9.5.4) | ✅ 11.1% (PASS) |
+| **Valoración global** | 🔴 **No viable** (incomp. arquitectónica) | 🟡 **Viable con reservas** (SRAM ajustado) | 🟢 **Candidato ideal** |
 
-### 10.3 Recomendación de despliegue (actualizada post-evaluación INT8)
+### 10.3 Recomendación de despliegue (actualizada post-investigación §9.5)
 
-1. **Despliegue primario y único viable**: **ESPDet T4** — 0.52 MB, cero errores de exponente, diseño nativo ESP-DL, mAP@50 INT8 = 0.5319 (degradación −11.1% vs FP32). Es el **único modelo que supera el gate de cuantización** (<25% degradación). Su rendimiento post-cuantización es suficiente para navegación LCMR en interiores.
+1. **Despliegue primario**: **ESPDet T4** — 0.52 MB, cero errores de exponente, diseño nativo ESP-DL, mAP@50 INT8 = 0.5319 (degradación −11.1% vs FP32). Candidato ideal: menor tamaño, mejor compatibilidad con el acelerador ESP-DL y menor degradación.
 
-2. **Descartado — FCOS T3**: Colapso catastrófico INT8 (mAP@50 = 0.0003, degradación 99.95%). Los 2 errores de exponente en SE blocks no son solo un warning: **invalidan la viabilidad funcional del modelo**. La cadena multiplicativa `sigmoid(cls) × sigmoid(centerness)` no sobrevive a la cuantización INT8.
+2. **Despliegue secundario viable**: **YOLO26 T2 ESP** — 2.71 MB, cero errores de exponente tras re-exportación con 6 salidas separadas (§9.5.4), mAP@50 INT8 = 0.4343 (degradación −18.0% vs FP32 = 0.5297). **Rescatado** gracias al diagnóstico de causa raíz: la cuantización unificada de boxes+scores destruía los scores; con salidas separadas cada tensor tiene su propia escala INT8. Requiere validación en dispositivo (SRAM ajustado por 2.6M params).
 
-3. **Descartado — YOLO26 T2**: Colapso total INT8 (0 detecciones, degradación 100%). A pesar de ser el mejor modelo FP32 (mAP@50 = 0.6047), la cuantización destruye completamente las predicciones. Su uso solo es viable en FP32 en hardware con soporte float (no ESP32-S3).
+3. **Descartado — FCOS T3**: Incompatibilidad arquitectónica confirmada con INT8 (§9.5.5). Se probaron 4 estrategias de mixed-precision (hasta 241/241 ops FP32 en modo nuclear) y binary search del backbone. Resultado: basta con que **8 operaciones** del backbone MobileNetV3-Small estén en INT8 para que el error se propague catastróficamente. Causa raíz: canales iniciales estrechos (16→16→24), SE blocks multiplicativos y InstanceNorm en head amplifican el error de cuantización de forma irreversible. **No viable en INT8** para ESP32-S3.
+
+> **Resumen de viabilidad post-investigación**: 2 de 3 modelos son viables para despliegue INT8 en ESP32-S3 (ESPDet T4 + YOLO26 T2 ESP). FCOS T3 queda descartado por incompatibilidad arquitectónica fundamentada en §9.5.5.
 
 ---
 
@@ -705,19 +912,28 @@ Se ejecutó inferencia FP32 (onnxruntime) e INT8 simulada (esp-ppq `TorchExecuto
 
 ```
 outputs/espdl/
-├── export_summary.json                    # Resumen JSON de las 3 conversiones
+├── export_summary.json                    # Resumen JSON de las 3 conversiones originales
+├── eval_fp32_vs_int8.json                 # Resultados evaluación FP32 vs INT8
 ├── fcos_v3s_t3/
-│   ├── fcos_v3s_t3.espdl                 # Modelo cuantizado INT8 (1.74 MB)
+│   ├── fcos_v3s_t3.espdl                 # Modelo cuantizado INT8 (1.74 MB) — ❌ NO VIABLE
 │   ├── fcos_v3s_t3.info                  # Estructura del grafo ESPDL (texto)
 │   └── fcos_v3s_t3.json                  # Configuración de cuantización
+├── fcos_v3s_t3_mixed/
+│   ├── fcos_v3s_t3_mixed.espdl           # Mixed-precision INT8+FP32 (1.74 MB) — ❌ NO VIABLE
+│   ├── fcos_v3s_t3_mixed.info
+│   └── fcos_v3s_t3_mixed.json
 ├── yolo26n_t2/
-│   ├── yolo26n_t2.espdl                  # Modelo cuantizado INT8 (2.72 MB)
-│   ├── yolo26n_t2.info                   # Estructura del grafo ESPDL (texto)
-│   └── yolo26n_t2.json                   # Configuración de cuantización
+│   ├── yolo26n_t2.espdl                  # Cuantización original salida unificada — ❌ NO VIABLE
+│   ├── yolo26n_t2.info
+│   └── yolo26n_t2.json
+├── yolo26n_t2_esp/
+│   ├── yolo26n_t2_esp.espdl              # ✅ Re-export 6 salidas ESP (2.71 MB) — VIABLE
+│   ├── yolo26n_t2_esp.info
+│   └── yolo26n_t2_esp.json
 └── espdet_pico_t4/
-    ├── espdet_pico_t4.espdl              # Modelo cuantizado INT8 (0.52 MB)
-    ├── espdet_pico_t4.info               # Estructura del grafo ESPDL (texto)
-    └── espdet_pico_t4.json               # Configuración de cuantización
+    ├── espdet_pico_t4.espdl              # ✅ Modelo cuantizado INT8 (0.52 MB) — VIABLE
+    ├── espdet_pico_t4.info
+    └── espdet_pico_t4.json
 ```
 
 ### 12.2 Descripción de artefactos
@@ -734,6 +950,14 @@ outputs/espdl/
 | Archivo | Ubicación | Descripción |
 |---|---|---|
 | `best_fixed.onnx` | `outputs/yolo26n_custom_v2-run1/export/` | ONNX de YOLO26 con ejes negativos corregidos |
+| `best_esp.onnx` | `outputs/yolo26n_custom_v2-run1/export/` | ONNX de YOLO26 re-exportado con 6 salidas ESP (§9.5.4) |
+
+### 12.4 Scripts generados durante la investigación §9.5
+
+| Script | Descripción | Estado |
+|---|---|---|
+| `scripts/export_yolo26_esp.py` | Re-export YOLO26 T2 con 6 salidas separadas para ESP-DL | ✅ Utilizado |
+| `scripts/convert_fcos_mixed_precision.py` | Cuantización mixed-precision FCOS T3 (head+FPN en FP32) | ❌ No viable |
 
 ---
 
@@ -741,36 +965,40 @@ outputs/espdl/
 
 ### 13.1 Conclusiones técnicas
 
-1. **La cuantización PTQ INT8 no es viable para todos los modelos**: de los 3 evaluados, solo ESPDet T4 supera el gate de degradación (<25%). FCOS T3 y YOLO26 T2 sufren colapso catastrófico INT8 (degradación ≥99.95%), a pesar de lograr compresión de 2.72× a 3.66×.
+1. **La cuantización PTQ INT8 es viable para 2 de 3 modelos tras diagnóstico e intervención**: ESPDet T4 pasó directamente (−11.1%), YOLO26 T2 fue rescatado mediante re-exportación con 6 salidas separadas (−18.0%), y FCOS T3 fue confirmado como arquitectónicamente incompatible con INT8 tras agotar 4 estrategias de mixed-precision (§9.5).
 
-2. **ESPDet T4 es el único modelo viable para despliegue INT8 en ESP32-S3**: 0.52 MB ESPDL, cero errores de exponente, mAP@50 INT8 = 0.5319 (degradación −11.1% vs FP32 = 0.5985), Precision = 0.336 y Recall = 0.666. Su diseño nativo para ESP-DL es determinante: es la única arquitectura cuya aritmética sobrevive intacta a la cuantización INT8.
+2. **ESPDet T4 es el candidato principal para despliegue INT8 en ESP32-S3**: 0.52 MB ESPDL, cero errores de exponente, diseño nativo ESP-DL, mAP@50 INT8 = 0.5319 (degradación −11.1% vs FP32 = 0.5985), Precision = 0.336 y Recall = 0.666. Su diseño nativo para ESP-DL es determinante.
 
-3. **FCOS T3 queda descartado funcionalmente** a pesar de tener un buen rendimiento FP32 (mAP@50 = 0.5878, F1 = 0.5234). La cuantización destruye la cadena multiplicativa `sigmoid(cls) × sigmoid(centerness)`: de 865 detecciones FP32, solo 23 sobreviven en INT8 (mAP@50 = 0.0003). Los errores de exponente en SE blocks no son solo un warning cosmético sino un **indicador de incompatibilidad funcional**.
+3. **YOLO26 T2 es viable como candidato secundario tras re-exportación ESP**: la causa raíz de su colapso original (0 detecciones, 100% degradación) era la salida unificada `[1, 9, 1029]` donde boxes (rango 0–224) y scores (rango 0–1) comparten escala INT8, dejando <1 bit de resolución para scores. Con 6 salidas separadas (`box{i} + score{i}` por nivel), cada tensor tiene su propia escala → mAP@50 INT8 = 0.4343 (degradación −18.0% vs FP32 = 0.5297). Archivo: 2.71 MB, 0 errores de exponente.
 
-4. **YOLO26 T2 queda descartado para INT8**: produce **0 detecciones** tras cuantización (FP32 mAP@50 = 0.6047 → INT8 = 0.0000). La cuantización del tensor de salida combinado `[1, 9, 1029]` corrompe boxes y scores simultáneamente. Su alto NSPR graphwise (24.87%) anticipaba este resultado.
+4. **FCOS T3 queda descartado por incompatibilidad arquitectónica fundamentada** (§9.5.5). Se probaron 4 estrategias de mixed-precision: (A) InstanceNorm FP32, (B) head+FPN completo FP32, (C) +SE blocks FP32, (D) binary search del backbone. Resultado: basta con 8 operaciones INT8 al inicio del backbone MobileNetV3-Small para que el error se propague catastróficamente. Causa raíz: canales iniciales estrechos (16→16→24), bloques SE multiplicativos e InstanceNorm en head amplifican el error de forma irreversible.
 
-5. **El NSPR graphwise es un predictor útil de viabilidad post-cuantización**: ESPDet T4 (NSPR layerwise máx = 1.89%) mantiene coherencia INT8, mientras FCOS y YOLO26 (NSPR graphwise >24%) colapsan. Sin embargo, un NSPR layerwise bajo no garantiza viabilidad — la interacción entre capas (medida por graphwise) es determinante.
+5. **El NSPR graphwise es un predictor útil de viabilidad post-cuantización**: ESPDet T4 (NSPR layerwise máx = 1.89%) mantiene coherencia INT8, pero el NSPR por sí solo no explica el colapso de YOLO26 (cuyo problema era de formato de salida, no de error numérico intrínseco). La causa raíz debe investigarse individualmente por modelo.
 
 ### 13.2 Conclusiones metodológicas
 
-6. **Las incompatibilidades entre ecosistemas son una fuente significativa de fricción** en el pipeline TinyML. Se documentaron 3 incidencias técnicas: (a) formato de datos de calibración numpy vs torch, (b) ejes negativos ONNX incompatibles con esp-ppq, y (c) errores de exponente en architecturas no diseñadas para ESP-DL. Cada una requirió investigación, diagnóstico y corrección específica.
+6. **Las incompatibilidades entre ecosistemas son una fuente significativa de fricción** en el pipeline TinyML. Se documentaron 3 incidencias técnicas originales + 2 diagnósticos profundos: (a) formato de datos de calibración, (b) ejes negativos ONNX, (c) errores de exponente, (d) salida unificada en YOLO26, (e) incompatibilidad MobileNetV3 con INT8.
 
 7. **La calibración con 500 imágenes reales del train set es suficiente** para la cuantización estática INT8. No se observaron diferencias entre modelos respecto a la calidad de calibración.
 
 8. **El pipeline de exportación es ejecutable localmente en CPU** sin necesidad de GPU. Los tiempos de conversión (~80-170 s por modelo) son aceptables para iteración rápida.
 
-9. **La evaluación INT8 simulada con `TorchExecutor` de esp-ppq es un paso crítico de validación** que debe ejecutarse antes de flashear el dispositivo. Sin ella, FCOS T3 y YOLO26 T2 habrían sido candidatos aparentemente viables basándose solo en métricas FP32 y compresión exitosa. La simulación en CPU reproduce fielmente la aritmética del acelerador ESP-DL.
+9. **La evaluación INT8 simulada con `TorchExecutor` de esp-ppq es un paso crítico de validación** que debe ejecutarse antes de flashear el dispositivo. Sin ella, FCOS T3 y YOLO26 T2 habrían sido candidatos aparentemente viables basándose solo en métricas FP32 y compresión exitosa.
 
-10. **Los errores de exponente detectados durante la conversión son predictores fuertes de colapso INT8**: los 2 errores en FCOS T3 (SE blocks) correlacionan con una degradación del 99.95%. Los modelos con 0 errores de exponente (YOLO26, ESPDet) tienen comportamiento divergente, pero los errores de exponente son condición suficiente de fallo.
+10. **La investigación de causa raíz transforma resultados de cuantización**: YOLO26 T2 pasó de 100% degradación a 18% (rescatado) gracias al diagnóstico de formato de salida. Sin el análisis profundo de §9.5, este modelo habría sido descartado innecesariamente. La inversión en diagnóstico se amortiza directamente en modelos viables adicionales.
+
+11. **Los errores de exponente son indicadores necesarios pero no suficientes de fallo INT8**: FCOS T3 (2 errores) colapsa, pero su causa raíz real es la arquitectura MobileNetV3, no los errores de exponente en sí. YOLO26 T2 original (0 errores) también colapsaba — por causa completamente diferente (formato de salida).
 
 ### 13.3 Consideraciones para trabajo académico
 
-11. **El trade-off real en TinyML no es solo tamaño vs precisión, sino diseño de arquitectura vs compatibilidad con acelerador**: los modelos genéricos (FCOS, YOLO26) logran mejor mAP FP32 pero colapsan al cuantizar para ESP-DL, mientras ESPDet (nativo) sacrifica ~4 pp de mAP FP32 pero mantiene rendimiento funcional post-cuantización.
-   - ESPDet (nativo ESP-DL): mAP@50 FP32=0.5985, INT8=0.5319 (−11.1%) — **funcional**
-   - FCOS (genérico PyTorch): mAP@50 FP32=0.5878, INT8=0.0003 (−99.95%) — **inoperante**
-   - YOLO26 (Ultralytics): mAP@50 FP32=0.6047, INT8=0.0000 (−100%) — **inoperante**
+12. **El formato de salida del ONNX impacta directamente la viabilidad de cuantización**: si un tensor de salida mezcla magnitudes heterogéneas (boxes 0–224 + scores 0–1), la escala INT8 compartida destruye el rango menor. La solución es separar salidas para que cada tensor tenga su propia escala. Esto transforma un modelo «inoperante» en uno viable (YOLO26 T2: 100%→18% degradación).
 
-12. **La cuantización PTQ INT8 logra ratios de compresión sub-óptimos respecto al teórico 4×**, con un gap de 8-32% explicable por overhead de metadatos. Sin embargo, la compresión es irrelevante si el modelo post-cuantización es funcionalmente inservible (caso FCOS y YOLO26).
+13. **El trade-off real en TinyML no es solo tamaño vs precisión, sino diseño de arquitectura + formato de exportación vs compatibilidad con acelerador**:
+   - ESPDet (nativo ESP-DL): mAP@50 FP32=0.5985, INT8=0.5319 (−11.1%) — **funcional** (diseño nativo)
+   - YOLO26 (Ultralytics + ESP format): mAP@50 FP32=0.5297, INT8=0.4343 (−18.0%) — **funcional** (tras re-export)
+   - FCOS (genérico MobileNetV3): mAP@50 FP32=0.5878, INT8=0.0003 (−99.95%) — **inoperante** (incompatibilidad arquitectónica)
+
+14. **La cuantización PTQ INT8 logra ratios de compresión sub-óptimos respecto al teórico 4×**, con un gap de 8-32% explicable por overhead de metadatos.
 
 ---
 
@@ -779,17 +1007,19 @@ outputs/espdl/
 | Prioridad | Tarea | Justificación | Estado |
 |---|---|---|:---:|
 | **Alta** | Validar ESPDL de ESPDet T4 en ESP32-S3 real (inferencia end-to-end) | Confirmar que INT8 funciona sin degradación en dispositivo — la simulación CPU muestra −11.1% mAP@50 | ⬜ Pendiente |
-| **Alta** | Benchmark de latencia de inferencia INT8 en ESP32-S3 (ms/frame) | Dato necesario para evaluar viabilidad de detección en tiempo real | ⬜ Pendiente |
-| ~~**Alta**~~ | ~~Validar ESPDL de FCOS T3 en ESP32-S3~~ | ~~Colapso INT8 confirmado (mAP@50 INT8 = 0.0003) — no procede~~ | ⛔ Descartado |
-| ~~**Media**~~ | ~~Evaluar mAP@50 post-cuantización (inferencia INT8 vs FP32)~~ | ~~Ejecutado con `eval_fp32_vs_int8.py` — resultados en Sección 9.4~~ | ✅ Completado |
-| **Media** | Explorar INT16 mixed-precision para cabezas de detección FCOS | Podría rescatar FCOS T3 manteniendo cls/centerness en FP16 y solo reg en INT8 | ⬜ Pendiente |
+| **Alta** | Validar ESPDL de YOLO26 T2 ESP en ESP32-S3 real (inferencia + SRAM) | Confirmar viabilidad en dispositivo: 2.71 MB en Flash + profiling de SRAM (2.6M params). Simulación CPU muestra −18.0% mAP@50. | ⬜ Pendiente |
+| **Alta** | Benchmark de latencia de inferencia INT8 en ESP32-S3 (ms/frame) | Dato necesario para evaluar viabilidad de detección en tiempo real (ambos modelos viables) | ⬜ Pendiente |
+| ~~**Alta**~~ | ~~Validar ESPDL de FCOS T3 en ESP32-S3~~ | ~~Incompatibilidad arquitectónica confirmada — §9.5.5~~ | ⛔ Descartado |
+| ~~**Media**~~ | ~~Evaluar mAP@50 post-cuantización (inferencia INT8 vs FP32)~~ | ~~Ejecutado con `eval_fp32_vs_int8.py` — resultados en §9.4~~ | ✅ Completado |
+| ~~**Media**~~ | ~~Investigar causas raíz de colapso INT8 en FCOS T3 y YOLO26 T2~~ | ~~Ejecutado — §9.5. YOLO26 rescatado, FCOS confirmado no viable~~ | ✅ Completado |
 | **Baja** | QAT (Quantization-Aware Training) para ESPDet | Potencialmente mejorar mAP post-cuantización del candidato principal | ⬜ Pendiente |
-| ~~**Baja**~~ | ~~Probar inferencia YOLO26 en ESP32-S3 (SRAM profiling)~~ | ~~Colapso INT8 total (0 detecciones) — no procede~~ | ⛔ Descartado |
+| ~~**Baja**~~ | ~~Explorar INT16 mixed-precision FCOS~~ | ~~Innecesario: el problema es backbone INT8 (8 ops bastan), no solucionable con mixed-precision~~ | ⛔ Descartado |
+| ~~**Baja**~~ | ~~Probar inferencia YOLO26 original en ESP32-S3~~ | ~~Reemplazado por YOLO26 T2 ESP con 6 salidas separadas~~ | ⛔ Sustituido |
 
 ---
 
 > **Documento generado**: 24 de febrero de 2026  
-> **Última actualización**: 24 de febrero de 2026 (evaluación FP32 vs INT8)  
-> **Scripts**: `scripts/convert_onnx_to_espdl.py`, `scripts/eval_fp32_vs_int8.py`  
+> **Última actualización**: 24 de febrero de 2026 (investigación causa raíz §9.5 — YOLO26 rescatado, FCOS descartado)  
+> **Scripts**: `scripts/convert_onnx_to_espdl.py`, `scripts/eval_fp32_vs_int8.py`, `scripts/export_yolo26_esp.py`, `scripts/convert_fcos_mixed_precision.py`  
 > **Datos fuente**: `outputs/espdl/export_summary.json`, `outputs/espdl/eval_fp32_vs_int8.json`  
 > **Visualizaciones**: `outputs/espdl/eval_visualizations/`

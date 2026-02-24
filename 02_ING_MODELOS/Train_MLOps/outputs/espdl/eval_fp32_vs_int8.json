@@ -1,316 +1,106 @@
 {
-  "fcos_v3s_t3": {
-    "label": "FCOS T3",
-    "family": "fcos",
+  "yolo26n_t2_esp": {
+    "label": "YOLO26 T2 ESP",
+    "family": "yolo26_esp",
     "fp32": {
-      "mAP50": 0.5878,
-      "mAP50_95": 0.2673,
-      "precision": 0.432,
-      "recall": 0.6639,
-      "f1": 0.5234,
-      "n_detections": 865,
+      "mAP50": 0.5297,
+      "mAP50_95": 0.3272,
+      "precision": 0.8114,
+      "recall": 0.5748,
+      "f1": 0.6729,
+      "n_detections": 385,
       "n_ground_truths": 576,
       "per_class": {
         "dog": {
-          "ap50": 0.4974,
-          "precision": 0.3505,
-          "recall": 0.5862,
-          "f1": 0.4387,
-          "n_gt": 58
-        },
-        "door": {
-          "ap50": 0.526,
-          "precision": 0.3923,
-          "recall": 0.6029,
-          "f1": 0.4754,
-          "n_gt": 136
-        },
-        "obstacle": {
-          "ap50": 0.5042,
-          "precision": 0.4727,
-          "recall": 0.6012,
-          "f1": 0.5293,
-          "n_gt": 173
-        },
-        "person": {
-          "ap50": 0.6465,
-          "precision": 0.4744,
-          "recall": 0.7327,
-          "f1": 0.5759,
-          "n_gt": 101
-        },
-        "stair": {
-          "ap50": 0.7651,
-          "precision": 0.4699,
-          "recall": 0.7963,
-          "f1": 0.5911,
-          "n_gt": 108
-        }
-      },
-      "inference_time_s": 2.7,
-      "avg_ms_per_image": 14.6
-    },
-    "int8": {
-      "mAP50": 0.0003,
-      "mAP50_95": 0.0001,
-      "precision": 0.0087,
-      "recall": 0.0015,
-      "f1": 0.0025,
-      "n_detections": 23,
-      "n_ground_truths": 576,
-      "per_class": {
-        "dog": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 58
-        },
-        "door": {
-          "ap50": 0.0014,
-          "precision": 0.0435,
-          "recall": 0.0074,
-          "f1": 0.0126,
-          "n_gt": 136
-        },
-        "obstacle": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 173
-        },
-        "person": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 101
-        },
-        "stair": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 108
-        }
-      },
-      "inference_time_s": 24.7,
-      "avg_ms_per_image": 132.1,
-      "quantization_time_s": 181.5
-    },
-    "degradation": {
-      "mAP50_degradation_pct": 99.95,
-      "verdict": "FAIL"
-    }
-  },
-  "yolo26n_t2": {
-    "label": "YOLO26 T2",
-    "family": "yolo26",
-    "fp32": {
-      "mAP50": 0.6047,
-      "mAP50_95": 0.3702,
-      "precision": 0.8234,
-      "recall": 0.6444,
-      "f1": 0.723,
-      "n_detections": 440,
-      "n_ground_truths": 576,
-      "per_class": {
-        "dog": {
-          "ap50": 0.6582,
-          "precision": 0.8889,
-          "recall": 0.6897,
-          "f1": 0.7767,
-          "n_gt": 58
-        },
-        "door": {
-          "ap50": 0.3656,
-          "precision": 0.6867,
-          "recall": 0.4191,
-          "f1": 0.5205,
-          "n_gt": 136
-        },
-        "obstacle": {
-          "ap50": 0.5735,
-          "precision": 0.812,
-          "recall": 0.6243,
-          "f1": 0.7059,
-          "n_gt": 173
-        },
-        "person": {
-          "ap50": 0.7889,
-          "precision": 0.8842,
-          "recall": 0.8317,
-          "f1": 0.8571,
-          "n_gt": 101
-        },
-        "stair": {
-          "ap50": 0.6372,
-          "precision": 0.8452,
-          "recall": 0.6574,
-          "f1": 0.7396,
-          "n_gt": 108
-        }
-      },
-      "inference_time_s": 2.0,
-      "avg_ms_per_image": 10.6
-    },
-    "int8": {
-      "mAP50": 0.0,
-      "mAP50_95": 0.0,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "n_detections": 0,
-      "n_ground_truths": 576,
-      "per_class": {
-        "dog": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 58
-        },
-        "door": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 136
-        },
-        "obstacle": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 173
-        },
-        "person": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 101
-        },
-        "stair": {
-          "ap50": 0.0,
-          "precision": 0.0,
-          "recall": 0.0,
-          "f1": 0.0,
-          "n_gt": 108
-        }
-      },
-      "inference_time_s": 17.7,
-      "avg_ms_per_image": 94.5,
-      "quantization_time_s": 80.8
-    },
-    "degradation": {
-      "mAP50_degradation_pct": 100.0,
-      "verdict": "FAIL"
-    }
-  },
-  "espdet_pico_t4": {
-    "label": "ESPDet T4",
-    "family": "espdet",
-    "fp32": {
-      "mAP50": 0.5985,
-      "mAP50_95": 0.2655,
-      "precision": 0.3708,
-      "recall": 0.7108,
-      "f1": 0.4874,
-      "n_detections": 1116,
-      "n_ground_truths": 576,
-      "per_class": {
-        "dog": {
-          "ap50": 0.5217,
-          "precision": 0.3304,
+          "ap50": 0.6236,
+          "precision": 0.9268,
           "recall": 0.6552,
-          "f1": 0.4393,
+          "f1": 0.7677,
           "n_gt": 58
         },
         "door": {
-          "ap50": 0.5725,
-          "precision": 0.3651,
-          "recall": 0.6765,
-          "f1": 0.4742,
+          "ap50": 0.2065,
+          "precision": 0.6452,
+          "recall": 0.2941,
+          "f1": 0.404,
           "n_gt": 136
         },
         "obstacle": {
-          "ap50": 0.4813,
-          "precision": 0.3521,
-          "recall": 0.7225,
-          "f1": 0.4735,
+          "ap50": 0.4136,
+          "precision": 0.781,
+          "recall": 0.474,
+          "f1": 0.5899,
           "n_gt": 173
         },
         "person": {
-          "ap50": 0.6592,
-          "precision": 0.4337,
-          "recall": 0.7129,
-          "f1": 0.5393,
+          "ap50": 0.7913,
+          "precision": 0.9111,
+          "recall": 0.8119,
+          "f1": 0.8586,
           "n_gt": 101
         },
         "stair": {
-          "ap50": 0.7576,
-          "precision": 0.3728,
-          "recall": 0.787,
-          "f1": 0.506,
+          "ap50": 0.6137,
+          "precision": 0.7931,
+          "recall": 0.6389,
+          "f1": 0.7077,
           "n_gt": 108
         }
       },
-      "inference_time_s": 1.5,
-      "avg_ms_per_image": 8.3
+      "inference_time_s": 2.9,
+      "avg_ms_per_image": 15.4
     },
     "int8": {
-      "mAP50": 0.5319,
-      "mAP50_95": 0.2419,
-      "precision": 0.336,
-      "recall": 0.6655,
-      "f1": 0.4465,
-      "n_detections": 1181,
+      "mAP50": 0.4343,
+      "mAP50_95": 0.274,
+      "precision": 0.8195,
+      "recall": 0.4749,
+      "f1": 0.6013,
+      "n_detections": 308,
       "n_ground_truths": 576,
       "per_class": {
         "dog": {
-          "ap50": 0.4562,
-          "precision": 0.2946,
-          "recall": 0.569,
-          "f1": 0.3882,
+          "ap50": 0.5123,
+          "precision": 0.8857,
+          "recall": 0.5345,
+          "f1": 0.6667,
           "n_gt": 58
         },
         "door": {
-          "ap50": 0.4471,
-          "precision": 0.3725,
-          "recall": 0.5588,
-          "f1": 0.4471,
+          "ap50": 0.2348,
+          "precision": 0.6949,
+          "recall": 0.3015,
+          "f1": 0.4205,
           "n_gt": 136
         },
         "obstacle": {
-          "ap50": 0.4289,
-          "precision": 0.2851,
-          "recall": 0.7283,
-          "f1": 0.4098,
+          "ap50": 0.2552,
+          "precision": 0.7937,
+          "recall": 0.289,
+          "f1": 0.4237,
           "n_gt": 173
         },
         "person": {
-          "ap50": 0.6079,
-          "precision": 0.3604,
+          "ap50": 0.6554,
+          "precision": 0.8554,
           "recall": 0.703,
-          "f1": 0.4765,
+          "f1": 0.7717,
           "n_gt": 101
         },
         "stair": {
-          "ap50": 0.7191,
-          "precision": 0.3673,
-          "recall": 0.7685,
-          "f1": 0.497,
+          "ap50": 0.514,
+          "precision": 0.8676,
+          "recall": 0.5463,
+          "f1": 0.6705,
           "n_gt": 108
         }
       },
-      "inference_time_s": 18.9,
-      "avg_ms_per_image": 101.1,
-      "quantization_time_s": 85.4
+      "inference_time_s": 15.2,
+      "avg_ms_per_image": 81.3,
+      "quantization_time_s": 72.5
     },
     "degradation": {
-      "mAP50_degradation_pct": 11.13,
+      "mAP50_degradation_pct": 18.01,
       "verdict": "PASS"
     }
   }
