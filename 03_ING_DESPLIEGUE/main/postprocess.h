@@ -1,13 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// TFM TinyML Detector — Post-processing for 3 model architectures
+// TFM TinyML Detector — Post-processing for 5 model architectures
 //
 //  MBNTv2_ssdlite_v1 : 3 tensors  → (1,1470,1) obj + (1,1470,5) cls + (1,1470,4) box
 //  YOLO11n_v1        : 1 tensor   → (1,9,1029)  transposed [box+cls, proposals]
 //  YOLO26n_v1        : 1 tensor   → (1,300,6)   end2end [x1,y1,x2,y2,conf,cls_id]
+//  ESPDet Pico T4    : 6 tensors  → FCOS 3-scale (score0-2, box0-2), direct dist
+//  YOLO26n T2 ESP    : 6 tensors  → DFL 3-scale (score0-2, box0-2), DFL integral
 // ═══════════════════════════════════════════════════════════════════════════
 #pragma once
 
 #include "app_config.h"
+#include "inference_engine.h"
 #include "esp_err.h"
 
 /// Initialise postprocessing (may pre-allocate scratch buffers in PSRAM).
@@ -49,3 +52,29 @@ DetectionResult postprocess_yolo26(
 
 /// Release scratch buffers.
 void postprocess_deinit();
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ESP-DL ESPDL postprocessors  (multi-output, INT8, power-of-2 quantized)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// ESPDet Pico T4: FCOS anchor-free detector — 3 scales, 6 output tensors.
+/// Each scale has score[HxWx5] + box[HxWx4] (direct distances l,t,r,b).
+/// Pipeline: dequant → sigmoid(scores) → filter → decode dist2bbox → NMS.
+/// @param engine  Pointer to EspDlEngine (for get_output_by_name)
+/// @param conf_thr  Confidence threshold after sigmoid
+/// @param iou_thr   IoU threshold for NMS
+DetectionResult postprocess_espdet_espdl(
+    const InferenceEngine* engine,
+    float conf_thr = ESPDET_CONF_THRESHOLD,
+    float iou_thr  = ESPDET_IOU_THRESHOLD);
+
+/// YOLO26n T2 ESP: DFL-based detector — 3 scales, 6 output tensors.
+/// Each scale has score[HxWx5] + box[HxWx64] (4 × DFL_REG_MAX=16 bins).
+/// Pipeline: dequant → sigmoid(scores) → filter → DFL integral → dist2bbox → NMS.
+/// @param engine  Pointer to EspDlEngine (for get_output_by_name)
+/// @param conf_thr  Confidence threshold after sigmoid
+/// @param iou_thr   IoU threshold for NMS
+DetectionResult postprocess_yolo26_espdl(
+    const InferenceEngine* engine,
+    float conf_thr = YOLO26ESP_CONF_THRESHOLD,
+    float iou_thr  = YOLO26ESP_IOU_THRESHOLD);

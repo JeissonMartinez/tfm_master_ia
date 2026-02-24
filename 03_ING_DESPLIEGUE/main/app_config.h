@@ -45,6 +45,18 @@
 #define DEFAULT_CONF_THRESHOLD  0.25f
 #define DEFAULT_IOU_THRESHOLD   0.45f
 
+// Umbrales por modelo ESPDL (ajustados del entrenamiento)
+#define ESPDET_CONF_THRESHOLD   0.35f
+#define ESPDET_IOU_THRESHOLD    0.40f
+#define YOLO26ESP_CONF_THRESHOLD 0.25f
+#define YOLO26ESP_IOU_THRESHOLD  0.45f
+
+// FCOS & DFL grid strides (224×224 → 28, 14, 7)
+#define NUM_SCALES          3
+static constexpr int GRID_STRIDES[NUM_SCALES]   = {8, 16, 32};
+static constexpr int GRID_SIZES[NUM_SCALES]     = {28, 14, 7};
+#define DFL_REG_MAX        16   // YOLO26 DFL bins
+
 // Nombres de clases (orden: 0-4)
 static const char* const CLASS_NAMES[NUM_CLASSES] = {
     "dog", "door", "obstacle", "person", "stair"
@@ -78,7 +90,9 @@ static const char* const CLASS_NAMES[NUM_CLASSES] = {
 enum class ModelType : uint8_t {
     MOBILENET_SSD,   // MBNTv2_ssdlite_v1: 3 tensores, decode anchors + NMS
     YOLO11N,         // yolo11n_v1: [1,9,1029], NMS completo en device
-    YOLO26N,         // yolo26n_v1: [1,300,6], NMS integrado
+    YOLO26N,         // yolo26n_v1: [1,300,6], NMS integrado (TFLite)
+    ESPDET_PICO,     // ESPDet Pico T4: FCOS 3-scale, 6 outputs (ESP-DL)
+    YOLO26N_ESP,     // YOLO26n T2 ESP: DFL 3-scale, 6 outputs (ESP-DL)
 };
 
 // ─── Runtime de inferencia ───────────────────────────────────────────────

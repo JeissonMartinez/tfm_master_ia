@@ -273,9 +273,246 @@ esp_err_t postprocess_init() {
              MBNT_NUM_ANCHORS, MBNT_NUM_CLASSES);
     ESP_LOGI(TAG, "   YOLO11: %d×%d transposed", Y11_ROWS, Y11_COLS);
     ESP_LOGI(TAG, "   YOLO26: %d×%d end2end", Y26_MAX_DETS, Y26_DET_DIM);
+    ESP_LOGI(TAG, "   ESPDet FCOS: 3 scales (%d,%d,%d) strides (%d,%d,%d)",
+             GRID_SIZES[0], GRID_SIZES[1], GRID_SIZES[2],
+             GRID_STRIDES[0], GRID_STRIDES[1], GRID_STRIDES[2]);
+    ESP_LOGI(TAG, "   YOLO26 DFL: 3 scales, reg_max=%d", DFL_REG_MAX);
     return ESP_OK;
 }
 
 void postprocess_deinit() {
     ESP_LOGI(TAG, "Postprocessing liberado");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ESP-DL Helpers
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Sigmoid activation (inlined for hot loop)
+static inline float sigmoid(float x) {
+    return 1.0f / (1.0f + std::exp(-x));
+}
+
+/// Dequantize INT8 value using power-of-2 exponent: float = int8 * 2^exp
+static inline float dequant(int8_t val, int exp) {
+    float scale = (exp >= 0) ? static_cast<float>(1 << exp)
+                             : (1.0f / static_cast<float>(1 << (-exp)));
+    return static_cast<float>(val) * scale;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ESPDet Pico T4 — FCOS anchor-free (3-scale, direct distances)
+//
+//  Output tensors:
+//    score0 [1,28,28,5] exp=-3    score1 [1,14,14,5] exp=-3    score2 [1,7,7,5] exp=-3
+//    box0   [1,28,28,4] exp=-3    box1   [1,14,14,4] exp=-3    box2   [1,7,7,4] exp=-4
+//
+//  Box layout: [left, top, right, bottom] — ReLU clamped distances from grid center
+//  Decode:
+//    l,t,r,b = max(0, dequant(box)) * stride
+//    x1 = (cx - l) / 224, y1 = (cy - t) / 224
+//    x2 = (cx + r) / 224, y2 = (cy + b) / 224
+// ═══════════════════════════════════════════════════════════════════════════
+DetectionResult postprocess_espdet_espdl(
+    const InferenceEngine* engine,
+    float conf_thr,
+    float iou_thr)
+{
+    DetectionResult result;
+    result.clear();
+
+    // Scale names
+    static const char* score_names[NUM_SCALES] = {"score0", "score1", "score2"};
+    static const char* box_names[NUM_SCALES]   = {"box0", "box1", "box2"};
+
+    const float inv_dim = 1.0f / static_cast<float>(INPUT_WIDTH);
+
+    for (int s = 0; s < NUM_SCALES; ++s) {
+        const int8_t* score_data = static_cast<const int8_t*>(
+            engine->get_output_by_name(score_names[s]));
+        const int8_t* box_data = static_cast<const int8_t*>(
+            engine->get_output_by_name(box_names[s]));
+
+        if (!score_data || !box_data) {
+            ESP_LOGW(TAG, "ESPDet: output '%s' o '%s' no encontrado",
+                     score_names[s], box_names[s]);
+            continue;
+        }
+
+        int score_exp = engine->get_output_exponent(score_names[s]);
+        int box_exp   = engine->get_output_exponent(box_names[s]);
+        int grid_h    = GRID_SIZES[s];
+        int grid_w    = GRID_SIZES[s];
+        int stride    = GRID_STRIDES[s];
+
+        for (int gy = 0; gy < grid_h; ++gy) {
+            for (int gx = 0; gx < grid_w; ++gx) {
+                int offset = (gy * grid_w + gx) * NUM_CLASSES;
+
+                // Find best class score after dequant + sigmoid
+                int best_cls = 0;
+                float best_score = -1e9f;
+                for (int c = 0; c < NUM_CLASSES; ++c) {
+                    float s_val = dequant(score_data[offset + c], score_exp);
+                    if (s_val > best_score) {
+                        best_score = s_val;
+                        best_cls = c;
+                    }
+                }
+
+                float conf = sigmoid(best_score);
+                if (conf < conf_thr) continue;
+
+                // Decode box: [l, t, r, b] from grid center
+                int box_offset = (gy * grid_w + gx) * 4;
+                float l = std::max(0.0f, dequant(box_data[box_offset + 0], box_exp));
+                float t = std::max(0.0f, dequant(box_data[box_offset + 1], box_exp));
+                float r = std::max(0.0f, dequant(box_data[box_offset + 2], box_exp));
+                float b = std::max(0.0f, dequant(box_data[box_offset + 3], box_exp));
+
+                // Grid center in pixel coords
+                float cx = (static_cast<float>(gx) + 0.5f) * stride;
+                float cy = (static_cast<float>(gy) + 0.5f) * stride;
+
+                Detection det;
+                det.x1 = clamp01((cx - l * stride) * inv_dim);
+                det.y1 = clamp01((cy - t * stride) * inv_dim);
+                det.x2 = clamp01((cx + r * stride) * inv_dim);
+                det.y2 = clamp01((cy + b * stride) * inv_dim);
+                det.confidence = conf;
+                det.class_id   = best_cls;
+
+                result.add(det);
+                if (result.count >= MAX_DETECTIONS) break;
+            }
+            if (result.count >= MAX_DETECTIONS) break;
+        }
+        if (result.count >= MAX_DETECTIONS) break;
+    }
+
+    if (result.count > 1) {
+        nms_per_class(result, iou_thr);
+    }
+
+    return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  YOLO26n T2 ESP — DFL integral (3-scale, 4×16 bins)
+//
+//  Output tensors:
+//    score0 [1,28,28,5] exp=-3    score1 [1,14,14,5] exp=-2    score2 [1,7,7,5] exp=-3
+//    box0   [1,28,28,64] exp=-3   box1   [1,14,14,64] exp=-3   box2   [1,7,7,64] exp=-3
+//
+//  Box layout: [l_bins(16), t_bins(16), r_bins(16), b_bins(16)]
+//  DFL decode:
+//    For each direction d ∈ {l,t,r,b}:
+//      bins[0..15] = dequant → softmax → weighted sum = distance
+//    dist2bbox same as ESPDet but with DFL-computed distances
+// ═══════════════════════════════════════════════════════════════════════════
+DetectionResult postprocess_yolo26_espdl(
+    const InferenceEngine* engine,
+    float conf_thr,
+    float iou_thr)
+{
+    DetectionResult result;
+    result.clear();
+
+    static const char* score_names[NUM_SCALES] = {"score0", "score1", "score2"};
+    static const char* box_names[NUM_SCALES]   = {"box0", "box1", "box2"};
+
+    const float inv_dim = 1.0f / static_cast<float>(INPUT_WIDTH);
+
+    for (int s = 0; s < NUM_SCALES; ++s) {
+        const int8_t* score_data = static_cast<const int8_t*>(
+            engine->get_output_by_name(score_names[s]));
+        const int8_t* box_data = static_cast<const int8_t*>(
+            engine->get_output_by_name(box_names[s]));
+
+        if (!score_data || !box_data) {
+            ESP_LOGW(TAG, "YOLO26ESP: output '%s' o '%s' no encontrado",
+                     score_names[s], box_names[s]);
+            continue;
+        }
+
+        int score_exp = engine->get_output_exponent(score_names[s]);
+        int box_exp   = engine->get_output_exponent(box_names[s]);
+        int grid_h    = GRID_SIZES[s];
+        int grid_w    = GRID_SIZES[s];
+        int stride    = GRID_STRIDES[s];
+
+        for (int gy = 0; gy < grid_h; ++gy) {
+            for (int gx = 0; gx < grid_w; ++gx) {
+                int score_offset = (gy * grid_w + gx) * NUM_CLASSES;
+
+                // Find best class
+                int best_cls = 0;
+                float best_score = -1e9f;
+                for (int c = 0; c < NUM_CLASSES; ++c) {
+                    float s_val = dequant(score_data[score_offset + c], score_exp);
+                    if (s_val > best_score) {
+                        best_score = s_val;
+                        best_cls = c;
+                    }
+                }
+
+                float conf = sigmoid(best_score);
+                if (conf < conf_thr) continue;
+
+                // DFL integral for 4 directions: l, t, r, b
+                // Each direction has DFL_REG_MAX=16 bins
+                int box_offset = (gy * grid_w + gx) * (4 * DFL_REG_MAX);
+                float distances[4];
+
+                for (int d = 0; d < 4; ++d) {
+                    const int8_t* bins_raw = &box_data[box_offset + d * DFL_REG_MAX];
+
+                    // Softmax over DFL_REG_MAX bins
+                    float max_val = -1e9f;
+                    float bins[DFL_REG_MAX];
+                    for (int k = 0; k < DFL_REG_MAX; ++k) {
+                        bins[k] = dequant(bins_raw[k], box_exp);
+                        if (bins[k] > max_val) max_val = bins[k];
+                    }
+
+                    float sum_exp = 0.0f;
+                    for (int k = 0; k < DFL_REG_MAX; ++k) {
+                        bins[k] = std::exp(bins[k] - max_val);
+                        sum_exp += bins[k];
+                    }
+
+                    // Weighted sum = expected distance
+                    float dist = 0.0f;
+                    for (int k = 0; k < DFL_REG_MAX; ++k) {
+                        dist += (bins[k] / sum_exp) * static_cast<float>(k);
+                    }
+                    distances[d] = dist;
+                }
+
+                // Grid center in pixel coords
+                float cx = (static_cast<float>(gx) + 0.5f) * stride;
+                float cy = (static_cast<float>(gy) + 0.5f) * stride;
+
+                // dist2bbox: l,t,r,b → x1,y1,x2,y2 normalized
+                Detection det;
+                det.x1 = clamp01((cx - distances[0] * stride) * inv_dim);
+                det.y1 = clamp01((cy - distances[1] * stride) * inv_dim);
+                det.x2 = clamp01((cx + distances[2] * stride) * inv_dim);
+                det.y2 = clamp01((cy + distances[3] * stride) * inv_dim);
+                det.confidence = conf;
+                det.class_id   = best_cls;
+
+                result.add(det);
+                if (result.count >= MAX_DETECTIONS) break;
+            }
+            if (result.count >= MAX_DETECTIONS) break;
+        }
+        if (result.count >= MAX_DETECTIONS) break;
+    }
+
+    if (result.count > 1) {
+        nms_per_class(result, iou_thr);
+    }
+
+    return result;
 }

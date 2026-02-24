@@ -65,4 +65,18 @@ public:
 
     /// Quantization zero-point of the output tensor (valid only for INT8 outputs).
     virtual int32_t get_output_zero_point(int index = 0) const = 0;
+
+    /// Obtiene un tensor de salida por nombre (ESP-DL multi-output).
+    /// Por defecto retorna nullptr (sólo EspDlEngine lo implementa).
+    virtual const void* get_output_by_name(const char* /*name*/) const { return nullptr; }
+
+    /// Exponent de cuantización power-of-2 para un tensor de salida por nombre.
+    /// Fórmula: float_value = int8_value * 2^exponent.
+    virtual int get_output_exponent(const char* /*name*/) const { return 0; }
+
+    /// Obtiene las dimensiones del tensor de salida por nombre.
+    virtual esp_err_t get_output_shape_by_name(const char* /*name*/,
+                                                int* /*dims*/, int* /*n_dims*/) const {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
 };

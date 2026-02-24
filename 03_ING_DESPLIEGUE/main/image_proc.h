@@ -27,5 +27,18 @@ int8_t* image_preprocess(const camera_fb_t* fb, int8_t* output = nullptr);
 /// @return Puntero al buffer de salida (float32), nullptr si error.
 float* image_preprocess_float(const camera_fb_t* fb, float* output = nullptr);
 
+/// Preprocesa un frame para modelos ESP-DL con cuantización INT8 power-of-2.
+///
+/// Pipeline:
+///   1. Crop central 224×224 desde 320×240
+///   2. RGB565 → RGB888
+///   3. Normalización a INT8 [0, 127]: val = round(pixel / 255.0 * 128)
+///      compatible con exponent=-7 → float = int8 * 2^(-7) ≈ pixel / 255.0
+///
+/// @param fb       Frame buffer de la cámara (RGB565, 320×240)
+/// @param output   Buffer de salida (224×224×3, INT8). Si nullptr, usa buffer interno.
+/// @return Puntero al buffer de salida (INT8), nullptr si error.
+int8_t* image_preprocess_espdl(const camera_fb_t* fb, int8_t* output = nullptr);
+
 /// Libera los buffers de preprocesamiento.
 void image_proc_deinit();

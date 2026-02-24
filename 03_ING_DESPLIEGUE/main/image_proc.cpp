@@ -116,6 +116,56 @@ float* image_preprocess_float(const camera_fb_t* fb, float* output) {
     return out;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  ESP-DL INT8 preprocessing (power-of-2 quantization, exponent=-7)
+//
+//  The ESP-DL quantization scheme uses: float_val = int8_val * 2^(-7)
+//  So to encode a pixel [0,255] into INT8:
+//    int8_val = round(pixel / 255.0 * 128.0)   → range [0, 128] clamped to [0,127]
+//
+//  This is different from TFLite's zero-point=128 scheme (pixel - 128).
+// ═══════════════════════════════════════════════════════════════════════════
+int8_t* image_preprocess_espdl(const camera_fb_t* fb, int8_t* output) {
+    if (!fb || !fb->buf) {
+        ESP_LOGE(TAG, "Frame buffer nulo");
+        return nullptr;
+    }
+
+    int8_t* out = output ? output : s_int8_buffer;
+    if (!out) {
+        ESP_LOGE(TAG, "Buffer de salida no disponible");
+        return nullptr;
+    }
+
+    const uint16_t* src = reinterpret_cast<const uint16_t*>(fb->buf);
+    int idx = 0;
+
+    // Crop central 224×224 desde 320×240
+    for (int y = CROP_OFFSET_Y; y < CROP_OFFSET_Y + INPUT_HEIGHT; y++) {
+        for (int x = CROP_OFFSET_X; x < CROP_OFFSET_X + INPUT_WIDTH; x++) {
+            uint16_t pixel = src[y * CAMERA_WIDTH + x];
+
+            uint8_t r, g, b;
+            rgb565_to_rgb888(pixel, r, g, b);
+
+            // Normalizar a INT8 [0, 127] para ESP-DL (exponent=-7)
+            // Formula: int8_val = (pixel * 128 + 127) / 255
+            //   → equivale a round(pixel / 255.0 * 128.0) con aritmética entera
+            //   → clamped a máximo 127 (sólo pixel=255 daría 128→clamp)
+            auto to_espdl = [](uint8_t p) -> int8_t {
+                int val = (static_cast<int>(p) * 128 + 127) / 255;
+                return static_cast<int8_t>(val > 127 ? 127 : val);
+            };
+
+            out[idx++] = to_espdl(r);
+            out[idx++] = to_espdl(g);
+            out[idx++] = to_espdl(b);
+        }
+    }
+
+    return out;
+}
+
 void image_proc_deinit() {
     if (s_int8_buffer) {
         heap_caps_free(s_int8_buffer);

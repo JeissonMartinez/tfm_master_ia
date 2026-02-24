@@ -30,11 +30,8 @@ idf_component_register(
         esp32-camera
     PRIV_REQUIRES
         json
-    # EMBED_FILES para modelos ESP-DL (descomentar cuando estén generados)
-    # EMBED_FILES
-    #     "models/espdl/mobilenetv2_ssdlite_v1.espdl"
-    #     "models/espdl/yolo11n_v1.espdl"
-    #     "models/espdl/yolo26n_v1.espdl"
+    # Modelos ESP-DL se cargan desde particiones flash independientes
+    # (no EMBED_FILES).  Usar scripts/flash_models.sh para flashear.
 )
 
 # C++23

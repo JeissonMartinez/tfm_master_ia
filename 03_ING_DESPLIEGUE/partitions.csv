@@ -1,5 +1,15 @@
-# TFM TinyML Detector — Custom Partition Table
-# Name,     Type,  SubType,  Offset,   Size,     Flags
-nvs,        data,  nvs,      0x9000,   0x6000,
-phy_init,   data,  phy,      0xf000,   0x1000,
-factory,    app,   factory,  0x10000,  0xF00000,
+# TFM TinyML Detector — Custom Partition Table (Ciclo 3)
+# Layout: firmware + 2 particiones de modelos ESPDL independientes
+#
+# Flash total: 16 MB (0x1000000)
+# factory:      10 MB  — firmware ESP-IDF (~3-4 MB comprimido, margen amplio)
+# model_espdet:  1 MB  — ESPDet Pico T4 (545 KB .espdl)
+# model_yolo26:  3 MB  — YOLO26n T2 ESP (2.71 MB .espdl)
+# Total usado:  ~14 MB — margen libre ~2 MB
+#
+# Name,          Type,  SubType,  Offset,     Size,       Flags
+nvs,             data,  nvs,      0x9000,     0x6000,
+phy_init,        data,  phy,      0xf000,     0x1000,
+factory,         app,   factory,  0x10000,    0xA00000,
+model_espdet,    data,  0x40,     0xA10000,   0x100000,
+model_yolo26,    data,  0x40,     0xB10000,   0x300000,

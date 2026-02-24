@@ -42,29 +42,21 @@ static const char* TAG = "main";
 #include "models/tflite/yolo26n_v1_fullint8.h"
 #include "models/tflite/yolo11n_v1_fullint8.h"
 
-// ─── ESP-DL embedded binaries (linked via EMBED_FILES in CMakeLists) ─────
-#if __has_include("espdl_model_list.h")
-// Will be populated when .espdl models are available
-extern const uint8_t mobilenetv2_ssdlite_v1_espdl_start[] asm("_binary_mobilenetv2_ssdlite_v1_espdl_start");
-extern const uint8_t mobilenetv2_ssdlite_v1_espdl_end[]   asm("_binary_mobilenetv2_ssdlite_v1_espdl_end");
-extern const uint8_t yolo11n_v1_espdl_start[]              asm("_binary_yolo11n_v1_espdl_start");
-extern const uint8_t yolo11n_v1_espdl_end[]                asm("_binary_yolo11n_v1_espdl_end");
-extern const uint8_t yolo26n_v1_espdl_start[]              asm("_binary_yolo26n_v1_espdl_start");
-extern const uint8_t yolo26n_v1_espdl_end[]                asm("_binary_yolo26n_v1_espdl_end");
-#define HAS_ESPDL_MODELS 1
-#else
-#define HAS_ESPDL_MODELS 0
-#endif
+// ─── ESP-DL models loaded from flash partitions ─────────────────────────
+// No embedded binaries needed — models are mmap'd from dedicated partitions:
+//   model_espdet → espdet_pico_t4.espdl (0xA10000, 1 MB)
+//   model_yolo26 → yolo26n_t2_esp.espdl (0xB10000, 3 MB)
+// Use scripts/flash_models.sh to flash model data independently.
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Compile-time model selection  (override via sdkconfig / menuconfig)
 // ═══════════════════════════════════════════════════════════════════════════
 #ifndef ACTIVE_MODEL_TYPE
-#define ACTIVE_MODEL_TYPE   ModelType::YOLO11N
+#define ACTIVE_MODEL_TYPE   ModelType::ESPDET_PICO
 #endif
 
 #ifndef ACTIVE_ENGINE_TYPE
-#define ACTIVE_ENGINE_TYPE  EngineType::TFLITE_MICRO
+#define ACTIVE_ENGINE_TYPE  EngineType::ESP_DL
 #endif
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -96,6 +88,28 @@ static ModelConfig make_model_config(ModelType type, EngineType engine) {
         cfg.tflite_data  = yolo26n_v1_fullint8_data;
         cfg.tflite_size  = yolo26n_v1_fullint8_data_len;
         cfg.arena_size   = 2768153 * 3;   // ~7.9 MB
+        break;
+
+    case ModelType::ESPDET_PICO:
+        cfg.name            = "ESPDet_Pico_T4";
+        cfg.engine          = EngineType::ESP_DL;
+        cfg.espdl_partition = "model_espdet";     // partitions.csv label
+        cfg.tflite_data     = nullptr;
+        cfg.tflite_size     = 0;
+        cfg.arena_size      = 0;
+        cfg.conf_threshold  = ESPDET_CONF_THRESHOLD;
+        cfg.iou_threshold   = ESPDET_IOU_THRESHOLD;
+        break;
+
+    case ModelType::YOLO26N_ESP:
+        cfg.name            = "YOLO26n_T2_ESP";
+        cfg.engine          = EngineType::ESP_DL;
+        cfg.espdl_partition = "model_yolo26";     // partitions.csv label
+        cfg.tflite_data     = nullptr;
+        cfg.tflite_size     = 0;
+        cfg.arena_size      = 0;
+        cfg.conf_threshold  = YOLO26ESP_CONF_THRESHOLD;
+        cfg.iou_threshold   = YOLO26ESP_IOU_THRESHOLD;
         break;
     }
 
@@ -198,6 +212,13 @@ static DetectionResult run_postprocess(const InferenceEngine* engine,
             return postprocess_yolo26(raw, cfg.conf_threshold, /*coords_normalized=*/false);
         }
     }
+
+    // ─── ESP-DL multi-output models ──────────────────────────────────
+    case ModelType::ESPDET_PICO:
+        return postprocess_espdet_espdl(engine, cfg.conf_threshold, cfg.iou_threshold);
+
+    case ModelType::YOLO26N_ESP:
+        return postprocess_yolo26_espdl(engine, cfg.conf_threshold, cfg.iou_threshold);
     }
 
     return DetectionResult{};
@@ -213,7 +234,9 @@ static void inference_task(void* param) {
 
     // Full INT8 models use int8 input; hybrid models with float32 I/O need float
     // YOLO26N fullint8 and MOBILENET_SSD use int8 input; hybrid YOLO models need float
+    // ESP-DL models use dedicated ESPDL preprocessing (different normalization)
     bool needs_float = false;  // All active models now use INT8 input
+    bool needs_espdl_preprocess = (cfg.engine == EngineType::ESP_DL);
 
     ESP_LOGI(TAG, "═══════════════════════════════════════════════");
     ESP_LOGI(TAG, " Inference loop — modelo: %s", cfg.name);
@@ -248,6 +271,19 @@ static void inference_task(void* param) {
 
             // ─── 3. Inference ────────────────────────────────────────
             ret = engine->invoke_float(input_f);
+        } else if (needs_espdl_preprocess) {
+            // ESP-DL uses different normalization: [0,127] vs [-128,127]
+            int8_t* input_i = image_preprocess_espdl(fb);
+            camera_release_fb(fb);
+            metrics_preprocess_end();
+
+            if (!input_i) {
+                ESP_LOGW(TAG, "Preprocesamiento ESPDL fallido");
+                continue;
+            }
+
+            // ─── 3. Inference ────────────────────────────────────────
+            ret = engine->invoke(input_i);
         } else {
             int8_t* input_i = image_preprocess(fb);
             camera_release_fb(fb);
@@ -332,8 +368,12 @@ extern "C" void app_main(void) {
     ESP_LOGI(TAG, "Cargando modelo: %s (%s)",
              cfg.name, ACTIVE_ENGINE_TYPE == EngineType::TFLITE_MICRO
                        ? "TFLite Micro" : "ESP-DL");
-    ESP_LOGI(TAG, "   TFLite size: %zu KB", cfg.tflite_size / 1024);
-    ESP_LOGI(TAG, "   Arena estimado: %d KB", cfg.arena_size / 1024);
+    if (cfg.engine == EngineType::TFLITE_MICRO) {
+        ESP_LOGI(TAG, "   TFLite size: %zu KB", cfg.tflite_size / 1024);
+        ESP_LOGI(TAG, "   Arena estimado: %d KB", cfg.arena_size / 1024);
+    } else {
+        ESP_LOGI(TAG, "   Partición ESPDL: %s", cfg.espdl_partition ? cfg.espdl_partition : "(null)");
+    }
 
     InferenceEngine* engine = create_engine(static_cast<EngineType>(ACTIVE_ENGINE_TYPE));
     if (!engine) {
