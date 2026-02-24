@@ -48,6 +48,11 @@ Changes from v2.5.0:
     - ESPDet-Pico v2: Official Espressif architecture (0.36M params)
     - Replaced custom DepthwiseSeparableConv + SimpleFPN architecture
       with official DSConv/DSC3k2/ESPBlock/ESPDetectHead from esp-detection
+
+Changes from v2.6.0:
+    - BUG FIX: Added ultralytics>=8.2 to install_requires
+      (ESPDet v2 imports from ultralytics.nn.modules but it was missing)
+    - Version bump forces pip cache invalidation on Vertex AI
     - New espdet_modules/ sub-package with official blocks
     - Strides changed [4,8,16] → [8,16,32] (official)
     - Transfer learning from espdet_pico_224_224_cat.pt (cat detection, nc=1)
@@ -59,7 +64,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="tfm-trainer",
-    version="2.6.0",
+    version="2.6.1",
     description=(
         "TFM — Entrenamiento de modelos de detección de objetos "
         "para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)"
@@ -74,6 +79,7 @@ setup(
         "scikit-learn>=1.4",
         "opencv-python-headless>=4.9",
         "albumentations>=2.0.0",
+        "ultralytics>=8.2",
         "torchvision>=0.19",
         "google-cloud-storage>=2.14",
         "google-cloud-aiplatform>=1.40",

@@ -12,6 +12,10 @@ src_colab/utils_metrics.py
 src_colab/utils_model.py
 src_colab/utils_train.py
 src_colab/utils_widgets.py
+src_colab/espdet_modules/__init__.py
+src_colab/espdet_modules/esp_block.py
+src_colab/espdet_modules/esp_conv.py
+src_colab/espdet_modules/esp_head.py
 tfm_trainer.egg-info/PKG-INFO
 tfm_trainer.egg-info/SOURCES.txt
 tfm_trainer.egg-info/dependency_links.txt

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: tfm-trainer
-Version: 2.5.0
+Version: 2.6.1
 Summary: TFM — Entrenamiento de modelos de detección de objetos para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)
 Author: TFM UNIR
 Requires-Python: >=3.10
@@ -11,6 +11,7 @@ Requires-Dist: matplotlib>=3.8
 Requires-Dist: scikit-learn>=1.4
 Requires-Dist: opencv-python-headless>=4.9
 Requires-Dist: albumentations>=2.0.0
+Requires-Dist: ultralytics>=8.2
 Requires-Dist: torchvision>=0.19
 Requires-Dist: google-cloud-storage>=2.14
 Requires-Dist: google-cloud-aiplatform>=1.40

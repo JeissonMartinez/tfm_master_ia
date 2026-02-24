@@ -2,14 +2,14 @@
 
 > **Modelo**: `espdet_pico` — ESPDet-Pico anchor-free micro-detector  
 > **Arquitectura v1 (Train 1)**: Custom simplificada — ~22.8K params (0.09 MB)  
-> **Arquitectura v2 (Train 2+)**: Oficial Espressif — ~0.36M params (1.5 MB est.)  
+> **Arquitectura v2 (Train 2)**: Oficial Espressif — ~0.36M params (1.41 MB ONNX)  
 > **Dataset**: IODC YOLO — 5 clases (dog, door, obstacle, person, stair)  
 > **Splits**: Train 1470 | Val 188 | Test 187  
 > **Infraestructura**: Google Vertex AI Custom Job — `n1-standard-8` + NVIDIA Tesla T4  
 > **Contenedor**: `us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest`  
 > **Entry-point**: `trainer.task_espdet`  
-> **Paquete base**: `tfm_trainer-2.6.0.tar.gz`  
-> **Última actualización**: 23 de febrero de 2026 (v2.6.0 — arquitectura oficial)  
+> **Paquete base**: `tfm_trainer-2.6.1.tar.gz`  
+> **Última actualización**: 23 de febrero de 2026 (v2.6.1 — Train 2 completado)  
 
 ---
 
@@ -18,27 +18,30 @@
 1. [Resumen Ejecutivo](#1-resumen-ejecutivo)
 2. [Configuración Base (Compartida)](#2-configuración-base-compartida)
 3. [Train 1 — Baseline](#3-train-1--baseline)
-4. [Backlog de Propuestas](#4-backlog-de-propuestas)
-5. [Comparativa Cross-Model](#5-comparativa-cross-model)
-6. [Conclusiones Generales](#6-conclusiones-generales)
+4. [Train 2 — Arquitectura Oficial Espressif (v2)](#4-train-2--arquitectura-oficial-espressif-v2)
+5. [Backlog de Propuestas](#5-backlog-de-propuestas)
+6. [Comparativa Cross-Model](#6-comparativa-cross-model)
+7. [Conclusiones Generales](#7-conclusiones-generales)
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-| Métrica (Test) | Train 1 |
-|---|:---:|
-| **mAP@50** | 0.0105 |
-| **mAP@50-95** | 0.0023 |
-| **Precision** | 0.0009 |
-| **Recall** | 0.1597 |
-| **F1-Score** | 0.0017 |
-| Épocas (P1+P2) | 120 (40+80) |
-| Optimizer | AdamW |
-| conf_threshold | 0.25 |
-| Tiempo | 23.6 min |
-| Inferencia (GPU) | 34.4 ms |
-| ONNX size | 0.109 MB |
+| Métrica (Test) | Train 1 (v1) | **Train 2 (v2)** |
+|---|:---:|:---:|
+| **mAP@50** | 0.0105 | **0.6203** |
+| **mAP@50-95** | 0.0023 | **0.3078** |
+| **Precision** | 0.0009 | **0.2956** |
+| **Recall** | 0.1597 | **0.7235** |
+| **F1-Score** | 0.0017 | **0.4197** |
+| Épocas (P1+P2) | 120 (40+80) | 113 (50+63) |
+| Optimizer | AdamW | AdamW |
+| conf_threshold | 0.25 | 0.25 |
+| Tiempo | 23.6 min | 21.7 min |
+| Inferencia (GPU) | 34.4 ms | 4.6 ms |
+| ONNX size | 0.109 MB | 1.41 MB |
+| Arquitectura | Custom v1 (22.8K) | **Oficial v2 (361K)** |
+| Pretrained | No | **Sí (cat-detection)** |
 
 > Tabla actualizada tras cada entrenamiento exitoso.
 
@@ -147,6 +150,7 @@ Parámetros comunes a todos los entrenamientos de esta serie, salvo modificació
 | T1 lección — arquitectura custom | v2.6.0: Reimplementación con arquitectura oficial Espressif ✅ |
 | T1 lección — sin pretrained | v2.6.0: Transfer learning desde `espdet_pico_224_224_cat.pt` ✅ |
 | T1 lección — strides incorrectos | v2.6.0: Strides [8,16,32] (oficial) en vez de [4,8,16] ✅ |
+| T2 fallido — ultralytics missing | v2.6.1: Añadido `ultralytics>=8.2` a `install_requires` ✅ |
 
 ---
 
@@ -382,6 +386,257 @@ Bug fix de `aug_config` confirmado: 16 aug keys presentes (vs 0 sin el fix).
 
 ---
 
+## 4. Train 2 — Arquitectura Oficial Espressif (v2) ✅
+
+> **PRIMER ENTRENAMIENTO EXITOSO** — El modelo ESPDet-Pico ya detecta objetos. mAP@50=0.62 (test), crecimiento de **59×** vs Train 1.
+
+### 4.1 Identificador
+
+| Campo | Valor |
+|---|---|
+| **Job ID** | `3793775725299892224` |
+| **Pipeline ID** | `1216450101048770560` |
+| **Fecha** | 23 de febrero de 2026 |
+| **Paquete** | `tfm_trainer-2.6.1.tar.gz` |
+| **Config YAML** | `espdet_pico_v2.yaml` → `espdet-pico-v2-t2.yaml` |
+| **Output GCS** | `gs://project-18f58341-12cf-47bc-861-tfm-data/output/espdet-pico-v2-t2/` |
+| **Output local** | `outputs/espdet-pico-v2-t2/` |
+
+### 4.2 Configuración
+
+Arquitectura oficial Espressif v2 — según configuración base §2 (sin modificaciones).
+
+| Parámetro | Valor |
+|---|---|
+| Arquitectura | **Oficial Espressif** (v2, 361,563 params) |
+| Pretrained | `espdet_pico_224_224_cat.pt` (cat-detection, nc=1) |
+| Phase 1 | 50 ep, LR=1e-3, WD=1e-4, backbone frozen |
+| Phase 2 | 100 ep, LR=1e-4, WD=1e-5, full fine-tuning |
+| AMP | True |
+| Grad clip | 5.0 |
+| Batch size | 32 |
+| Patience | 25 |
+| conf_threshold | 0.25 |
+| Resolución | 224×224 (fija) |
+
+### 4.3 Verificación de Despliegue
+
+DEPLOY VERIFICATION confirmado en logs — todos los parámetros correctos:
+
+```
+🎯 DEPLOY VERIFICATION — ESPDet-Pico v2.6.1 (Official Architecture)
+  Architecture:    Official Espressif (esp-detection repo)
+  Strides:         [8, 16, 32]
+  pretrained:      gs://...pretrained/espdet_pico_224_224_cat.pt
+  Phase 1:         50 ep, LR=0.001, WD=0.0001
+  Phase 2:         100 ep, LR=0.0001, WD=1e-05
+  Optimizer:       adamw
+  cls_weight:      1.0
+  reg_weight:      2.0
+  Conf threshold:  0.25
+  IoU threshold:   0.45
+  AMP:             True
+  Grad clip:       5.0
+  Export imgsz:    224
+  Batch size:      32
+  Patience:        25
+  Aug keys:        ['aug_brightness_limit', 'aug_contrast_limit', ..., 'aug_gaussian_noise']
+```
+
+Transfer learning confirmado:
+- ✅ 622 param groups cargados (~99.97%)
+- ℹ️ Shape mismatch (random init): 6 tensores de `head.cv3.*.2` (cls final nc=1→5)
+- ✅ Backbone congelado: 213,440 params frozen (59.0%)
+- ✅ Trainable Phase 1: 148,123 / 361,563 (41.0%)
+
+### 4.4 Entrenamiento
+
+- **Épocas completadas**: 113 (50 Phase 1 + 63 Phase 2, **early stopping** epoch 112)
+- **Mejor val_loss**: **4.4100** (epoch 87)
+- **Phase 1** (backbone frozen, 148,123 trainable params):
+  - Start: train=16.476, val=14.675 (img=224)
+  - Best: epoch 48, val=4.682
+  - End: epoch 49, val=4.690
+  - Time: 9.5 min
+  - cls_loss: 12.654 → 1.283 (**-89.9%**)
+  - reg_loss: 3.821 → 1.766 (-53.8%)
+- **Phase 2** (full fine-tuning, 361,563 trainable params):
+  - Start: epoch 50, val=4.645 (sin spike — resolución constante 224px ✅)
+  - Best: **epoch 87, val=4.410**
+  - Early stop: epoch 112 (25 epochs sin mejora)
+  - Time: 12.1 min
+  - cls_loss: 1.305 → 0.722 (-44.7%)
+  - reg_loss: 1.756 → 1.366 (-22.2%)
+- **Tiempo total**: 21.7 min
+- **Phase 2 vs Phase 1**: val_loss mejoró 4.682 → 4.410 (-5.8%) ✅
+- **Early stopping se activó**: Best en epoch 87, stop en epoch 112 (patience=25 agotado)
+
+**Evolución de pérdida (puntos clave):**
+
+| Epoch | Phase | train_loss | val_loss | cls | reg | Nota |
+|---|---|---|---|---|---|---|
+| 0 | P1 | 16.476 | 14.675 | 12.654 | 3.821 | Start |
+| 2 | P1 | 7.150 | 6.781 | 4.239 | 2.910 | Descenso rápido |
+| 11 | P1 | 3.788 | 5.025 | 1.708 | 2.080 | — |
+| 25 | P1 | 3.315 | 4.772 | 1.430 | 1.885 | — |
+| 42 | P1 | 3.113 | 4.690 | 1.329 | 1.785 | — |
+| 48 | P1 | 3.050 | **4.682** | 1.303 | 1.747 | **Best P1** |
+| 50 | P2 | 3.061 | 4.645 | 1.305 | 1.756 | Start P2 (sin spike ✅) |
+| 60 | P2 | 2.816 | 4.465 | 1.129 | 1.687 | — |
+| 71 | P2 | 2.490 | 4.418 | 0.938 | 1.552 | — |
+| 87 | P2 | 2.291 | **4.410** | 0.833 | 1.458 | **Best global** ★ |
+| 100 | P2 | 2.142 | 4.505 | 0.739 | 1.403 | Overfitting visible |
+| 112 | P2 | 2.089 | 4.532 | 0.722 | 1.366 | **Early stop** ⏹️ |
+
+### 4.5 Resultados — Validación
+
+| Métrica | Valor |
+|---|---|
+| mAP@50 | **0.4543** |
+| mAP@50-95 | 0.2100 |
+| Precision | 0.2848 |
+| Recall | 0.5628 |
+| F1-Score | 0.3782 |
+| Detecciones totales | 1,538 (~8.2/imagen) |
+| Ground truths | 762 |
+| Inferencia | 11.2 ms |
+
+**Per-class AP@50 (Val):**
+
+| Clase | AP@50 | Precision | Recall | F1 |
+|---|:---:|:---:|:---:|:---:|
+| dog | 0.4100 | 0.3304 | 0.5067 | 0.4000 |
+| door | **0.5313** | 0.3127 | 0.6313 | 0.4182 |
+| obstacle | 0.3614 | 0.2266 | 0.5915 | 0.3277 |
+| person | 0.4893 | 0.3160 | 0.5659 | 0.4055 |
+| stair | 0.4796 | 0.2381 | 0.5189 | 0.3264 |
+
+**Confusion Matrix (Val):**
+
+|  | dog | door | obst | pers | stair | FN |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **dog** | 76 | 0 | 0 | 0 | 0 | 74 |
+| **door** | 0 | 101 | 0 | 0 | 0 | 59 |
+| **obstacle** | 0 | 0 | 97 | 0 | 0 | 67 |
+| **person** | 0 | 0 | 0 | 103 | 0 | 79 |
+| **stair** | 0 | 0 | 0 | 0 | 55 | 51 |
+| **FP (bkg)** | 154 | 222 | 331 | 223 | 176 | — |
+
+### 4.6 Resultados — Test
+
+| Métrica | Valor |
+|---|---|
+| mAP@50 | **0.6203** |
+| mAP@50-95 | 0.3078 |
+| Precision | 0.2956 |
+| Recall | 0.7235 |
+| F1-Score | 0.4197 |
+| Detecciones totales | 1,416 (~7.6/imagen) |
+| Ground truths | 576 |
+| Inferencia | 4.6 ms |
+
+**Per-class AP@50 (Test):**
+
+| Clase | AP@50 | Precision | Recall | F1 |
+|---|:---:|:---:|:---:|:---:|
+| dog | 0.6085 | 0.2826 | 0.6724 | 0.3980 |
+| door | 0.5846 | 0.2697 | 0.6544 | 0.3820 |
+| obstacle | 0.5043 | 0.2934 | 0.7225 | 0.4174 |
+| person | 0.6742 | 0.3333 | 0.7624 | 0.4639 |
+| stair | **0.7299** | 0.2990 | 0.8056 | 0.4361 |
+
+**Confusion Matrix (Test):**
+
+|  | dog | door | obst | pers | stair | FN |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **dog** | 39 | 0 | 0 | 0 | 0 | 19 |
+| **door** | 0 | 89 | 0 | 0 | 0 | 47 |
+| **obstacle** | 0 | 0 | 125 | 0 | 0 | 48 |
+| **person** | 0 | 0 | 0 | 77 | 0 | 24 |
+| **stair** | 0 | 0 | 0 | 0 | 87 | 21 |
+| **FP (bkg)** | 99 | 241 | 301 | 154 | 204 | — |
+
+### 4.7 Export ONNX
+
+| Parámetro | Valor |
+|---|---|
+| ONNX size | **1.41 MB** |
+| ONNX valid | ✅ |
+| ONNX latency | 2.5 ms (CPU, OnnxRuntime) |
+| Input shape | (1, 3, 224, 224) |
+| Opset | 13 |
+| Outputs | 6 — Interleaved: box0(1,4,28,28), score0(1,5,28,28), box1(1,4,14,14), score1(1,5,14,14), box2(1,4,7,7), score2(1,5,7,7) |
+| Checkpoint size | 1.70 MB |
+| onnxsim | No (no instalado en container) |
+
+### 4.8 Análisis
+
+**Resultado general: ÉXITO — El modelo detecta correctamente. mAP@50=0.62 (test) valida la arquitectura oficial + transfer learning como viable para ESP32-S3.**
+
+#### Mejoras vs Train 1
+
+| Métrica (Test) | Train 1 (v1) | Train 2 (v2) | Factor |
+|---|:---:|:---:|:---:|
+| mAP@50 | 0.0105 | **0.6203** | **59×** |
+| mAP@50-95 | 0.0023 | **0.3078** | **134×** |
+| Precision | 0.0009 | **0.2956** | **329×** |
+| Recall | 0.1597 | **0.7235** | **4.5×** |
+| F1 | 0.0017 | **0.4197** | **247×** |
+| Detecciones/img (val) | 572 | **8.2** | **-98.6%** |
+| Inferencia (test) | 34.4 ms | **4.6 ms** | **7.5× más rápido** |
+
+La mejora es transformacional: de ruido aleatorio a detector funcional.
+
+#### Fortalezas identificadas
+
+1. **Transfer learning altamente efectivo** — La pérdida de clasificación bajó de 12.65 a 1.28 solo en Phase 1 (backbone frozen). Los features del backbone pretrained cat-detection generalizaron bien a las 5 clases IODC. Esto confirma que la representación visual de bajo nivel (bordes, texturas, formas) es transferible entre dominios de detección.
+
+2. **Sin spike en Phase 2** — A diferencia de Train 1 (spike de val 8.35→8.89 por cambio de resolución 320→224), Train 2 con resolución fija 224px no tuvo spike. Epoch 50 (val=4.645) fue inmediatamente mejor que epoch 48 (val=4.682). El descongelamiento del backbone fue suave.
+
+3. **Early stopping funcionó** — El modelo no desperdició 37 epochs de cómputo. Best en epoch 87, stop en 112. Patience=25 fue un buen balance entre exploración y eficiencia.
+
+4. **Recall alto (0.72 test)** — El modelo encuentra la mayoría de los objetos. Todas las clases superan 0.65 recall. Para asistencia visual (caso de uso ESP32-S3), recall alto es prioritario sobre precision.
+
+5. **Cero confusión inter-clase** — Las confusion matrices muestran TP solo en la diagonal. El modelo NO confunde clases entre sí: nunca clasifica un dog como door, ni un person como obstacle. Todos los errores son FP (background→clase) o FN (clase→miss).
+
+6. **stair es la clase mejor detectada** (AP@50=0.7299 test) — Recall 80.6%, la más alta del dataset. Relevante para el caso de uso de asistencia visual.
+
+#### Debilidades identificadas
+
+7. **Precision baja (~0.30)** — El modelo produce ~2.5× más detecciones que objetos reales. Para 576 GT en test, genera 1,416 detecciones. Esto implica que ~60% de las detecciones son FP (background clasificado como objeto). Aunque mucho mejor que T1 (572/img → 8/img), aún hay margen de mejora.
+
+8. **obstacle tiene los más FP** — 331 FP en val (vs 97 TP), 301 FP en test (vs 125 TP). El modelo tiende a clasificar áreas de background como obstacle, probablemente porque esta clase es visualmente diversa (muebles, objetos varios).
+
+9. **Gap Val-Test significativo** — mAP@50 val=0.454 vs test=0.620 (+36% en test). Esto es inusual y sugiere que el conjunto de validación es más difícil o tiene distribución distinta. No indica overfitting al val set (al contrario), pero dificulta usar val_loss como proxy fiable del rendimiento real.
+
+10. **Indicios de overfitting al final** — train_loss bajó a 2.09 mientras val_loss se estancó en 4.41 (ratio 2.1×). Las últimas 25 epochs (87-112) no mejoraron validación. Más epochs no habrían ayudado.
+
+11. **ONNX sin simplificación** — `onnxsim` no está instalado en el container; el ONNX (1.41 MB) podría reducirse ~10-15% con simplificación.
+
+#### Bugs de tracking detectados
+
+12. **experiment.json tiene campos sin poblar** — `best_val_loss: "inf"`, `best_epoch: 0`, `duration_s: 0.0`. El código no actualiza estos campos de `ExperimentSetup` después del entrenamiento. Bug cosmético (métricas reales están en `val_evaluation.json` y `test_evaluation.json`).
+
+13. **experiment.json config tiene aug keys viejos** — Muestra `aug_horizontal_flip`, `aug_brightness_contrast`, `aug_rotation_limit` (keys del dataclass `ExperimentSetup`, no del YAML real). Las augmentaciones se aplicaron correctamente (confirmado por DEPLOY VERIFICATION), pero el tracking captura snapshots del dataclass que usa naming legacy. Bug cosmético, sin impacto en training.
+
+14. **experiment.json tiene batch_size: 16 en two_phase** — El default del dataclass, no el valor real (32). Mismo origen que #13.
+
+### 4.9 Lecciones
+
+1. **LECCIÓN PRINCIPAL: La arquitectura oficial + transfer learning es la clave** — 16× más parámetros (22.8K → 361K) y features pretrained de calidad transformaron el modelo de inoperable (0.01 mAP) a funcional (0.62 mAP). Los ~$10 invertidos en el retrain en Vertex AI validaron la hipótesis completamente.
+
+2. **Resolución fija simplifica el training** — Sin progressive resize, no hay spikes ni epochs de recuperación. La transición Phase 1→Phase 2 fue limpia.
+
+3. **Precision baja es el próximo cuello de botella** — Para mejorar la calidad del modelo, el siguiente paso debería enfocarse en reducir FP (Focal Loss, NMS tuning, o conf_threshold ajuste).
+
+4. **ExperimentSetup dataclass necesita refactoring** — Los campos de runtime (`best_val_loss`, `best_epoch`, `duration_s`) y los aug keys deberían actualizarse post-training. Bug cosmético pero reduce la utilidad del tracking de experimentos.
+
+5. **`ultralytics>=8.2` en dependencies funciona** — La instalación (8.4.14) fue exitosa, pero arrastra ~155 MB de deps extra (polars, opencv-python duplicado). Futuro: considerar vendorear solo los módulos necesarios (`ultralytics.nn.modules.conv`, `.block`).
+
+6. **Vertex AI Experiments sigue sin funcionar (403)** — Error recurrente idéntico a FCOS y YOLO26. El training continúa sin registro de experimentos. Pendiente de resolver a nivel de IAM/scoping del service account.
+
+---
+
 ## Debugging / Incidentes
 
 > Sección para registrar problemas encontrados durante el despliegue y debugging de los entrenamientos.
@@ -390,39 +645,57 @@ Bug fix de `aug_config` confirmado: 16 aug keys presentes (vs 0 sin el fix).
 
 - **Descubierto en**: Revisión de código pre-lanzamiento (comparación con `task_fcos.py`)
 - **Síntoma potencial**: `IODCDataset` recibiría `aug_config={}`, usando solo defaults internos de Albumentations
-- **Causa raíz**: `task_espdet.py` no extraía ni pasaba `aug_config` al constructor de `IODCDataset`, a diferencia de `task_fcos.py` que sí lo hace en L324-335
+- **Causa raíz**: `task_espdet.py` no extraía ni pasaba `aug_config` al constructor de `IODCDataset`
 - **Fix aplicado**: Añadido `aug_config = {k: v for k, v in fc.items() if k.startswith("aug_")}` + pasado como `aug_config=aug_config` a `IODCDataset()`
 - **Versión**: Fix incluido en `tfm_trainer-2.5.0`
-- **Verificación**: DEPLOY VERIFICATION confirma 16 aug keys presentes
 
 ### Train 1 — Dead config detectada (no impacto directo)
 
 - **`fpn_channels: 32`**: YAML lo define pero `build_espdet_pico()` no acepta el parámetro. FPN usa `ch_list[0]=8` del backbone.
 - **`num_head_convs: 2`**: YAML lo define pero no se pasa al constructor.
-- **`aug_horizontal_flip`, `aug_brightness_contrast`, `aug_rotation_limit`**: YAML keys no coincidían con los que `IODCDataset` busca (`aug_hflip_prob`, `aug_brightness_limit`, `aug_rotate_limit`). Defaults cubrían los keys correctos.
-- **Impacto**: Ninguno en T1 (defaults son razonables), pero impedía personalización vía YAML.
-- **Acción**: ✅ Corregido en v2.6.0 — YAML v2 usa keys alineados.
+- **Impacto**: Ninguno en T1 (defaults son razonables).
+- **Acción**: ✅ Obsoleto en v2 — YAML v2 no usa estos keys.
 
-### Train 1 — Warnings benignos (sin impacto)
+### Pre-Train 2 — Revisión integral pre-lanzamiento
+
+- **Bug encontrado**: ONNX interleaved export no se activaba — `hasattr(model, "export_onnx_forward")` era False (método en `model.head`, no en `model`)
+- **Fix aplicado**: Cambiado a `hasattr(model, "set_export_mode")` en `utils_export.py`
+- **Bug encontrado**: `espdet_modules/__init__.py` no exportaba `C3k`, `ESPSerial`, `ESPSerialLite`, `ESPDetect`, `ESPDLDetect`
+- **Fix aplicado**: Añadidas todas las exportaciones faltantes
+- **Bug encontrado**: Aug naming mismatch — YAML usaba keys viejos que `_build_transforms()` ignoraba silenciosamente
+- **Fix aplicado**: YAML v2 actualizado con keys correctos (`aug_hflip_prob`, `aug_brightness_limit`, etc.)
+- **Versión**: Fixes incluidos en `tfm_trainer-2.6.0`
+- **Verificación**: 5/5 checks pasados (forward, export mode, pretrained, freeze, aug alignment)
+
+### Train 2 — Intento fallido (antes de T2 exitoso)
+
+- **Error**: `ModuleNotFoundError: No module named 'ultralytics'` en `utils_model.py:261`
+- **Causa raíz**: `ultralytics` no estaba en `install_requires` de setup.py. El contenedor Vertex AI no lo incluye. Train 1 (arq. custom) no lo necesitaba.
+- **Fix aplicado**: Añadido `"ultralytics>=8.2"` a `install_requires`, version bump a 2.6.1
+- **Versión**: `tfm_trainer-2.6.1`
+- **Resultado**: Re-lanzamiento exitoso
+
+### Train 2 — Warnings benignos (sin impacto)
 
 - `pythonjsonlogger` module no encontrado — error de `sitecustomize` del contenedor
 - pip dependency conflicts (bigframes, ydata-profiling, dataproc-jupyter-plugin, pydantic version)
+- pip PATH warnings para scripts de `ultralytics`, `onnxruntime`, etc.
 - Vertex AI Experiments 403 (`ACCESS_TOKEN_SCOPE_INSUFFICIENT`) — entrenamiento continúa sin tracking
 
 ---
 
-## 4. Backlog de Propuestas
+## 5. Backlog de Propuestas
 
-> Propuestas identificadas durante el análisis de Train 1. **Actualizadas tras reimplementación v2.6.0.**
+> Propuestas identificadas durante el análisis de Train 1 y Train 2. **Actualizadas tras resultados de Train 2.**
 
-### ✅ PROPUESTA EJECUTADA — Reimplementación Arquitectura Oficial (v2.6.0)
+### ✅ PROPUESTA EJECUTADA — Reimplementación Arquitectura Oficial (v2.6.0/v2.6.1)
 
 **Objetivos cumplidos**: Reemplazar arquitectura custom (22.8K params) por oficial Espressif (0.36M params).
 
 | Aspecto | Train 1 (v1) | Train 2 (v2) | Estado |
 |---|---|---|---|
 | Arquitectura | Custom (DepthwiseSeparable + SimpleFPN) | **Oficial Espressif** (DSConv, DSC3k2, ESPBlock, ESPDetectHead) | ✅ |
-| Params | 22,839 | **~360,000** (16×) | ✅ |
+| Params | 22,839 | **361,563** (16×) | ✅ |
 | Strides | [4, 8, 16] | **[8, 16, 32]** (oficial) | ✅ |
 | Pretrained | None | **espdet_pico_224_224_cat.pt** (~99.97% transferred) | ✅ |
 | Resize | Progressive 640→224 | **Fijo 224** | ✅ |
@@ -430,69 +703,88 @@ Bug fix de `aug_config` confirmado: 16 aug keys presentes (vs 0 sin el fix).
 | Phase 2 | 80 ep, lr=5e-5 | **100 ep, lr=1e-4** | ✅ |
 | Patience | 20 | **25** | ✅ |
 | ONNX format | Grouped (cls0,cls1,cls2,reg0,...) | **Interleaved (box0,score0,box1,score1,box2,score2)** | ✅ |
-| Paquete | tfm_trainer-2.5.0 | **tfm_trainer-2.6.0** | ✅ |
+| Paquete | tfm_trainer-2.5.0 | **tfm_trainer-2.6.1** | ✅ |
+| **mAP@50 (test)** | 0.0105 | **0.6203** (59×) | ✅ |
 
-> Esta propuesta unificada subsume las Propuestas A (capacidad), B (224px fijo), y D (más epochs) del backlog original.
+> Esta propuesta unificada subsumió las Propuestas A (capacidad), B (224px fijo), y D (más epochs) del backlog original. **Resultados validan la hipótesis**: mAP@50 creció 59× con la arquitectura correcta.
 
 ### PROPUESTA C — Reducir conf_threshold evaluación
 
-**Estado**: ⏳ Pendiente — evaluar con v2. Si el modelo con 0.36M params produce menos FP spam, puede no ser necesario bajar a 0.10.
+**Estado**: ⏳ Pendiente — Con v2 el modelo produce ~8 det/img (vs 572/img en v1). El FP spam desapareció, pero Precision sigue baja (0.30). Podría experimentarse con conf_threshold=0.35 o 0.40 para subir Precision a costa de Recall.
 
 ### PROPUESTA E — Focal Loss (Train 3+)
 
-**Estado**: ⏳ Pendiente — evaluar después de Train 2 (v2). Si transfer learning resuelve el background suppression, Focal Loss no es necesario.
+**Estado**: ⏳ Evaluado — Transfer learning resolvió parcialmente el background suppression (de 572 det/img a 8 det/img). Sin embargo, Precision=0.30 indica que aún hay ~60% de FP. Focal Loss podría ayudar a mejorar la supresión de background. Recomendado para Train 3 si se decide optimizar Precision.
 
 ### PROPUESTA F — Alinear naming de augmentación (Mejora código)
 
-**Estado**: ✅ **Corregido en v2.6.0** — YAML `espdet_pico_v2.yaml` usa keys alineados con `_build_transforms()` (`aug_hflip_prob`, `aug_brightness_limit`, `aug_contrast_limit`, `aug_rotate_limit`, `aug_gaussian_noise`). Eliminados keys muertos (`aug_horizontal_flip`, `aug_brightness_contrast`, `aug_rotation_limit`, `aug_hue_sat_val`, `aug_random_gamma`, `aug_clahe`).
+**Estado**: ✅ **Corregido en v2.6.0** — YAML `espdet_pico_v2.yaml` usa keys alineados con `_build_transforms()` (`aug_hflip_prob`, `aug_brightness_limit`, `aug_contrast_limit`, `aug_rotate_limit`, `aug_gaussian_noise`). Eliminados keys muertos. Confirmado funcional en Train 2 (DEPLOY VERIFICATION muestra 10 aug keys correctos).
+
+### PROPUESTA G — Refactoring ExperimentSetup (Bug cosmético)
+
+**Estado**: ⏳ Nuevo — Identified en Train 2. `ExperimentSetup` no actualiza `best_val_loss`, `best_epoch`, `duration_s` post-training. Aug keys en la serialización usan naming legacy. `batch_size` en `two_phase` usa default (16) en vez del valor real (32). Sin impacto en training, pero reduce utilidad del tracking.
+
+### PROPUESTA H — Vendor ultralytics modules
+
+**Estado**: ⏳ Nuevo — La dependencia `ultralytics>=8.2` instala ~155 MB de deps innecesarios (polars, opencv-python duplicado). ESPDet solo usa `ultralytics.nn.modules.conv` y `.block`. Copiar localmente las ~5 clases necesarias (Conv, DWConv, SPPF, C2f, C3, Bottleneck, SCDown) eliminaría la dependencia completamente.
 
 ### Planificación Actualizada
 
 | Train | Config | Cambios | Estado |
 |---|---|---|---|
 | Train 1 | espdet_pico_v1.yaml | Baseline (arq. custom, sin pretrained) | ✅ Completado (FRACASO) |
-| Train 2 | **espdet_pico_v2.yaml** | **Arq. oficial + transfer learning + strides oficiales** | ⏳ Preparado |
-| Train 3 | espdet_pico_v3.yaml | Focal Loss (si necesario post-T2) | ⏳ Pendiente |
+| Train 2 | **espdet_pico_v2.yaml** | **Arq. oficial + transfer learning + strides oficiales** | ✅ **Completado (ÉXITO)** |
+| Train 3 | espdet_pico_v3.yaml | Focal Loss + conf_threshold tuning (si necesario) | ⏳ Pendiente |
 
 ---
 
-## 5. Comparativa Cross-Model
+## 6. Comparativa Cross-Model
 
 ### Test Metrics — ESPDet vs FCOS vs YOLO26
 
-| Métrica | ESPDet T1 | FCOS T3 (prod) | FCOS T7 (bench) | YOLO26 T1 | YOLO26 T2 |
-|---|:---:|:---:|:---:|:---:|:---:|
-| **mAP@50** | 0.0105 | 0.5675 | 0.6120 | 0.7544 | **0.7747** |
-| **mAP@50-95** | 0.0023 | 0.2602 | 0.2824 | 0.5153 | **0.5456** |
-| **Precision** | 0.0009 | 0.6609 | 0.3716 | 0.8264 | **0.8324** |
-| **Recall** | 0.1597 | 0.6276 | **0.6872** | 0.6402 | 0.6853 |
-| **F1-Score** | 0.0017 | 0.6438 | 0.4824 | 0.7215 | **0.7517** |
-| Params | **0.023M** | 1.23M | 1.23M | 2.58M | 2.58M |
-| ONNX size | **0.109 MB** | 4.74 MB | 4.74 MB | 9.97 MB | 9.97 MB |
-| ONNX latency | **0.76 ms** | — | — | 8.3 ms | 9.9 ms |
-| Train time | 23.6 min | — | — | 26.0 min | 32.6 min |
+| Métrica | ESPDet T1 | **ESPDet T2** | FCOS T3 (prod) | FCOS T7 (bench) | YOLO26 T1 | YOLO26 T2 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mAP@50** | 0.0105 | **0.6203** | 0.5675 | 0.6120 | 0.7544 | **0.7747** |
+| **mAP@50-95** | 0.0023 | **0.3078** | 0.2602 | 0.2824 | 0.5153 | **0.5456** |
+| **Precision** | 0.0009 | 0.2956 | **0.6609** | 0.3716 | 0.8264 | **0.8324** |
+| **Recall** | 0.1597 | **0.7235** | 0.6276 | 0.6872 | 0.6402 | 0.6853 |
+| **F1-Score** | 0.0017 | 0.4197 | **0.6438** | 0.4824 | 0.7215 | **0.7517** |
+| Params | **0.023M** | **0.36M** | 1.23M | 1.23M | 2.58M | 2.58M |
+| ONNX size | **0.109 MB** | **1.41 MB** | 4.74 MB | 4.74 MB | 9.97 MB | 9.97 MB |
+| ONNX latency | **0.76 ms** | **2.5 ms** | — | — | 8.3 ms | 9.9 ms |
+| Train time | 23.6 min | 21.7 min | — | — | 26.0 min | 32.6 min |
 
 ### Conclusión cross-model
 
-ESPDet-Pico T1 con width_mult=0.5 es **funcionalmente inoperable** (mAP@50=0.01). No es comparable con FCOS ni YOLO26 en su estado actual. El modelo cumple el objetivo de tamaño ultra-compacto (0.109 MB ONNX, 0.76 ms latencia) pero a costa de **cero utilidad predictiva**.
+ESPDet-Pico T2 con arquitectura oficial y transfer learning **supera a FCOS T3** en mAP@50 (0.6203 vs 0.5675) y es comparable a FCOS T7 (0.6120), siendo **3.4× más pequeño** en ONNX. El modelo tiene el mejor Recall del grupo (0.7235), pero la Precision más baja (0.2956), resultando en un F1 inferior (0.4197 vs 0.6438 FCOS, 0.7517 YOLO26).
 
-El factor limitante es exclusivamente la **capacidad del modelo** (22.8K params). La arquitectura, loss, y pipeline de entrenamiento funcionaron correctamente — la limitación es estructural, no un bug.
+YOLO26 T2 sigue siendo el mejor modelo en calidad de detección (mAP@50=0.7747, F1=0.7517), pero su ONNX de 9.97 MB lo hace **inviable para ESP32-S3** (8 MB Flash disponibles). ESPDet-Pico T2 (1.41 MB ONNX) es el **único modelo que cabe cómodamente en el dispositivo embebido** con rendimiento funcional.
+
+| Modelo | mAP@50 | ONNX size | Cabe en ESP32-S3? | Nota |
+|---|:---:|:---:|:---:|:---:|
+| ESPDet T2 | 0.6203 | **1.41 MB** | ✅ Sí | **Candidato para deploy** |
+| FCOS T7 | 0.6120 | 4.74 MB | ⚠️ Ajustado | Post-cuantización INT8 necesaria |
+| YOLO26 T2 | **0.7747** | 9.97 MB | ❌ No | Excede Flash disponible |
 
 ---
 
-## 6. Conclusiones Generales
+## 7. Conclusiones Generales
 
-1. **Train 1 usó una arquitectura custom incorrecta** — La implementación original (22.8K params con DepthwiseSeparableConv + SimpleFPN) NO correspondía a la arquitectura oficial Espressif. Esto causó: capacidad insuficiente (16× menos params que el diseño oficial), incompatibilidad total con pesos pretrained, y strides incorrectos [4,8,16] vs [8,16,32].
+1. **Train 2 valida la arquitectura oficial Espressif + transfer learning** — mAP@50 creció **59×** (0.0105 → 0.6203) con la misma infraestructura (Vertex AI T4, ~22 min). La inversión en reimplementar la arquitectura oficial fue la decisión correcta.
 
-2. **v2.6.0 reimplementa la arquitectura oficial** — Se importaron los bloques reales del repo `espressif/esp-detection` (DSConv, DSC3k2, ESPBlock, ESPBlockLite, ESPDetectHead) y se ensambló la topología exacta del YAML oficial con scale `n`=[0.50, 0.25, 512]. Resultado: 0.36M params, strides [8,16,32].
+2. **ESPDet-Pico es ahora el candidato principal para ESP32-S3** — Con 1.41 MB ONNX y mAP@50=0.62, supera a FCOS en calidad AND tamaño. Es el único modelo que cabe cómodamente en Flash del ESP32-S3 sin necesitar cuantización extrema.
 
-3. **Transfer learning ahora es posible** — Los pesos `espdet_pico_224_224_cat.pt` (cat-detection, nc=1) transfieren ~99.97% de parámetros al nuevo modelo. Solo las capas finales de clasificación (Conv2d nc=1→5) son random. Esto debería proporcionar features de backbone de altísima calidad desde el inicio.
+3. **Recall alto (0.72) es relevante para asistencia visual** — El modelo encuentra la mayoría de objetos (puertas 65%, escaleras 80%, personas 76%, obstáculos 72%). Para un dispositivo de asistencia, fallar en detectar un obstáculo es más peligroso que un falso positivo.
 
-4. **ONNX export compatible con esp-ppq** — El formato interleaved `(box0, score0, box1, score1, box2, score2)` es directamente compatible con ESPDetPostProcessor para la conversión a `.espdl` para el ESP32-S3.
+4. **Precision baja (0.30) es la debilidad principal** — ~60% de detecciones son FP. Focal Loss (Propuesta E) y/o ajuste de conf_threshold (Propuesta C) podrían mejorar esto en Train 3.
 
-5. **Pipeline MLOps sigue maduro** — v2.6.0 mantiene todas las protecciones (DEPLOY VERIFICATION, version bump, aug_config fix, print() en entry-point). La reimplementación arquitectónica fue posible sin cambios en el pipeline de entrenamiento (2 fases, progressive resize, loss, evaluación).
+5. **Cero confusión inter-clase** — El modelo nunca confunde una clase con otra. Todos los errores son background→clase (FP) o clase→miss (FN). La discriminación clasificatoria es buena; el problema es solo la supresión de background.
 
-6. **Acción inmediata: Lanzar Train 2 con `espdet_pico_v2.yaml`** — Todo el código y configuración están listos. El entrenamiento debería mostrar mejoras dramáticas sobre Train 1 gracias a: 16× más parámetros, transfer learning, y strides correctos.
+6. **Pipeline MLOps maduro y estable** — Segundo modelo de 3 familias entrenado exitosamente en la misma infraestructura. Protecciones de DEPLOY VERIFICATION, version bump, y aug_config fix funcionan como esperado.
+
+7. **Transfer learning desde cat-detection funciona para IODC** — Los features de bajo nivel (bordes, texturas) del pretrained cat-detection generalizaron bien a las 5 clases del dataset IODC. cls_loss bajó un 89.9% solo en Phase 1 (backbone frozen), confirmando la calidad de los features transferidos.
+
+8. **Siguiente paso recomendado**: Evaluar si la precisión actual (0.30) es aceptable para el caso de uso del ESP32-S3, o si se necesita un Train 3 con Focal Loss. Paralelamente, iniciar la conversión ONNX → ESPDL para despliegue en el dispositivo.
 
 ---
 
