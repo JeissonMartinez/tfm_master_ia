@@ -3,13 +3,14 @@
 > **Modelo**: `espdet_pico` — ESPDet-Pico anchor-free micro-detector  
 > **Arquitectura v1 (Train 1)**: Custom simplificada — ~22.8K params (0.09 MB)  
 > **Arquitectura v2 (Train 2)**: Oficial Espressif — ~0.36M params (1.41 MB ONNX)  
+> **Arquitectura v3 (Train 3)**: Oficial Espressif + Focal Loss — ~0.36M params (1.41 MB ONNX)  
 > **Dataset**: IODC YOLO — 5 clases (dog, door, obstacle, person, stair)  
 > **Splits**: Train 1470 | Val 188 | Test 187  
 > **Infraestructura**: Google Vertex AI Custom Job — `n1-standard-8` + NVIDIA Tesla T4  
 > **Contenedor**: `us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest`  
 > **Entry-point**: `trainer.task_espdet`  
-> **Paquete base**: `tfm_trainer-2.6.1.tar.gz`  
-> **Última actualización**: 23 de febrero de 2026 (v2.6.1 — Train 2 completado)  
+> **Paquete base**: `tfm_trainer-2.6.2.tar.gz`  
+> **Última actualización**: 24 de febrero de 2026 (v2.6.2 — Train 3 completado)  
 
 ---
 
@@ -19,29 +20,31 @@
 2. [Configuración Base (Compartida)](#2-configuración-base-compartida)
 3. [Train 1 — Baseline](#3-train-1--baseline)
 4. [Train 2 — Arquitectura Oficial Espressif (v2)](#4-train-2--arquitectura-oficial-espressif-v2)
-5. [Backlog de Propuestas](#5-backlog-de-propuestas)
-6. [Comparativa Cross-Model](#6-comparativa-cross-model)
-7. [Conclusiones Generales](#7-conclusiones-generales)
+5. [Train 3 — Focal Loss (v3)](#5-train-3--focal-loss-v3)
+6. [Backlog de Propuestas](#6-backlog-de-propuestas)
+7. [Comparativa Cross-Model](#7-comparativa-cross-model)
+8. [Conclusiones Generales](#8-conclusiones-generales)
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-| Métrica (Test) | Train 1 (v1) | **Train 2 (v2)** |
-|---|:---:|:---:|
-| **mAP@50** | 0.0105 | **0.6203** |
-| **mAP@50-95** | 0.0023 | **0.3078** |
-| **Precision** | 0.0009 | **0.2956** |
-| **Recall** | 0.1597 | **0.7235** |
-| **F1-Score** | 0.0017 | **0.4197** |
-| Épocas (P1+P2) | 120 (40+80) | 113 (50+63) |
-| Optimizer | AdamW | AdamW |
-| conf_threshold | 0.25 | 0.25 |
-| Tiempo | 23.6 min | 21.7 min |
-| Inferencia (GPU) | 34.4 ms | 4.6 ms |
-| ONNX size | 0.109 MB | 1.41 MB |
-| Arquitectura | Custom v1 (22.8K) | **Oficial v2 (361K)** |
-| Pretrained | No | **Sí (cat-detection)** |
+| Métrica (Test) | Train 1 (v1) | Train 2 (v2) | **Train 3 (v3)** |
+|---|:---:|:---:|:---:|
+| **mAP@50** | 0.0105 | **0.6203** | 0.5993 |
+| **mAP@50-95** | 0.0023 | **0.3078** | 0.3220 |
+| **Precision** | 0.0009 | **0.2956** | 0.2156 |
+| **Recall** | 0.1597 | 0.7235 | **0.7663** |
+| **F1-Score** | 0.0017 | **0.4197** | 0.3365 |
+| Épocas (P1+P2) | 120 (40+80) | 113 (50+63) | 131 (50+81) |
+| Loss | BCE | BCE | **Focal (γ=2.0, α=0.25)** |
+| Optimizer | AdamW | AdamW | AdamW |
+| conf_threshold | 0.25 | 0.25 | 0.25 |
+| Tiempo | 23.6 min | 21.7 min | 27.0 min |
+| Inferencia (GPU) | 34.4 ms | 4.6 ms | 3.6 ms |
+| ONNX size | 0.109 MB | 1.41 MB | 1.41 MB |
+| Arquitectura | Custom v1 (22.8K) | Oficial v2 (361K) | **Oficial v2 + Focal (361K)** |
+| Pretrained | No | Sí (cat-detection) | Sí (cat-detection) |
 
 > Tabla actualizada tras cada entrenamiento exitoso.
 
@@ -117,6 +120,8 @@ Parámetros comunes a todos los entrenamientos de esta serie, salvo modificació
 | `reg_loss` | GIoU loss (l,t,r,b stride-normalizado) | 2.0 |
 
 > ESPDet NO utiliza centerness (a diferencia de FCOS). `ctr_loss` siempre es 0.0.
+>
+> **Train 3**: `cls_loss` cambió a **Sigmoid Focal Loss** (γ=2.0, α=0.25) para intentar mejorar la supresión de background. Resultado: **no mejoró** — ver §5 para análisis completo.
 
 ### 2.6 Augmentación (Albumentations)
 
@@ -151,6 +156,8 @@ Parámetros comunes a todos los entrenamientos de esta serie, salvo modificació
 | T1 lección — sin pretrained | v2.6.0: Transfer learning desde `espdet_pico_224_224_cat.pt` ✅ |
 | T1 lección — strides incorrectos | v2.6.0: Strides [8,16,32] (oficial) en vez de [4,8,16] ✅ |
 | T2 fallido — ultralytics missing | v2.6.1: Añadido `ultralytics>=8.2` a `install_requires` ✅ |
+| T2 lección — ExperimentSetup bugs | v2.6.2: Corregidos `best_val_loss`, `best_epoch`, `duration_s`, `batch_size`, aug field names ✅ |
+| T3 lección — Focal Loss degradó | Focal Loss (γ=2.0, α=0.25) empeoró Precision (-27%) en modelo de 0.36M. No recomendado sin más capacidad ⚠️ |
 
 ---
 
@@ -637,6 +644,212 @@ La mejora es transformacional: de ruido aleatorio a detector funcional.
 
 ---
 
+## 5. Train 3 — Focal Loss (v3)
+
+> **Hipótesis**: Reemplazar BCE por Sigmoid Focal Loss (γ=2.0, α=0.25) en `cls_loss` para mejorar la supresión de background y reducir FP, subiendo Precision sin sacrificar Recall.
+>
+> **Resultado**: ❌ **HIPÓTESIS NO CONFIRMADA** — Focal Loss **degradó** Precision (-27%), mAP@50 (-3.4%) y F1 (-19.8%). El único beneficio fue un ligero aumento de Recall (+5.9%). El modelo de 0.36M params no tiene capacidad suficiente para beneficiarse de Focal Loss con estos hiperparámetros.
+
+### 5.1 Identificador
+
+| Campo | Valor |
+|---|---|
+| **Job ID** | `2124347638428991488` |
+| **Pipeline ID** | `579401860008378368` |
+| **Fecha** | 23 de febrero de 2026 |
+| **Paquete** | `tfm_trainer-2.6.2.tar.gz` |
+| **Config YAML** | `espdet_pico_v3.yaml` → `espdet-pico-v3-t3.yaml` |
+| **Output GCS** | `gs://project-18f58341-12cf-47bc-861-tfm-data/output/espdet-pico-v3-t3/` |
+| **Output local** | `outputs/espdet-pico-v3-t3/` |
+
+### 5.2 Configuración (Cambios vs Train 2)
+
+| Parámetro | Train 2 (v2) | **Train 3 (v3)** | Cambio |
+|---|---|---|---|
+| `cls_loss` | BCE | **Sigmoid Focal Loss** | γ=2.0, α=0.25 |
+| Paquete | `tfm_trainer-2.6.1` | **`tfm_trainer-2.6.2`** | Focal Loss + ExperimentSetup fixes |
+| Config YAML | `espdet_pico_v2.yaml` | **`espdet_pico_v3.yaml`** | Solo cambios de loss |
+| Arquitectura | Oficial Espressif (361K) | Idéntica (361K) | Sin cambios |
+| Pretrained | `espdet_pico_224_224_cat.pt` | Idéntico | Sin cambios |
+| Two-phase | P1=50ep, P2=100ep | Idéntico | Sin cambios |
+| Augmentación | HFlip, BC, HSV, Rotate, GaussNoise | Idéntica | Sin cambios |
+| conf_threshold | 0.25 | 0.25 | Sin cambios |
+
+> **Cambio único**: Solo se modificó la función de loss de clasificación. Todo lo demás es idéntico a Train 2 para aislar el efecto de Focal Loss.
+
+#### Fixes en v2.6.2 (cosmético — sin impacto en training)
+
+| Fix | Descripción |
+|---|---|
+| `best_val_loss` | Ahora se actualiza post-training (antes: `"inf"`) |
+| `best_epoch` | Ahora se actualiza post-training (antes: `0`) |
+| `duration_s` | Ahora se registra correctamente (antes: `0.0`) |
+| `batch_size` | Ahora refleja el valor real de `two_phase` (antes: default `16`) |
+| Aug field names | Ahora usa naming correcto del YAML (antes: naming legacy del dataclass) |
+
+### 5.3 DEPLOY VERIFICATION
+
+```
+🔍 DEPLOY VERIFICATION:
+  Package version: 2.6.2 ✅
+  Focal Loss: ON (γ=2.0, α=0.25) ✅
+  Model architecture: espdet_pico  
+  Total params: 361,563
+  Transfer learning: 622 param groups, 616 loaded, 6 shape mismatches (cls head → nc=5)
+  Aug keys: 10 keys present
+  Export format: interleaved
+```
+
+> ✅ **Focal Loss confirmado activo** en el log: `🎯 ESPDet cls_loss: Sigmoid Focal Loss (γ=2.0, α=0.25)`
+
+### 5.4 Dinámica de Entrenamiento
+
+| Métrica | Phase 1 (Freeze) | Phase 2 (Full) | Total |
+|---|---|---|---|
+| Epochs | 50 | 81 (early stop ep. 130) | **131** |
+| Duración | 10.2 min | 16.8 min | **27.0 min** |
+| train_loss (inicio→fin) | 6.46 → 1.87 | 1.85 → 1.34 | 6.46 → 1.34 |
+| val_loss (inicio→fin) | 5.65 → 2.76 | 2.73 → 2.57 | 5.65 → 2.57 |
+| Best val_loss | 2.7633 (ep. 48) | **2.5571 (ep. 105)** | — |
+| LR | 1e-3 → ~0 (cosine) | 1e-4 → ~0 (cosine) | — |
+
+**Observaciones**:
+- Transición Phase 1→Phase 2 limpia: val_loss pasó de 2.76 a 2.73 sin spike ✅
+- Early stopping activado en epoch 130 (patience=25, best_epoch=105)
+- **Loss scale NO comparable con T2**: Focal Loss pondera los ejemplos fáciles con factor $(1-p_t)^\gamma$, reduciendo la magnitud del loss. T2 best_val_loss=4.41 vs T3 best_val_loss=2.56 — la diferencia es por la ponderación, NO por mejor convergencia.
+- train/val ratio al final: 1.34/2.57 = 1.9× — similar a T2 (2.09/4.41 = 2.1×). Mismo nivel de overfitting.
+
+### 5.5 Resultados — Validación
+
+| Métrica | Valor |
+|---|---|
+| **mAP@50** | **0.4230** |
+| **mAP@50-95** | 0.2164 |
+| **Precision** | 0.2111 |
+| **Recall** | 0.5936 |
+| **F1-Score** | 0.3114 |
+| Detecciones / GT | 2,367 / 762 (3.1× ratio) |
+
+#### Per-class AP@50 — Validación
+
+| Clase | AP@50 | Recall | TP | FP (bg) | Nota |
+|---|:---:|:---:|:---:|:---:|---|
+| dog | 0.3913 | 0.4667 | 70 | 217 | Clase más difícil en val |
+| door | 0.4683 | 0.6563 | 105 | 359 | — |
+| obstacle | 0.3309 | 0.7256 | 119 | 790 | Más FP absolutos |
+| person | 0.4956 | 0.6099 | 111 | 328 | — |
+| stair | 0.4286 | 0.5094 | 54 | 214 | — |
+
+### 5.6 Resultados — Test
+
+| Métrica | Valor | vs T2 | Delta |
+|---|---|:---:|---|
+| **mAP@50** | **0.5993** | 0.6203 | **-3.4%** ⬇️ |
+| **mAP@50-95** | 0.3220 | 0.3078 | +4.6% ⬆️ |
+| **Precision** | 0.2156 | 0.2956 | **-27.1%** ⬇️ |
+| **Recall** | **0.7663** | 0.7235 | +5.9% ⬆️ |
+| **F1-Score** | 0.3365 | 0.4197 | **-19.8%** ⬇️ |
+| Detecciones / GT | 2,119 / 576 | 1,416 / 576 | **+49.6% más detecciones** ⬇️ |
+
+#### Per-class AP@50 — Test (comparativa)
+
+| Clase | T3 AP@50 | T2 AP@50 | Delta | T3 Recall | T3 TP | T3 FP (bg) |
+|---|:---:|:---:|---|:---:|:---:|:---:|
+| dog | 0.5989 | 0.6085 | -1.6% | 0.6724 | 39 | 153 |
+| door | 0.5589 | 0.5846 | -4.4% | 0.7426 | 101 | 380 |
+| obstacle | 0.4418 | 0.5043 | **-12.4%** | 0.8266 | 143 | 598 |
+| person | 0.7078 | 0.6742 | **+5.0%** | 0.8119 | 82 | 283 |
+| stair | 0.6893 | 0.7299 | -5.6% | 0.7778 | 84 | 256 |
+
+### 5.7 Confusion Matrices
+
+```
+Cero confusión inter-clase (idéntico a T2)
+Todas las off-diagonal cls→cls son 0.0
+Todos los errores son: background → clase (FP) o clase → miss (FN)
+```
+
+**Comparativa FP (background→clase) — Test**:
+
+| Clase | T2 FP (bg) | T3 FP (bg) | Delta |
+|---|:---:|:---:|---|
+| dog | 87 | 153 | +75.9% ⬆️ |
+| door | 192 | 380 | +97.9% ⬆️ |
+| obstacle | 301 | 598 | +98.7% ⬆️ |
+| person | 202 | 283 | +40.1% ⬆️ |
+| stair | 103 | 256 | +148.5% ⬆️ |
+| **Total** | **885** | **1,670** | **+88.7%** ⬆️ |
+
+> ⚠️ **Focal Loss casi duplicó los FP de background**. El efecto fue exactamente opuesto al esperado.
+
+### 5.8 ONNX Export
+
+| Métrica | Valor | vs T2 |
+|---|---|---|
+| ONNX size | 1.41 MB | = |
+| ONNX outputs | 6 (interleaved) | = |
+| Latencia GPU (T4) | 3.6 ms | ~T2 (2.5 ms) |
+| Checkpoint | 1.70 MB | = |
+| `onnxsim` | No instalado | = |
+
+### 5.9 ExperimentSetup — Validación de Fixes (v2.6.2)
+
+| Campo | T2 (v2.6.1) | T3 (v2.6.2) | Estado |
+|---|---|---|---|
+| `best_val_loss` | `"inf"` | **2.5571** | ✅ Fix confirmado |
+| `best_epoch` | `0` | **105** | ✅ Fix confirmado |
+| `duration_s` | `0.0` | **1622.65** | ✅ Fix confirmado |
+| `batch_size` | `16` (wrong default) | **32** | ✅ Fix confirmado |
+| Aug keys | Legacy names | **Correctos** (`aug_hflip_prob`, etc.) | ✅ Fix confirmado |
+
+> ✅ Los 5 bugs cosméticos del `ExperimentSetup` (Propuesta G) están **completamente resueltos** en v2.6.2.
+
+### 5.10 Análisis
+
+#### ¿Por qué Focal Loss degradó el rendimiento?
+
+1. **Efecto opuesto al esperado** — Focal Loss estaba diseñada para reducir FP de background down-weighting los ejemplos fáciles (background claro). En su lugar, **aumentó** los FP un 88.7%. El modelo ahora produce 2,119 detecciones para 576 GT (3.7× ratio) vs 1,416 en T2 (2.5× ratio).
+
+2. **Capacidad insuficiente del modelo** — Con solo 0.36M params, ESPDet-Pico necesita **toda** la señal de gradiente disponible para aprender la supresión de background. Focal Loss (α=0.25) reduce el peso de los negativos fáciles en un factor ~100× ($\alpha \cdot (1-p_t)^\gamma \approx 0.25 \cdot 0.01 = 0.0025$ para negativos con $p_t \approx 0.9$). Esto priva al modelo de la señal que necesita para discriminar background.
+
+3. **Focal Loss funciona mejor en modelos más grandes** — En la literatura (Lin et al., 2017), Focal Loss mejora RetinaNet (~36M params). Con 100× menos capacidad, ESPDet-Pico no puede compensar la reducción de gradiente en negativos fáciles con mejores representaciones internas.
+
+4. **obstacle fue la clase más afectada** — AP@50 cayó -12.4% (0.5043→0.4418). Esta clase ya era la más difícil (visualmente diversa, muchos FP). Al reducir la señal de gradiente para background, obstacle perdió la capacidad de distinguir objetos reales del background complejo.
+
+5. **person fue la única mejora** — AP@50 subió +5.0% (0.6742→0.7078). Posiblemente porque es la clase más visualmente consistente (forma humana), donde el modelo ya tenía features fuertes y Focal Loss ayudó a enfocarse en los ejemplos difíciles restantes.
+
+6. **mAP@50-95 mejoró ligeramente** (+4.6%) — Esto sugiere que las detecciones que sí produce T3 tienen mejor localización (boxes más precisos), pero la calidad clasificatoria empeoró drásticamente.
+
+#### Fortalezas
+
+7. **Recall mejorado** — 0.7663 vs 0.7235 (+5.9%). El modelo detecta más objetos reales, pero a costa de muchos más FP.
+
+8. **Cero confusión inter-clase** — Idéntico a T2. La clasificación entre clases sigue siendo perfecta; el problema es exclusivamente background vs objeto.
+
+9. **ExperimentSetup fixes funcionan** — Los 5 bugs cosméticos de Propuesta G están resueltos. El tracking de experimentos es ahora completo y confiable.
+
+#### Debilidades
+
+10. **Precision desplomada (0.2156)** — Peor que T2 (0.2956) en un 27%. Para 576 GT en test, genera 2,119 detecciones — ~73% son FP.
+
+11. **F1-Score degradado (0.3365)** — -19.8% vs T2 (0.4197). El balance Precision/Recall empeoró significativamente.
+
+12. **Efecto contrario al objetivo** — El propósito de T3 era **mejorar** Precision reduciendo FP. El resultado fue exactamente el opuesto.
+
+### 5.11 Lecciones
+
+1. **LECCIÓN PRINCIPAL: Focal Loss no es adecuada para modelos ultra-ligeros (0.36M params)** — La reducción de gradiente en negativos fáciles priva al modelo de la señal necesaria para aprender background suppression. Con capacidad limitada, BCE es más efectivo porque proporciona gradiente completo en todos los ejemplos.
+
+2. **El problema de Precision en ESPDet-Pico no se resuelve con loss engineering** — Hay que explorar otras vías: ajuste de `conf_threshold` (0.35-0.40), NMS más agresivo, o post-procesamiento heurístico.
+
+3. **Aislar variables experimentales funciona** — Al cambiar SOLO la loss function (mismo modelo, mismos hyperparams, mismos datos), el efecto es claramente atribuible a Focal Loss. Buena práctica MLOps.
+
+4. **v2.6.2 es estable para tracking** — ExperimentSetup ahora registra correctamente todos los campos runtime. Base sólida para futuros experimentos.
+
+5. **Train 2 (BCE) sigue siendo el mejor modelo ESPDet-Pico** — Para deploy en ESP32-S3, Train 2 (mAP@50=0.6203, F1=0.4197) es superior a Train 3 en todas las métricas excepto Recall.
+
+---
+
 ## Debugging / Incidentes
 
 > Sección para registrar problemas encontrados durante el despliegue y debugging de los entrenamientos.
@@ -682,11 +895,19 @@ La mejora es transformacional: de ruido aleatorio a detector funcional.
 - pip PATH warnings para scripts de `ultralytics`, `onnxruntime`, etc.
 - Vertex AI Experiments 403 (`ACCESS_TOKEN_SCOPE_INSUFFICIENT`) — entrenamiento continúa sin tracking
 
+### Train 3 — Sin bugs detectados
+
+- Pipeline completó sin errores (`exit code 0`)
+- Mismos warnings benignos que T2 (`pythonjsonlogger`, pip conflicts, Vertex AI Experiments 403)
+- Focal Loss se activó correctamente (confirmado por log `🎯 ESPDet cls_loss: Sigmoid Focal Loss`)
+- ExperimentSetup fixes v2.6.2 confirmados funcionales (5/5 campos corregidos)
+- No se encontraron bugs nuevos de código
+
 ---
 
-## 5. Backlog de Propuestas
+## 6. Backlog de Propuestas
 
-> Propuestas identificadas durante el análisis de Train 1 y Train 2. **Actualizadas tras resultados de Train 2.**
+> Propuestas identificadas durante el análisis de Train 1, Train 2 y Train 3. **Actualizadas tras resultados de Train 3.**
 
 ### ✅ PROPUESTA EJECUTADA — Reimplementación Arquitectura Oficial (v2.6.0/v2.6.1)
 
@@ -710,19 +931,28 @@ La mejora es transformacional: de ruido aleatorio a detector funcional.
 
 ### PROPUESTA C — Reducir conf_threshold evaluación
 
-**Estado**: ⏳ Pendiente — Con v2 el modelo produce ~8 det/img (vs 572/img en v1). El FP spam desapareció, pero Precision sigue baja (0.30). Podría experimentarse con conf_threshold=0.35 o 0.40 para subir Precision a costa de Recall.
+**Estado**: ⏳ **Prioridad alta** — Tras el fracaso de Focal Loss (T3), esta es la vía más prometedora para mejorar Precision sin reentrenar. Experimentar con `conf_threshold=0.35` o `0.40` sobre el checkpoint de T2 para subir Precision a costa de Recall. **No requiere GPU ni reentrenamiento** — solo re-evaluar con umbral diferente.
 
-### PROPUESTA E — Focal Loss (Train 3+)
+### ❌ PROPUESTA EVALUADA — Focal Loss (Train 3)
 
-**Estado**: ⏳ Evaluado — Transfer learning resolvió parcialmente el background suppression (de 572 det/img a 8 det/img). Sin embargo, Precision=0.30 indica que aún hay ~60% de FP. Focal Loss podría ayudar a mejorar la supresión de background. Recomendado para Train 3 si se decide optimizar Precision.
+**Estado**: ❌ **Evaluada y descartada en Train 3** — Sigmoid Focal Loss (γ=2.0, α=0.25) **degradó** el rendimiento en lugar de mejorarlo.
+
+| Aspecto | Train 2 (BCE) | Train 3 (Focal) | Resultado |
+|---|---|---|---|
+| mAP@50 (test) | **0.6203** | 0.5993 | -3.4% ⬇️ |
+| Precision | **0.2956** | 0.2156 | -27.1% ⬇️ |
+| F1 | **0.4197** | 0.3365 | -19.8% ⬇️ |
+| FP totales (test) | **885** | 1,670 | +88.7% ⬇️ |
+
+> **Conclusión**: Focal Loss no es adecuada para modelos ultra-ligeros (0.36M params). La reducción de gradiente en negativos fáciles priva al modelo de la señal necesaria para background suppression. Se descarta para esta familia de modelos.
 
 ### PROPUESTA F — Alinear naming de augmentación (Mejora código)
 
 **Estado**: ✅ **Corregido en v2.6.0** — YAML `espdet_pico_v2.yaml` usa keys alineados con `_build_transforms()` (`aug_hflip_prob`, `aug_brightness_limit`, `aug_contrast_limit`, `aug_rotate_limit`, `aug_gaussian_noise`). Eliminados keys muertos. Confirmado funcional en Train 2 (DEPLOY VERIFICATION muestra 10 aug keys correctos).
 
-### PROPUESTA G — Refactoring ExperimentSetup (Bug cosmético)
+### ✅ PROPUESTA G — Refactoring ExperimentSetup (Bug cosmético)
 
-**Estado**: ⏳ Nuevo — Identified en Train 2. `ExperimentSetup` no actualiza `best_val_loss`, `best_epoch`, `duration_s` post-training. Aug keys en la serialización usan naming legacy. `batch_size` en `two_phase` usa default (16) en vez del valor real (32). Sin impacto en training, pero reduce utilidad del tracking.
+**Estado**: ✅ **Completado en v2.6.2** — Confirmado funcional en Train 3. Los campos `best_val_loss`, `best_epoch`, `duration_s`, `batch_size` se actualizan correctamente post-training. Aug keys usan naming correcto del YAML.
 
 ### PROPUESTA H — Vendor ultralytics modules
 
@@ -734,29 +964,33 @@ La mejora es transformacional: de ruido aleatorio a detector funcional.
 |---|---|---|---|
 | Train 1 | espdet_pico_v1.yaml | Baseline (arq. custom, sin pretrained) | ✅ Completado (FRACASO) |
 | Train 2 | **espdet_pico_v2.yaml** | **Arq. oficial + transfer learning + strides oficiales** | ✅ **Completado (ÉXITO)** |
-| Train 3 | espdet_pico_v3.yaml | Focal Loss + conf_threshold tuning (si necesario) | ⏳ Pendiente |
+| Train 3 | espdet_pico_v3.yaml | Focal Loss (γ=2.0, α=0.25) | ❌ **Completado (REGRESIÓN)** |
+| Train 4 | espdet_pico_v4.yaml | conf_threshold tuning (0.35-0.40) ó NMS tuning | ⏳ Pendiente |
 
 ---
 
-## 6. Comparativa Cross-Model
+## 7. Comparativa Cross-Model
 
 ### Test Metrics — ESPDet vs FCOS vs YOLO26
 
-| Métrica | ESPDet T1 | **ESPDet T2** | FCOS T3 (prod) | FCOS T7 (bench) | YOLO26 T1 | YOLO26 T2 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **mAP@50** | 0.0105 | **0.6203** | 0.5675 | 0.6120 | 0.7544 | **0.7747** |
-| **mAP@50-95** | 0.0023 | **0.3078** | 0.2602 | 0.2824 | 0.5153 | **0.5456** |
-| **Precision** | 0.0009 | 0.2956 | **0.6609** | 0.3716 | 0.8264 | **0.8324** |
-| **Recall** | 0.1597 | **0.7235** | 0.6276 | 0.6872 | 0.6402 | 0.6853 |
-| **F1-Score** | 0.0017 | 0.4197 | **0.6438** | 0.4824 | 0.7215 | **0.7517** |
-| Params | **0.023M** | **0.36M** | 1.23M | 1.23M | 2.58M | 2.58M |
-| ONNX size | **0.109 MB** | **1.41 MB** | 4.74 MB | 4.74 MB | 9.97 MB | 9.97 MB |
-| ONNX latency | **0.76 ms** | **2.5 ms** | — | — | 8.3 ms | 9.9 ms |
-| Train time | 23.6 min | 21.7 min | — | — | 26.0 min | 32.6 min |
+| Métrica | ESPDet T1 | **ESPDet T2** | ESPDet T3 | FCOS T3 (prod) | FCOS T7 (bench) | YOLO26 T1 | YOLO26 T2 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mAP@50** | 0.0105 | **0.6203** | 0.5993 | 0.5675 | 0.6120 | 0.7544 | **0.7747** |
+| **mAP@50-95** | 0.0023 | 0.3078 | **0.3220** | 0.2602 | 0.2824 | 0.5153 | **0.5456** |
+| **Precision** | 0.0009 | 0.2956 | 0.2156 | **0.6609** | 0.3716 | 0.8264 | **0.8324** |
+| **Recall** | 0.1597 | 0.7235 | **0.7663** | 0.6276 | 0.6872 | 0.6402 | 0.6853 |
+| **F1-Score** | 0.0017 | 0.4197 | 0.3365 | **0.6438** | 0.4824 | 0.7215 | **0.7517** |
+| Params | **0.023M** | **0.36M** | **0.36M** | 1.23M | 1.23M | 2.58M | 2.58M |
+| ONNX size | **0.109 MB** | **1.41 MB** | **1.41 MB** | 4.74 MB | 4.74 MB | 9.97 MB | 9.97 MB |
+| ONNX latency | **0.76 ms** | **2.5 ms** | **3.6 ms** | — | — | 8.3 ms | 9.9 ms |
+| Train time | 23.6 min | 21.7 min | 27.0 min | — | — | 26.0 min | 32.6 min |
+| Loss | BCE | BCE | **Focal** | — | — | — | — |
 
 ### Conclusión cross-model
 
 ESPDet-Pico T2 con arquitectura oficial y transfer learning **supera a FCOS T3** en mAP@50 (0.6203 vs 0.5675) y es comparable a FCOS T7 (0.6120), siendo **3.4× más pequeño** en ONNX. El modelo tiene el mejor Recall del grupo (0.7235), pero la Precision más baja (0.2956), resultando en un F1 inferior (0.4197 vs 0.6438 FCOS, 0.7517 YOLO26).
+
+ESPDet T3 (Focal Loss) no mejoró la situación — degradó Precision aún más (0.2156) y bajó mAP@50 a 0.5993. **Train 2 se confirma como el mejor modelo ESPDet para deploy.**
 
 YOLO26 T2 sigue siendo el mejor modelo en calidad de detección (mAP@50=0.7747, F1=0.7517), pero su ONNX de 9.97 MB lo hace **inviable para ESP32-S3** (8 MB Flash disponibles). ESPDet-Pico T2 (1.41 MB ONNX) es el **único modelo que cabe cómodamente en el dispositivo embebido** con rendimiento funcional.
 
@@ -768,23 +1002,25 @@ YOLO26 T2 sigue siendo el mejor modelo en calidad de detección (mAP@50=0.7747, 
 
 ---
 
-## 7. Conclusiones Generales
+## 8. Conclusiones Generales
 
-1. **Train 2 valida la arquitectura oficial Espressif + transfer learning** — mAP@50 creció **59×** (0.0105 → 0.6203) con la misma infraestructura (Vertex AI T4, ~22 min). La inversión en reimplementar la arquitectura oficial fue la decisión correcta.
+1. **Train 2 sigue siendo el mejor modelo ESPDet-Pico** — mAP@50=0.6203, F1=0.4197, 1.41 MB ONNX. Focal Loss (Train 3) no mejoró ninguna métrica clave excepto Recall. **Train 2 es el candidato para deploy en ESP32-S3.**
 
-2. **ESPDet-Pico es ahora el candidato principal para ESP32-S3** — Con 1.41 MB ONNX y mAP@50=0.62, supera a FCOS en calidad AND tamaño. Es el único modelo que cabe cómodamente en Flash del ESP32-S3 sin necesitar cuantización extrema.
+2. **Focal Loss no es adecuada para modelos ultra-ligeros** — Con 0.36M params, la reducción de gradiente en negativos fáciles priva al modelo de la señal necesaria. BCE proporciona mejor training signal para modelos con capacidad limitada. Lección importante para la familia ESPDet.
 
-3. **Recall alto (0.72) es relevante para asistencia visual** — El modelo encuentra la mayoría de objetos (puertas 65%, escaleras 80%, personas 76%, obstáculos 72%). Para un dispositivo de asistencia, fallar en detectar un obstáculo es más peligroso que un falso positivo.
+3. **Train 2 valida la arquitectura oficial Espressif + transfer learning** — mAP@50 creció **59×** (0.0105 → 0.6203) con la misma infraestructura (Vertex AI T4, ~22 min). La inversión en reimplementar la arquitectura oficial fue la decisión correcta.
 
-4. **Precision baja (0.30) es la debilidad principal** — ~60% de detecciones son FP. Focal Loss (Propuesta E) y/o ajuste de conf_threshold (Propuesta C) podrían mejorar esto en Train 3.
+4. **ESPDet-Pico es ahora el candidato principal para ESP32-S3** — Con 1.41 MB ONNX y mAP@50=0.62, supera a FCOS en calidad AND tamaño. Es el único modelo que cabe cómodamente en Flash del ESP32-S3 sin necesitar cuantización extrema.
 
-5. **Cero confusión inter-clase** — El modelo nunca confunde una clase con otra. Todos los errores son background→clase (FP) o clase→miss (FN). La discriminación clasificatoria es buena; el problema es solo la supresión de background.
+5. **Recall alto (0.72-0.77) es relevante para asistencia visual** — El modelo encuentra la mayoría de objetos. Para un dispositivo de asistencia, fallar en detectar un obstáculo es más peligroso que un falso positivo.
 
-6. **Pipeline MLOps maduro y estable** — Segundo modelo de 3 familias entrenado exitosamente en la misma infraestructura. Protecciones de DEPLOY VERIFICATION, version bump, y aug_config fix funcionan como esperado.
+6. **Precision baja (0.22-0.30) es la debilidad principal** — ~60-73% de detecciones son FP. Focal Loss no resolvió el problema. Siguiente vía: ajuste de `conf_threshold` (Propuesta C) o NMS tuning.
 
-7. **Transfer learning desde cat-detection funciona para IODC** — Los features de bajo nivel (bordes, texturas) del pretrained cat-detection generalizaron bien a las 5 clases del dataset IODC. cls_loss bajó un 89.9% solo en Phase 1 (backbone frozen), confirmando la calidad de los features transferidos.
+7. **Cero confusión inter-clase** — Consistente en T2 y T3. El modelo nunca confunde una clase con otra. La discriminación clasificatoria es perfecta; el problema es solo la supresión de background.
 
-8. **Siguiente paso recomendado**: Evaluar si la precisión actual (0.30) es aceptable para el caso de uso del ESP32-S3, o si se necesita un Train 3 con Focal Loss. Paralelamente, iniciar la conversión ONNX → ESPDL para despliegue en el dispositivo.
+8. **Pipeline MLOps maduro y estable** — 3 entrenamientos exitosos con la misma infraestructura. ExperimentSetup ahora tracking completo (v2.6.2). DEPLOY VERIFICATION funciona correctamente.
+
+9. **Siguiente paso recomendado**: Evaluar si la precisión actual de T2 (0.30) es aceptable para el caso de uso del ESP32-S3, o experimentar con `conf_threshold=0.35-0.40` (Propuesta C — **no requiere reentrenar**, solo ajustar el umbral de evaluación). Paralelamente, iniciar la conversión ONNX → ESPDL para despliegue en el dispositivo.
 
 ---
 

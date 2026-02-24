@@ -351,9 +351,24 @@ def build_fcos_loss(
 def build_espdet_loss(
     cls_weight: float = 1.0,
     reg_weight: float = 2.0,
+    focal_gamma: float = 0.0,
+    focal_alpha: float = 0.25,
 ) -> Callable:
-    """Build ESPDet-Pico loss (simplified anchor-free)."""
-    cls_loss_fn = nn.BCEWithLogitsLoss(reduction="none")
+    """Build ESPDet-Pico loss (simplified anchor-free).
+
+    If ``focal_gamma > 0``, sigmoid focal loss replaces BCE for
+    classification, down-weighting easy negatives to improve precision.
+    """
+    use_focal = focal_gamma > 0
+    cls_loss_fn = (
+        None if use_focal
+        else nn.BCEWithLogitsLoss(reduction="none")
+    )
+    if use_focal:
+        log(f"🎯 ESPDet cls_loss: Sigmoid Focal Loss "
+            f"(γ={focal_gamma}, α={focal_alpha})")
+    else:
+        log("🎯 ESPDet cls_loss: BCEWithLogitsLoss (standard)")
 
     def espdet_loss(preds: Dict, targets: Dict) -> Dict[str, torch.Tensor]:
         total_cls = torch.tensor(0.0, device=preds["cls"][0].device)
@@ -367,10 +382,15 @@ def build_espdet_loss(
             reg_target = targets[f"reg_{lvl_idx}"]
             pos_mask = targets[f"pos_{lvl_idx}"]
 
-            cls_loss = cls_loss_fn(
-                cls_pred.permute(0, 2, 3, 1).reshape(-1, cls_pred.shape[1]),
-                cls_target.reshape(-1, cls_pred.shape[1]),
-            ).sum()
+            flat_pred = cls_pred.permute(0, 2, 3, 1).reshape(-1, cls_pred.shape[1])
+            flat_tgt = cls_target.reshape(-1, cls_pred.shape[1])
+            if use_focal:
+                cls_loss = _sigmoid_focal_loss(
+                    flat_pred, flat_tgt,
+                    gamma=focal_gamma, alpha=focal_alpha,
+                )
+            else:
+                cls_loss = cls_loss_fn(flat_pred, flat_tgt).sum()
             total_cls = total_cls + cls_loss
 
             if pos_mask.any():

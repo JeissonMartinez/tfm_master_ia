@@ -1,0 +1,83 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: ESPDet-Pico — v3 (Focal Loss)
+# ─────────────────────────────────────────────────────────────
+# Custom Job de Vertex AI · Ciclo 2
+# Leído por trainer/config_loader.py → ExperimentSetup
+#
+# ESPDet-Pico v3: Focal Loss para mejorar Precision (~0.30 en T2).
+# Sigmoid Focal Loss (γ=2.0, α=0.25) reemplaza BCE en cls_loss,
+# down-weighteando easy negatives (background→clase) que causan FP.
+#
+# Cambios vs v2:
+#   - Focal Loss: focal_loss_gamma=2.0, focal_loss_alpha=0.25
+#   - Fix ExperimentSetup: best_val_loss, best_epoch, duration_s, batch_size
+#   - Resto de hiperparámetros sin cambios (misma arquitectura, mismos pesos)
+
+model:
+  family: ESPDet
+  variant: espdet_pico
+  version: v3
+  description: "ESPDet-Pico + Focal Loss (γ=2.0, α=0.25) para mejorar Precision"
+
+dataset:
+  name: iodc_yolo
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/iodc_yolo.zip
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 224
+
+common:
+  batch_size: 32
+  patience: 25
+  seed: 42
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+
+espdet:
+  # ── Arquitectura oficial ──────────────────────────────────
+  strides: [8, 16, 32]
+  pretrained_weights: gs://project-18f58341-12cf-47bc-861-tfm-data/pretrained/espdet_pico_224_224_cat.pt
+
+  # ── Fase 1 — Backbone congelado (layers 0-10) ────────────
+  phase1_epochs: 50
+  phase1_lr: 1.0e-3
+  phase1_wd: 1.0e-4
+  phase1_optimizer: adamw
+  phase1_scheduler: cosine
+
+  # ── Fase 2 — Todo descongelado ───────────────────────────
+  phase2_epochs: 100
+  phase2_lr: 1.0e-4
+  phase2_wd: 1.0e-5
+  phase2_optimizer: adamw
+  phase2_scheduler: cosine
+
+  # ── Redimensionado — fijo 224 (match pretrained) ──────────
+  resize_schedule:
+    0: 224
+
+  # ── Loss weights ──────────────────────────────────────────
+  cls_weight: 1.0
+  reg_weight: 2.0
+
+  # ── Focal Loss (Propuesta E — Train 3) ────────────────────
+  # γ > 0 activa Sigmoid Focal Loss en lugar de BCE para cls.
+  # γ=2.0 es el valor estándar (Lin et al., 2017).
+  # α=0.25 pondera positivos (0.75 para negativos) → reduce FP.
+  focal_loss_gamma: 2.0
+  focal_loss_alpha: 0.25
+
+  # ── Augmentation (Albumentations — moderado) ──────────────
+  aug_hflip_prob: 0.5
+  aug_brightness_limit: 0.3
+  aug_contrast_limit: 0.3
+  aug_rotate_limit: 15
+  aug_gaussian_noise: 0.2
+
+  # ── Entrenamiento ─────────────────────────────────────────
+  amp: true
+  grad_clip: 5.0
+  workers: 4
+
+  # ── Export ────────────────────────────────────────────────
+  export_imgsz: 224
+  export_opset: 13

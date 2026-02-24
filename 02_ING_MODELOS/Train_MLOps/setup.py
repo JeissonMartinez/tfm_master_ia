@@ -58,13 +58,26 @@ Changes from v2.6.0:
     - Transfer learning from espdet_pico_224_224_cat.pt (cat detection, nc=1)
     - ONNX export: interleaved (box0,score0,box1,score1,box2,score2) for esp-ppq
     - Version bump forces pip cache invalidation on Vertex AI
+
+Changes from v2.6.1:
+    - Sigmoid Focal Loss for ESPDet cls head (γ, α params in YAML)
+      build_espdet_loss() now accepts focal_gamma/focal_alpha;
+      when γ > 0, replaces BCEWithLogitsLoss with _sigmoid_focal_loss
+    - BUG FIX: ExperimentSetup tracking — experiment.json now records
+      best_val_loss, best_epoch, final_train_loss, final_val_loss, duration_s
+    - BUG FIX: batch_size in experiment.json reads from setup.batch_size
+      (was defaulting to 16 from fc.get)
+    - BUG FIX: aug field names in UnifiedExperimentConfig aligned with
+      IODCDataset keys (aug_hflip_prob, aug_brightness_limit, etc.)
+    - DEPLOY VERIFICATION updated with Focal Loss ON/OFF display
+    - Version bump forces pip cache invalidation on Vertex AI
 """
 
 from setuptools import setup, find_packages
 
 setup(
     name="tfm-trainer",
-    version="2.6.1",
+    version="2.6.2",
     description=(
         "TFM — Entrenamiento de modelos de detección de objetos "
         "para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)"

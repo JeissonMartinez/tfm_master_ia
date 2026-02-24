@@ -83,11 +83,12 @@ class UnifiedExperimentConfig:
     export_imgsz: int = 224
     export_opset: int = 13
 
-    # Augmentation
-    aug_horizontal_flip: float = 0.5
-    aug_brightness_contrast: float = 0.3
+    # Augmentation (aligned with IODCDataset aug_config keys since v2.6.2)
+    aug_hflip_prob: float = 0.5
+    aug_brightness_limit: float = 0.3
+    aug_contrast_limit: float = 0.3
     aug_gaussian_noise: float = 0.2
-    aug_rotation_limit: int = 15
+    aug_rotate_limit: int = 15
 
     # Notes
     notes: str = ""
@@ -193,7 +194,7 @@ def create_experiment_from_setup(setup) -> UnifiedExperiment:
             phase2_epochs=fc.get("phase2_epochs", 60),
             phase1_lr=fc.get("phase1_lr", 1e-3),
             phase2_lr=fc.get("phase2_lr", 1e-4),
-            batch_size=fc.get("batch_size", 16),
+            batch_size=fc.get("batch_size", setup.batch_size),
             resize_schedule=fc.get("resize_schedule", {0: 640, 10: 416, 20: 320, 30: 224}),
             amp=fc.get("amp", True),
             grad_clip=fc.get("grad_clip", 10.0),
@@ -212,6 +213,13 @@ def create_experiment_from_setup(setup) -> UnifiedExperiment:
     cfg.export_imgsz = fc.get("export_imgsz", 224)
     cfg.notes = fc.get("notes", "")
     cfg.tags = fc.get("tags", [])
+
+    # Populate augmentation fields from family config (v2.6.2)
+    cfg.aug_hflip_prob = fc.get("aug_hflip_prob", 0.5)
+    cfg.aug_brightness_limit = fc.get("aug_brightness_limit", 0.3)
+    cfg.aug_contrast_limit = fc.get("aug_contrast_limit", 0.3)
+    cfg.aug_gaussian_noise = fc.get("aug_gaussian_noise", 0.2)
+    cfg.aug_rotate_limit = fc.get("aug_rotate_limit", 15)
 
     exp = UnifiedExperiment(config=cfg)
     exp.created_at = datetime.now().isoformat()

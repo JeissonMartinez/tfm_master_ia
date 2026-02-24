@@ -302,7 +302,7 @@ def main() -> None:
     logger.log_params({"model_size_mb": size_info['float32_mb'], **ESPDET_SPECS})
 
     # ── DEPLOY VERIFICATION (lección FCOS T8) ──
-    print("\n🎯 DEPLOY VERIFICATION — ESPDet-Pico v2.6.1 (Official Architecture)")
+    print("\n🎯 DEPLOY VERIFICATION — ESPDet-Pico v2.6.2 (Focal Loss)")
     print(f"  Architecture:    Official Espressif (esp-detection repo)")
     print(f"  Strides:         [8, 16, 32]")
     print(f"  pretrained:      {fc.get('pretrained_weights', None)}")
@@ -315,6 +315,10 @@ def main() -> None:
     print(f"  Optimizer:       {fc.get('phase1_optimizer', 'adamw')}")
     print(f"  cls_weight:      {fc.get('cls_weight', 1.0)}")
     print(f"  reg_weight:      {fc.get('reg_weight', 2.0)}")
+    _focal_g = fc.get("focal_loss_gamma", 0.0)
+    _focal_a = fc.get("focal_loss_alpha", 0.25)
+    print(f"  Focal Loss:      {'ON' if _focal_g > 0 else 'OFF'} "
+          f"(γ={_focal_g}, α={_focal_a})")
     print(f"  Conf threshold:  {setup.conf_threshold}")
     print(f"  IoU threshold:   {setup.iou_threshold}")
     print(f"  AMP:             {fc.get('amp', True)}")
@@ -399,6 +403,8 @@ def main() -> None:
     loss_fn = build_espdet_loss(
         cls_weight=fc.get("cls_weight", 1.0),
         reg_weight=fc.get("reg_weight", 2.0),
+        focal_gamma=fc.get("focal_loss_gamma", 0.0),
+        focal_alpha=fc.get("focal_loss_alpha", 0.25),
     )
 
     checkpoint_dir = os.path.join(LOCAL_WORK_DIR, "checkpoints")
@@ -592,6 +598,19 @@ def main() -> None:
         experiment.onnx_latency_ms = onnx_verify.inference_time_ms
     experiment.model_path = best_ckpt
     experiment.history_csv = history_csv
+
+    # ── Populate training results from history (Bug fix v2.6.2) ──
+    if history.all_val_loss:
+        experiment.best_val_loss = min(history.all_val_loss)
+        experiment.best_epoch = int(
+            history.all_val_loss.index(experiment.best_val_loss)
+        )
+    if history.all_train_loss:
+        experiment.final_train_loss = history.all_train_loss[-1]
+    if history.all_val_loss:
+        experiment.final_val_loss = history.all_val_loss[-1]
+    experiment.duration_s = train_time
+
     experiment.mark_completed()
 
     exp_json = os.path.join(LOCAL_WORK_DIR, "experiment.json")
