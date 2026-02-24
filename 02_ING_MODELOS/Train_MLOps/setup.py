@@ -71,13 +71,21 @@ Changes from v2.6.1:
       IODCDataset keys (aug_hflip_prob, aug_brightness_limit, etc.)
     - DEPLOY VERIFICATION updated with Focal Loss ON/OFF display
     - Version bump forces pip cache invalidation on Vertex AI
+
+Changes from v2.6.2:
+    - ESPDet-Pico v4: BCE + NMS tuning (conf=0.35, iou=0.40)
+    - Focal Loss desactivada (γ=0.0) tras regresión en Train 3
+    - NMS tuning: conf_threshold 0.25→0.35, iou_threshold 0.45→0.40
+      para reducir FP de background sin reentrenar
+    - DEPLOY VERIFICATION version string updated
+    - Version bump forces pip cache invalidation on Vertex AI
 """
 
 from setuptools import setup, find_packages
 
 setup(
     name="tfm-trainer",
-    version="2.6.2",
+    version="2.6.3",
     description=(
         "TFM — Entrenamiento de modelos de detección de objetos "
         "para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)"

@@ -302,7 +302,7 @@ def main() -> None:
     logger.log_params({"model_size_mb": size_info['float32_mb'], **ESPDET_SPECS})
 
     # ── DEPLOY VERIFICATION (lección FCOS T8) ──
-    print("\n🎯 DEPLOY VERIFICATION — ESPDet-Pico v2.6.2 (Focal Loss)")
+    print("\n🎯 DEPLOY VERIFICATION — ESPDet-Pico v2.6.3 (BCE + NMS tuning)")
     print(f"  Architecture:    Official Espressif (esp-detection repo)")
     print(f"  Strides:         [8, 16, 32]")
     print(f"  pretrained:      {fc.get('pretrained_weights', None)}")

@@ -1,0 +1,92 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: ESPDet-Pico — v4 (BCE + NMS Tuning)
+# ─────────────────────────────────────────────────────────────
+# Custom Job de Vertex AI · Ciclo 2
+# Leído por trainer/config_loader.py → ExperimentSetup
+#
+# ESPDet-Pico v4: Revertir a BCE (desactivar Focal Loss) + NMS tuning.
+# Train 3 demostró que Focal Loss degrada Precision (-27%) en modelo
+# de 0.36M params. Esta versión regresa a BCE y aplica NMS tuning
+# para reducir FP sin reentrenar el modelo.
+#
+# Cambios vs v3:
+#   - Focal Loss desactivada: focal_loss_gamma=0.0 (→ BCE estándar)
+#   - NMS tuning: conf_threshold 0.25→0.35, iou_threshold 0.45→0.40
+#     · conf_threshold=0.35: Filtra predicciones de baja confianza → menos FP
+#     · iou_threshold=0.40: NMS más agresivo → suprime duplicados/solapamientos
+#   - Resto de hiperparámetros idénticos a v2/v3
+
+model:
+  family: ESPDet
+  variant: espdet_pico
+  version: v4
+  description: "ESPDet-Pico BCE + NMS tuning (conf=0.35, iou=0.40)"
+
+dataset:
+  name: iodc_yolo
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/iodc_yolo.zip
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 224
+
+common:
+  batch_size: 32
+  patience: 25
+  seed: 42
+  # ── NMS Tuning (Propuesta C — Train 4) ────────────────────
+  # Subir conf de 0.25→0.35: descarta detecciones con score < 0.35,
+  # reduciendo FP de background. T2 tenía ~60% FP, esperamos reducir
+  # a ~40-50% con este ajuste.
+  conf_threshold: 0.35
+  # Bajar IoU de 0.45→0.40: NMS más agresivo suprime más duplicados
+  # solapados. Complementa conf_threshold para limpiar detecciones.
+  iou_threshold: 0.40
+
+espdet:
+  # ── Arquitectura oficial ──────────────────────────────────
+  strides: [8, 16, 32]
+  pretrained_weights: gs://project-18f58341-12cf-47bc-861-tfm-data/pretrained/espdet_pico_224_224_cat.pt
+
+  # ── Fase 1 — Backbone congelado (layers 0-10) ────────────
+  phase1_epochs: 50
+  phase1_lr: 1.0e-3
+  phase1_wd: 1.0e-4
+  phase1_optimizer: adamw
+  phase1_scheduler: cosine
+
+  # ── Fase 2 — Todo descongelado ───────────────────────────
+  phase2_epochs: 100
+  phase2_lr: 1.0e-4
+  phase2_wd: 1.0e-5
+  phase2_optimizer: adamw
+  phase2_scheduler: cosine
+
+  # ── Redimensionado — fijo 224 (match pretrained) ──────────
+  resize_schedule:
+    0: 224
+
+  # ── Loss weights ──────────────────────────────────────────
+  cls_weight: 1.0
+  reg_weight: 2.0
+
+  # ── Focal Loss — DESACTIVADA (lección Train 3) ───────────
+  # γ=0.0 → usa BCE estándar (BCEWithLogitsLoss).
+  # Train 3 demostró que Focal Loss con γ=2.0 degradó Precision
+  # un 27% en este modelo de 0.36M params.
+  focal_loss_gamma: 0.0
+  focal_loss_alpha: 0.25
+
+  # ── Augmentation (Albumentations — moderado) ──────────────
+  aug_hflip_prob: 0.5
+  aug_brightness_limit: 0.3
+  aug_contrast_limit: 0.3
+  aug_rotate_limit: 15
+  aug_gaussian_noise: 0.2
+
+  # ── Entrenamiento ─────────────────────────────────────────
+  amp: true
+  grad_clip: 5.0
+  workers: 4
+
+  # ── Export ────────────────────────────────────────────────
+  export_imgsz: 224
+  export_opset: 13
