@@ -553,6 +553,78 @@ Num of Quantized Var:         [443]
 
 > **Nota**: Los datos de Network/Quantization Snapshot de FCOS T3 no fueron capturados en el log de terminal (output truncado). El archivo `.info` del modelo contiene la estructura completa del grafo ESPDL.
 
+### 9.4 Evaluación FP32 vs INT8 (Simulación en CPU)
+
+Se ejecutó inferencia FP32 (onnxruntime) e INT8 simulada (esp-ppq `TorchExecutor`) sobre el **test set completo** (187 imágenes, 576 anotaciones, 5 clases) para medir la degradación real de métricas causada por la cuantización PTQ INT8.
+
+**Metodología**:
+- FP32: sesión `onnxruntime.InferenceSession` sobre ONNX original
+- INT8: `espdl_quantize_onnx()` → `TorchExecutor(ppq_graph, device="cpu")` — replica exactamente la aritmética INT8 del acelerador ESP-DL
+- Calibración: 500 imágenes del train set (las mismas usadas en la conversión ESPDL)
+- Decodificación y NMS específica por familia (umbrales de confianza: FCOS=0.40, YOLO26=0.25, ESPDet=0.35)
+- mAP calculada con interpolación 101-puntos (estilo COCO)
+
+**Script**: `scripts/eval_fp32_vs_int8.py`  
+**Resultados**: `outputs/espdl/eval_fp32_vs_int8.json`
+
+#### 9.4.1 Métricas globales comparativas
+
+| Métrica | FCOS T3 FP32 | FCOS T3 INT8 | YOLO26 T2 FP32 | YOLO26 T2 INT8 | ESPDet T4 FP32 | ESPDet T4 INT8 |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **mAP@50** | 0.5878 | 0.0003 | 0.6047 | 0.0000 | 0.5985 | 0.5319 |
+| **mAP@50-95** | 0.2673 | 0.0001 | 0.3702 | 0.0000 | 0.2655 | 0.2419 |
+| **Precision** | 0.4320 | 0.0087 | 0.8234 | 0.0000 | 0.3708 | 0.3360 |
+| **Recall** | 0.6639 | 0.0015 | 0.6444 | 0.0000 | 0.7108 | 0.6655 |
+| **F1** | 0.5234 | 0.0025 | 0.7230 | 0.0000 | 0.4874 | 0.4465 |
+| **Detecciones totales** | 865 | 23 | 440 | 0 | 1116 | 1181 |
+
+#### 9.4.2 Gate de degradación
+
+| Modelo | mAP@50 FP32 | mAP@50 INT8 | Degradación | Veredicto |
+|---|:---:|:---:|:---:|:---:|
+| **FCOS T3** | 0.5878 | 0.0003 | **99.95%** | ⛔ **FAIL** |
+| **YOLO26 T2** | 0.6047 | 0.0000 | **100.0%** | ⛔ **FAIL** |
+| **ESPDet T4** | 0.5985 | 0.5319 | **11.1%** | ✅ **PASS** |
+
+> **Criterios del gate**: <25% = ✅ PASS, 25-50% = ⚠️ MARGINAL, >50% = ⛔ FAIL
+
+#### 9.4.3 mAP@50 por clase — ESPDet T4 (único modelo PASS)
+
+| Clase | FP32 | INT8 | Δ absoluto | Δ% |
+|---|:---:|:---:|:---:|:---:|
+| dog | 0.5217 | 0.4562 | −0.0655 | −12.6% |
+| door | 0.5725 | 0.4471 | −0.1254 | −21.9% |
+| obstacle | 0.4813 | 0.4289 | −0.0524 | −10.9% |
+| person | 0.6592 | 0.6079 | −0.0513 | −7.8% |
+| stair | 0.7576 | 0.7191 | −0.0385 | −5.1% |
+
+> La degradación por clase en ESPDet T4 es relativamente uniforme (5-22%), con `door` como la clase más afectada (−21.9%), posiblemente por la geometría elongada de las puertas que es más sensible a errores de cuantización en la regresión de bounding box.
+
+#### 9.4.4 Análisis de resultados
+
+**FCOS T3 y YOLO26 T2 — Colapso catastrófico INT8:**
+
+- FCOS T3 produce solo 23 detecciones INT8 (vs 865 FP32), todas con puntuación muy baja. La cuantización destruye la cadena `sigmoid(cls) × sigmoid(centerness)` que es multiplicativa: pequeños errores en cada factor se amplifican exponencialmente.
+- YOLO26 T2 produce **0 detecciones** INT8 — el modelo queda completamente silenciado. La cuantización del output combinado `[4+5, 1029]` corrompe tanto coordenadas como scores simultáneamente en una sola capa.
+- Ambos modelos no fueron diseñados para cuantización INT8 en el acelerador ESP-DL: FCOS usa Squeeze-and-Excite (2 errores de exponente), YOLO26 tiene capas DFL + attention con alto NSPR graphwise (24.87%).
+
+**ESPDet T4 — Degradación aceptable:**
+
+- Único modelo que pasa el gate (−11.1% mAP@50), confirmando su diseño nativo para cuantización INT8 en ESP-DL.
+- La Precision se reduce 9.4% (0.371 → 0.336) y el Recall solo 6.4% (0.711 → 0.666), indicando que el modelo mantiene buena sensibilidad post-cuantización.
+- El número de detecciones se mantiene estable (1116 → 1181), sin colapso de output.
+
+#### 9.4.5 Visualizaciones comparativas
+
+| Archivo | Descripción |
+|---|---|
+| `eval_visualizations/fcos_v3s_t3_fp32_vs_int8.png` | Grid GT / FP32 / INT8 — FCOS T3, 4 imágenes representativas |
+| `eval_visualizations/yolo26n_t2_fp32_vs_int8.png` | Grid GT / FP32 / INT8 — YOLO26 T2, 4 imágenes representativas |
+| `eval_visualizations/espdet_pico_t4_fp32_vs_int8.png` | Grid GT / FP32 / INT8 — ESPDet T4, 4 imágenes representativas |
+| `eval_visualizations/comparison_3models_grid.png` | Grid unificado GT + 3 modelos × FP32/INT8, 3 imágenes |
+
+> Las visualizaciones confirman cualitativamente los resultados numéricos: FCOS y YOLO26 pierden prácticamente todas las bounding boxes en INT8, mientras ESPDet T4 mantiene detecciones coherentes con ligera degradación en localización.
+
 ---
 
 ## 10. Análisis de Viabilidad para ESP32-S3
@@ -575,15 +647,16 @@ Num of Quantized Var:         [443]
 | **Diseñado para ESP-DL** | ❌ (MobileNetV3 genérico) | ❌ (YOLO convencional) | ✅ (Espressif nativo) |
 | **Errores de exponente** | ⚠️ (2 en SE blocks) | ✅ (0) | ✅ (0) |
 | **Fix ONNX requerido** | ✅ (no) | ⚠️ (sí, 3 ops) | ✅ (no) |
-| **Valoración global** | 🟡 **Viable con reservas** | 🟡 **Ajustado** | 🟢 **Candidato ideal** |
+| **Degradación INT8 mAP@50** | ⛔ 99.95% (FAIL) | ⛔ 100% (FAIL) | ✅ 11.1% (PASS) |
+| **Valoración global** | 🔴 **No viable** (colapso INT8) | 🔴 **No viable** (colapso INT8) | 🟢 **Candidato ideal** |
 
-### 10.3 Recomendación de despliegue
+### 10.3 Recomendación de despliegue (actualizada post-evaluación INT8)
 
-1. **Despliegue primario**: **ESPDet T4** — 0.52 MB, cero errores de exponente, diseñado nativamente para ESP-DL, cabe holgadamente en Flash dejando ~4.5 MB libres para firmware + buffers. mAP@50 = 0.6052 es suficiente para navegación LCMR en interiores.
+1. **Despliegue primario y único viable**: **ESPDet T4** — 0.52 MB, cero errores de exponente, diseño nativo ESP-DL, mAP@50 INT8 = 0.5319 (degradación −11.1% vs FP32). Es el **único modelo que supera el gate de cuantización** (<25% degradación). Su rendimiento post-cuantización es suficiente para navegación LCMR en interiores.
 
-2. **Despliegue alternativo**: **FCOS T3** — 1.74 MB, mejor F1 (0.6438) y Precision (0.6609) que ESPDet, pero con 2 warnings de exponente en bloques Squeeze-and-Excite que requieren validación en dispositivo. Si pasa la validación, ofrece un **42% más de Precision** que ESPDet.
+2. **Descartado — FCOS T3**: Colapso catastrófico INT8 (mAP@50 = 0.0003, degradación 99.95%). Los 2 errores de exponente en SE blocks no son solo un warning: **invalidan la viabilidad funcional del modelo**. La cadena multiplicativa `sigmoid(cls) × sigmoid(centerness)` no sobrevive a la cuantización INT8.
 
-3. **Referencia experimental**: **YOLO26 T2** — 2.72 MB, mejor rendimiento en todas las métricas (mAP@50 = 0.7747), pero su viabilidad en ESP32-S3 es incierta por consumo de SRAM. Se incluye para comparación académica y como upper bound de rendimiento alcanzable con cuantización INT8.
+3. **Descartado — YOLO26 T2**: Colapso total INT8 (0 detecciones, degradación 100%). A pesar de ser el mejor modelo FP32 (mAP@50 = 0.6047), la cuantización destruye completamente las predicciones. Su uso solo es viable en FP32 en hardware con soporte float (no ESP32-S3).
 
 ---
 
@@ -668,15 +741,15 @@ outputs/espdl/
 
 ### 13.1 Conclusiones técnicas
 
-1. **La cuantización PTQ INT8 con esp-ppq es viable para los 3 modelos evaluados**, logrando ratios de compresión de 2.72× a 3.66× sin requerir re-entrenamiento (QAT).
+1. **La cuantización PTQ INT8 no es viable para todos los modelos**: de los 3 evaluados, solo ESPDet T4 supera el gate de degradación (<25%). FCOS T3 y YOLO26 T2 sufren colapso catastrófico INT8 (degradación ≥99.95%), a pesar de lograr compresión de 2.72× a 3.66×.
 
-2. **ESPDet T4 es el candidato óptimo para despliegue en ESP32-S3**: 0.52 MB ESPDL, cero errores de exponente, diseño nativo para ESP-DL, y la menor huella de memoria de los 3 modelos. Su mAP@50 de 0.6052 es adecuada para las 5 clases de navegación interior (dog, door, person, obstacle, stair).
+2. **ESPDet T4 es el único modelo viable para despliegue INT8 en ESP32-S3**: 0.52 MB ESPDL, cero errores de exponente, mAP@50 INT8 = 0.5319 (degradación −11.1% vs FP32 = 0.5985), Precision = 0.336 y Recall = 0.666. Su diseño nativo para ESP-DL es determinante: es la única arquitectura cuya aritmética sobrevive intacta a la cuantización INT8.
 
-3. **FCOS T3 es una alternativa viable** con mejor rendimiento de detección (F1=0.6438, Precision=0.6609), pero los 2 errores de exponente en bloques Squeeze-and-Excite del backbone MobileNetV3 representan un riesgo de runtime que debe validarse en dispositivo.
+3. **FCOS T3 queda descartado funcionalmente** a pesar de tener un buen rendimiento FP32 (mAP@50 = 0.5878, F1 = 0.5234). La cuantización destruye la cadena multiplicativa `sigmoid(cls) × sigmoid(centerness)`: de 865 detecciones FP32, solo 23 sobreviven en INT8 (mAP@50 = 0.0003). Los errores de exponente en SE blocks no son solo un warning cosmético sino un **indicador de incompatibilidad funcional**.
 
-4. **YOLO26 T2 demuestra el upper bound de rendimiento** (mAP@50=0.7747) alcanzable con cuantización INT8, pero su tamaño de 2.72 MB ESPDL y ~2.6M parámetros hacen **incierta** su viabilidad en ESP32-S3 por restricciones de SRAM durante inferencia.
+4. **YOLO26 T2 queda descartado para INT8**: produce **0 detecciones** tras cuantización (FP32 mAP@50 = 0.6047 → INT8 = 0.0000). La cuantización del tensor de salida combinado `[1, 9, 1029]` corrompe boxes y scores simultáneamente. Su alto NSPR graphwise (24.87%) anticipaba este resultado.
 
-5. **El error de cuantización graphwise es mayor en architecturas más pequeñas** (ESPDet 45.74% vs YOLO26 24.87%), confirmando que modelos con menos redundancia son más sensibles a PTQ INT8. Sin embargo, el error layerwise se mantiene bajo en todos los modelos (< 2%), indicando que la cuantización por capa es precisa.
+5. **El NSPR graphwise es un predictor útil de viabilidad post-cuantización**: ESPDet T4 (NSPR layerwise máx = 1.89%) mantiene coherencia INT8, mientras FCOS y YOLO26 (NSPR graphwise >24%) colapsan. Sin embargo, un NSPR layerwise bajo no garantiza viabilidad — la interacción entre capas (medida por graphwise) es determinante.
 
 ### 13.2 Conclusiones metodológicas
 
@@ -686,31 +759,37 @@ outputs/espdl/
 
 8. **El pipeline de exportación es ejecutable localmente en CPU** sin necesidad de GPU. Los tiempos de conversión (~80-170 s por modelo) son aceptables para iteración rápida.
 
+9. **La evaluación INT8 simulada con `TorchExecutor` de esp-ppq es un paso crítico de validación** que debe ejecutarse antes de flashear el dispositivo. Sin ella, FCOS T3 y YOLO26 T2 habrían sido candidatos aparentemente viables basándose solo en métricas FP32 y compresión exitosa. La simulación en CPU reproduce fielmente la aritmética del acelerador ESP-DL.
+
+10. **Los errores de exponente detectados durante la conversión son predictores fuertes de colapso INT8**: los 2 errores en FCOS T3 (SE blocks) correlacionan con una degradación del 99.95%. Los modelos con 0 errores de exponente (YOLO26, ESPDet) tienen comportamiento divergente, pero los errores de exponente son condición suficiente de fallo.
+
 ### 13.3 Consideraciones para trabajo académico
 
-9. **Existe un trade-off documentable entre tamaño, precisión y compatibilidad** con el acelerador ESP-DL que es relevante para la investigación en TinyML:
-   - ESPDet (nativo ESP-DL): menor tamaño, menor mAP, máxima compatibilidad
-   - FCOS (genérico PyTorch): tamaño medio, mAP media, compatibilidad parcial (warnings)
-   - YOLO26 (Ultralytics): mayor tamaño, mayor mAP, compatibilidad requiere preprocesamiento
+11. **El trade-off real en TinyML no es solo tamaño vs precisión, sino diseño de arquitectura vs compatibilidad con acelerador**: los modelos genéricos (FCOS, YOLO26) logran mejor mAP FP32 pero colapsan al cuantizar para ESP-DL, mientras ESPDet (nativo) sacrifica ~4 pp de mAP FP32 pero mantiene rendimiento funcional post-cuantización.
+   - ESPDet (nativo ESP-DL): mAP@50 FP32=0.5985, INT8=0.5319 (−11.1%) — **funcional**
+   - FCOS (genérico PyTorch): mAP@50 FP32=0.5878, INT8=0.0003 (−99.95%) — **inoperante**
+   - YOLO26 (Ultralytics): mAP@50 FP32=0.6047, INT8=0.0000 (−100%) — **inoperante**
 
-10. **La cuantización PTQ INT8 logra ratios de compresión sub-óptimos respecto al teórico 4×**, con un gap de 8-32% explicable por overhead de metadatos. Esto debe considerarse al estimar requisitos de memoria en trabajos de diseño de sistemas TinyML.
+12. **La cuantización PTQ INT8 logra ratios de compresión sub-óptimos respecto al teórico 4×**, con un gap de 8-32% explicable por overhead de metadatos. Sin embargo, la compresión es irrelevante si el modelo post-cuantización es funcionalmente inservible (caso FCOS y YOLO26).
 
 ---
 
 ## 14. Trabajo Futuro
 
-| Prioridad | Tarea | Justificación |
-|---|---|---|
-| **Alta** | Validar ESPDL de ESPDet T4 en ESP32-S3 real (inferencia end-to-end) | Confirmar que INT8 funciona sin degradación crítica en dispositivo |
-| **Alta** | Validar ESPDL de FCOS T3 en ESP32-S3 (evaluar errores de exponente SE) | Determinar si los 2 errors de exponente causan overflow real |
-| **Media** | Benchmark de latencia de inferencia INT8 en ESP32-S3 (ms/frame) | Dato necesario para evaluar viabilidad de detección en tiempo real |
-| **Media** | Evaluar mAP@50 post-cuantización (inferencia INT8 vs FP32) | Medir degradación real de mAP por cuantización |
-| **Baja** | Explorar INT16 mixed-precision para capas sensibles (FCOS SE blocks) | Resolver errores de exponente manteniendo tamaño aceptable |
-| **Baja** | QAT (Quantization-Aware Training) para ESPDet | Potencialmente mejorar mAP post-cuantización del candidato principal |
-| **Baja** | Probar inferencia YOLO26 en ESP32-S3 (SRAM profiling) | Confirmar si 2.72 MB ESPDL es ejecutable con el SRAM disponible |
+| Prioridad | Tarea | Justificación | Estado |
+|---|---|---|:---:|
+| **Alta** | Validar ESPDL de ESPDet T4 en ESP32-S3 real (inferencia end-to-end) | Confirmar que INT8 funciona sin degradación en dispositivo — la simulación CPU muestra −11.1% mAP@50 | ⬜ Pendiente |
+| **Alta** | Benchmark de latencia de inferencia INT8 en ESP32-S3 (ms/frame) | Dato necesario para evaluar viabilidad de detección en tiempo real | ⬜ Pendiente |
+| ~~**Alta**~~ | ~~Validar ESPDL de FCOS T3 en ESP32-S3~~ | ~~Colapso INT8 confirmado (mAP@50 INT8 = 0.0003) — no procede~~ | ⛔ Descartado |
+| ~~**Media**~~ | ~~Evaluar mAP@50 post-cuantización (inferencia INT8 vs FP32)~~ | ~~Ejecutado con `eval_fp32_vs_int8.py` — resultados en Sección 9.4~~ | ✅ Completado |
+| **Media** | Explorar INT16 mixed-precision para cabezas de detección FCOS | Podría rescatar FCOS T3 manteniendo cls/centerness en FP16 y solo reg en INT8 | ⬜ Pendiente |
+| **Baja** | QAT (Quantization-Aware Training) para ESPDet | Potencialmente mejorar mAP post-cuantización del candidato principal | ⬜ Pendiente |
+| ~~**Baja**~~ | ~~Probar inferencia YOLO26 en ESP32-S3 (SRAM profiling)~~ | ~~Colapso INT8 total (0 detecciones) — no procede~~ | ⛔ Descartado |
 
 ---
 
 > **Documento generado**: 24 de febrero de 2026  
-> **Script de conversión**: `02_ING_MODELOS/Train_MLOps/scripts/convert_onnx_to_espdl.py`  
-> **Datos fuente**: `02_ING_MODELOS/Train_MLOps/outputs/espdl/export_summary.json`
+> **Última actualización**: 24 de febrero de 2026 (evaluación FP32 vs INT8)  
+> **Scripts**: `scripts/convert_onnx_to_espdl.py`, `scripts/eval_fp32_vs_int8.py`  
+> **Datos fuente**: `outputs/espdl/export_summary.json`, `outputs/espdl/eval_fp32_vs_int8.json`  
+> **Visualizaciones**: `outputs/espdl/eval_visualizations/`
