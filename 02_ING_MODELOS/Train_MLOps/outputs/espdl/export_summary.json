@@ -1,0 +1,55 @@
+{
+  "timestamp": "2026-02-24 00:00:04",
+  "tool": "convert_onnx_to_espdl.py (Train_MLOps)",
+  "quantization": "INT8 symmetric (esp-ppq)",
+  "models": [
+    {
+      "name": "fcos_v3s_t3",
+      "family": "FCOS",
+      "run_id": "fcos_v3s_v1-1771690809",
+      "description": "FCOS MobileNetV3-Small + SimpleFPN — Train 3 (best F1)",
+      "success": true,
+      "onnx_path": "outputs/fcos_v3s_v1-1771690809/export/fcos_v3s.onnx",
+      "onnx_size_mb": 4.752,
+      "espdl_path": "outputs/espdl/fcos_v3s_t3/fcos_v3s_t3.espdl",
+      "espdl_size_mb": 1.735,
+      "compression_ratio": 2.74,
+      "conversion_time_s": 169.4,
+      "target": "esp32s3",
+      "n_calib_samples": 500,
+      "error": ""
+    },
+    {
+      "name": "yolo26n_t2",
+      "family": "YOLO26_CUSTOM",
+      "run_id": "yolo26n_custom_v2-run1",
+      "description": "YOLO26n MuSGD — Train 2 (best mAP@50)",
+      "success": true,
+      "onnx_path": "outputs/yolo26n_custom_v2-run1/export/best.onnx",
+      "onnx_size_mb": 9.947,
+      "espdl_path": "outputs/espdl/yolo26n_t2/yolo26n_t2.espdl",
+      "espdl_size_mb": 2.72,
+      "compression_ratio": 3.66,
+      "conversion_time_s": 78.8,
+      "target": "esp32s3",
+      "n_calib_samples": 500,
+      "error": ""
+    },
+    {
+      "name": "espdet_pico_t4",
+      "family": "ESPDet",
+      "run_id": "espdet-pico-v4-t4",
+      "description": "ESPDet-Pico BCE+NMS tuning — Train 4 (primary ESP32-S3 candidate)",
+      "success": true,
+      "onnx_path": "outputs/espdet-pico-v4-t4/export/espdet_pico.onnx",
+      "onnx_size_mb": 1.418,
+      "espdl_path": "outputs/espdl/espdet_pico_t4/espdet_pico_t4.espdl",
+      "espdl_size_mb": 0.521,
+      "compression_ratio": 2.72,
+      "conversion_time_s": 83.7,
+      "target": "esp32s3",
+      "n_calib_samples": 500,
+      "error": ""
+    }
+  ]
+}
