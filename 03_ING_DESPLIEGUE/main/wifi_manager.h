@@ -1,16 +1,16 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// TFM TinyML Detector — WiFi Access-Point manager
+// TFM TinyML Detector — WiFi Station manager
 // ═══════════════════════════════════════════════════════════════════════════
 #pragma once
 
 #include "esp_err.h"
 
-/// Start WiFi in AP mode (SSID / password from app_config.h).
-/// Initialises NVS, netif, event loop, and DHCP server.
-esp_err_t wifi_init_ap();
+/// Start WiFi in STA mode and connect to the configured network.
+/// Initialises NVS, netif, event loop. Blocks until IP obtained or max retries.
+esp_err_t wifi_init_sta();
 
-/// Stop WiFi AP.
+/// Stop WiFi STA.
 void wifi_deinit();
 
-/// Get the AP's IP address string (e.g. "192.168.4.1").
+/// Get the STA IP address string (e.g. "192.168.1.55").
 const char* wifi_get_ip();

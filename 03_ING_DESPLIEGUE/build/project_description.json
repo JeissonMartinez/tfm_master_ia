@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "tfm_tinyml_detector",
-    "project_version":    "6a732990-dirty",
+    "project_version":    "2e22166ec-dirty",
     "project_path":       "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE",
     "idf_path":           "/Users/admin/esp/v5.4.3/esp-idf",
     "build_dir":          "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/build",

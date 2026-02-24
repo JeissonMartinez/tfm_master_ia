@@ -62,11 +62,10 @@ static const char* const CLASS_NAMES[NUM_CLASSES] = {
     "dog", "door", "obstacle", "person", "stair"
 };
 
-// ─── WiFi AP ─────────────────────────────────────────────────────────────
-#define WIFI_AP_SSID      "ESP32_TFM"
-#define WIFI_AP_PASS      "tfm2026esp"
-#define WIFI_AP_CHANNEL   1
-#define WIFI_AP_MAX_CONN  4
+// ─── WiFi STA (red doméstica) ────────────────────────────────────────────
+#define WIFI_STA_SSID     "JM"
+#define WIFI_STA_PASS     "Meca1020@"
+#define WIFI_MAX_RETRY    10
 #define WEB_SERVER_PORT   80
 #define WS_MAX_CLIENTS    3
 

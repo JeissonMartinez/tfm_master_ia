@@ -254,7 +254,7 @@ IGNORE_EXTRA_COMPONENT:UNINITIALIZED=
 PROJECT_SOURCE_DIR:UNINITIALIZED=/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE
 
 //No help, variable specified on the command line.
-PYTHON:UNINITIALIZED=/Users/admin/.espressif/python_env/idf5.4_py3.9_env/bin/python3
+PYTHON:UNINITIALIZED=/Users/admin/.espressif/python_env/idf5.4_py3.14_env/bin/python
 
 //No help, variable specified on the command line.
 PYTHON_DEPS_CHECKED:UNINITIALIZED=1

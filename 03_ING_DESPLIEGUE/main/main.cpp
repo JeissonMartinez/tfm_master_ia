@@ -52,7 +52,7 @@ static const char* TAG = "main";
 //  Compile-time model selection  (override via sdkconfig / menuconfig)
 // ═══════════════════════════════════════════════════════════════════════════
 #ifndef ACTIVE_MODEL_TYPE
-#define ACTIVE_MODEL_TYPE   ModelType::ESPDET_PICO
+#define ACTIVE_MODEL_TYPE   ModelType::YOLO26N_ESP // ModelType::ESPDET_PICO
 #endif
 
 #ifndef ACTIVE_ENGINE_TYPE
@@ -390,8 +390,8 @@ extern "C" void app_main(void) {
 
     ESP_LOGI(TAG, "Arena usado: %zu KB", engine->get_arena_used() / 1024);
 
-    // ─── 6. Start WiFi AP ────────────────────────────────────────────
-    ESP_ERROR_CHECK(wifi_init_ap());
+    // ─── 6. Start WiFi STA ────────────────────────────────────────────
+    ESP_ERROR_CHECK(wifi_init_sta());
 
     // ─── 7. Start Web Server ─────────────────────────────────────────
     ESP_ERROR_CHECK(webserver_start());
@@ -400,18 +400,23 @@ extern "C" void app_main(void) {
     // ─── 8. Launch inference task on Core 0 ──────────────────────────
     ESP_LOGI(TAG, "Lanzando tarea de inferencia en Core %d...", INFERENCE_TASK_CORE);
 
-    BaseType_t task_ret = xTaskCreatePinnedToCore(
+    // Allocate task stack from PSRAM — internal heap is too fragmented
+    // after ESP-DL model load + WiFi init for a contiguous 32 KB block.
+    BaseType_t task_ret = xTaskCreatePinnedToCoreWithCaps(
         inference_task,
         "inference",
         INFERENCE_TASK_STACK,
         engine,
         INFERENCE_TASK_PRIORITY,
         nullptr,
-        INFERENCE_TASK_CORE
+        INFERENCE_TASK_CORE,
+        MALLOC_CAP_SPIRAM
     );
 
     if (task_ret != pdPASS) {
-        ESP_LOGE(TAG, "No se pudo crear la tarea de inferencia");
+        ESP_LOGE(TAG, "No se pudo crear la tarea de inferencia (heap interno: %u KB, PSRAM: %u KB)",
+                 (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
+                 (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
         engine->deinit();
         delete engine;
         return;
@@ -419,7 +424,6 @@ extern "C" void app_main(void) {
 
     ESP_LOGI(TAG, "═══════════════════════════════════════════════════════════");
     ESP_LOGI(TAG, " ✅ Sistema iniciado correctamente");
-    ESP_LOGI(TAG, " 📡 Conéctate a WiFi: %s / %s", WIFI_AP_SSID, WIFI_AP_PASS);
     ESP_LOGI(TAG, " 🌐 Dashboard: http://%s/", wifi_get_ip());
     ESP_LOGI(TAG, "═══════════════════════════════════════════════════════════");
 }
