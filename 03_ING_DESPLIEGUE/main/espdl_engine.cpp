@@ -35,6 +35,7 @@ static const char* TAG = "espdl_engine";
 struct EspDlEngine::Impl {
     const ModelConfig* config      = nullptr;
     bool               initialized = false;
+    size_t             model_ram_bytes = 0;  // PSRAM consumed by model
 
 #if HAS_ESP_DL
     dl::Model*         model       = nullptr;
@@ -98,6 +99,8 @@ esp_err_t EspDlEngine::init(const ModelConfig* config) {
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
 
+    size_t psram_before = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+
     // Construir modelo desde partición flash
     // max_internal_size=0 → máximo uso de PSRAM
     // param_copy=true → copia parámetros a RAM (mejor rendimiento)
@@ -151,6 +154,13 @@ esp_err_t EspDlEngine::init(const ModelConfig* config) {
     ESP_LOGI(TAG, "   Heap libre después: interno=%u KB, PSRAM=%u KB",
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024));
+
+    // Capture RAM consumed by the model (PSRAM delta)
+    size_t psram_after = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+    m_impl->model_ram_bytes = (psram_before > psram_after)
+                              ? (psram_before - psram_after) : 0;
+    ESP_LOGI(TAG, "   Modelo RAM: %u KB",
+             (unsigned)(m_impl->model_ram_bytes / 1024));
 
     ESP_LOGI(TAG, "✅ ESP-DL inicializado: %s (%d outputs)",
              config->name, (int)m_impl->output_names.size());
@@ -312,9 +322,7 @@ esp_err_t EspDlEngine::get_output_shape_by_name(const char* name,
 
 size_t EspDlEngine::get_arena_used() const {
 #if HAS_ESP_DL
-    // ESP-DL no expone un "arena" — reportamos la memoria usada por el modelo
-    // vía la diferencia de PSRAM antes/después.  Por ahora retornamos 0.
-    return 0;
+    return m_impl ? m_impl->model_ram_bytes : 0;
 #else
     return 0;
 #endif

@@ -15,6 +15,16 @@ static const char* TAG = "stream_buf";
 std::atomic<InferMode> g_infer_mode{InferMode::CONTINUOUS};
 std::atomic<bool>      g_infer_trigger{false};
 
+#if DYNAMIC_THRESHOLDS
+std::atomic<float>  g_conf_threshold{ESPDET_CONF_THRESHOLD};
+std::atomic<float>  g_iou_threshold{ESPDET_IOU_THRESHOLD};
+#endif
+
+// ─── Runtime model switching ─────────────────────────────────────────────
+std::atomic<bool>    g_model_switch{false};
+std::atomic<uint8_t> g_next_model{0};
+std::atomic<uint32_t> g_model_req_id{0};
+
 // ─── Shared buffer ───────────────────────────────────────────────────────
 static uint8_t*            s_jpg_buf  = nullptr;   // PSRAM buffer
 static size_t              s_jpg_len  = 0;

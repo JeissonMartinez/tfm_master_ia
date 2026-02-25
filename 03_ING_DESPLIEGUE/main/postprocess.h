@@ -1,11 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// TFM TinyML Detector — Post-processing for 5 model architectures
+// TFM TinyML Detector — Post-processing for 6 model architectures
 //
 //  MBNTv2_ssdlite_v1 : 3 tensors  → (1,1470,1) obj + (1,1470,5) cls + (1,1470,4) box
 //  YOLO11n_v1        : 1 tensor   → (1,9,1029)  transposed [box+cls, proposals]
 //  YOLO26n_v1        : 1 tensor   → (1,300,6)   end2end [x1,y1,x2,y2,conf,cls_id]
 //  ESPDet Pico T4    : 6 tensors  → FCOS 3-scale (score0-2, box0-2), direct dist
 //  YOLO26n T2 ESP    : 6 tensors  → DFL 3-scale (score0-2, box0-2), DFL integral
+//  YOLO26n T3 ESP    : 6 tensors  → Direct 3-scale (score0-2, box0-2), no DFL
 // ═══════════════════════════════════════════════════════════════════════════
 #pragma once
 
@@ -78,3 +79,15 @@ DetectionResult postprocess_yolo26_espdl(
     const InferenceEngine* engine,
     float conf_thr = YOLO26ESP_CONF_THRESHOLD,
     float iou_thr  = YOLO26ESP_IOU_THRESHOLD);
+
+/// YOLO26n T3 ESP: Direct distance detector — 3 scales, 6 output tensors.
+/// Each scale has score[HxWx5] + box[HxWx4] (direct distances l,t,r,b).
+/// Pipeline: dequant → sigmoid(scores) → filter → dist2bbox → NMS.
+/// NO DFL integral required (reg_max=1, Identity).
+/// @param engine  Pointer to EspDlEngine (for get_output_by_name)
+/// @param conf_thr  Confidence threshold after sigmoid
+/// @param iou_thr   IoU threshold for NMS
+DetectionResult postprocess_yolo26_t3_espdl(
+    const InferenceEngine* engine,
+    float conf_thr = YOLO26T3ESP_CONF_THRESHOLD,
+    float iou_thr  = YOLO26T3ESP_IOU_THRESHOLD);

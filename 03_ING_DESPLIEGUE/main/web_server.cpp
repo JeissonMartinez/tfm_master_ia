@@ -23,6 +23,28 @@ static httpd_handle_t s_stream_server = nullptr;  // port 81 — MJPEG stream
 static int  s_ws_fds[WS_MAX_CLIENTS] = {};
 static int  s_ws_count = 0;
 
+static void ws_remove(int fd);
+
+static void ws_broadcast_text(const char* text, size_t len) {
+    if (!s_server || s_ws_count == 0 || !text || len == 0) return;
+
+    httpd_ws_frame_t frame = {};
+    frame.type    = HTTPD_WS_TYPE_TEXT;
+    frame.payload = reinterpret_cast<uint8_t*>(const_cast<char*>(text));
+    frame.len     = len;
+
+    for (int i = 0; i < s_ws_count; /* no increment */) {
+        esp_err_t ret = httpd_ws_send_frame_async(s_server, s_ws_fds[i], &frame);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "WS event error fd=%d: %s, eliminando",
+                     s_ws_fds[i], esp_err_to_name(ret));
+            ws_remove(s_ws_fds[i]);
+        } else {
+            ++i;
+        }
+    }
+}
+
 static void ws_add(int fd) {
     if (s_ws_count < WS_MAX_CLIENTS) {
         s_ws_fds[s_ws_count++] = fd;
@@ -142,11 +164,79 @@ static void handle_ws_command(const char* payload, size_t len) {
     } else if (std::strcmp(cmd->valuestring, "infer") == 0) {
         g_infer_trigger.store(true, std::memory_order_relaxed);
         ESP_LOGI(TAG, "Trigger de inferencia recibido");
+#if DYNAMIC_THRESHOLDS
+    } else if (std::strcmp(cmd->valuestring, "threshold") == 0) {
+        const cJSON* conf_val = cJSON_GetObjectItem(root, "conf");
+        const cJSON* iou_val  = cJSON_GetObjectItem(root, "iou");
+        if (cJSON_IsNumber(conf_val)) {
+            float c = static_cast<float>(conf_val->valuedouble);
+            if (c >= 0.05f && c <= 0.95f) {
+                g_conf_threshold.store(c, std::memory_order_relaxed);
+                ESP_LOGI(TAG, "conf_threshold → %.2f", c);
+            }
+        }
+        if (cJSON_IsNumber(iou_val)) {
+            float u = static_cast<float>(iou_val->valuedouble);
+            if (u >= 0.05f && u <= 0.95f) {
+                g_iou_threshold.store(u, std::memory_order_relaxed);
+                ESP_LOGI(TAG, "iou_threshold → %.2f", u);
+            }
+        }
+#endif
+    } else if (std::strcmp(cmd->valuestring, "model") == 0) {
+        const cJSON* idx = cJSON_GetObjectItem(root, "index");
+        uint32_t req_id = 0;
+        const cJSON* req = cJSON_GetObjectItem(root, "req_id");
+        if (cJSON_IsNumber(req) && req->valuedouble >= 0) {
+            req_id = static_cast<uint32_t>(req->valuedouble);
+        }
+        if (cJSON_IsNumber(idx)) {
+            int i = idx->valueint;
+            if (i >= 0 && i < NUM_AVAILABLE_MODELS) {
+                g_next_model.store(static_cast<uint8_t>(i), std::memory_order_relaxed);
+                g_model_req_id.store(req_id, std::memory_order_relaxed);
+                g_model_switch.store(true, std::memory_order_release);
+                ESP_LOGI(TAG, "Model switch solicitado → modelo %d", i);
+                webserver_notify_model_switch("started", false, i, -1, nullptr, req_id, nullptr);
+            } else {
+                ESP_LOGW(TAG, "Model index fuera de rango: %d", i);
+                webserver_notify_model_switch("done", false, i, -1, nullptr,
+                                              req_id, "index_out_of_range");
+            }
+        }
     } else {
         ESP_LOGW(TAG, "WS cmd desconocido: %s", cmd->valuestring);
     }
 
     cJSON_Delete(root);
+}
+
+void webserver_notify_model_switch(const char* phase,
+                                   bool ok,
+                                   int target_idx,
+                                   int active_idx,
+                                   const char* model_name,
+                                   uint32_t req_id,
+                                   const char* error)
+{
+    cJSON* root = cJSON_CreateObject();
+    if (!root) return;
+
+    cJSON_AddStringToObject(root, "evt", "model_switch");
+    cJSON_AddStringToObject(root, "phase", phase ? phase : "done");
+    cJSON_AddBoolToObject(root, "ok", ok);
+    cJSON_AddNumberToObject(root, "target_idx", target_idx);
+    cJSON_AddNumberToObject(root, "active_idx", active_idx);
+    if (model_name) cJSON_AddStringToObject(root, "model", model_name);
+    if (req_id > 0) cJSON_AddNumberToObject(root, "req_id", req_id);
+    if (error) cJSON_AddStringToObject(root, "error", error);
+
+    char* json_str = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!json_str) return;
+
+    ws_broadcast_text(json_str, std::strlen(json_str));
+    free(json_str);
 }
 
 static esp_err_t ws_handler(httpd_req_t* req) {
@@ -283,6 +373,20 @@ void webserver_broadcast(const InferenceMetrics& m, const DetectionResult& dets)
     cJSON_AddStringToObject(root, "mode",
         g_infer_mode.load(std::memory_order_relaxed) == InferMode::CONTINUOUS
         ? "continuous" : "ondemand");
+
+    // ─── Active model ────────────────────────────────────────────────
+    if (m.model_name) {
+        cJSON_AddStringToObject(root, "model", m.model_name);
+    }
+    cJSON_AddNumberToObject(root, "model_idx", m.model_idx);
+
+#if DYNAMIC_THRESHOLDS
+    // ─── Current thresholds (for slider sync) ────────────────────────
+    cJSON_AddNumberToObject(root, "conf_thr",
+        g_conf_threshold.load(std::memory_order_relaxed));
+    cJSON_AddNumberToObject(root, "iou_thr",
+        g_iou_threshold.load(std::memory_order_relaxed));
+#endif
 
     // ─── Detections ──────────────────────────────────────────────────
     cJSON* arr = cJSON_AddArrayToObject(root, "dets");

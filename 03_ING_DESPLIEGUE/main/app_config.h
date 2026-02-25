@@ -40,16 +40,25 @@
 #define CROP_OFFSET_Y      8   // (240 - 224) / 2 = 8
 
 // ─── Detección ───────────────────────────────────────────────────────────
-#define MAX_DETECTIONS    20
+#define MAX_DETECTIONS    10
 #define NUM_CLASSES        5
-#define DEFAULT_CONF_THRESHOLD  0.25f
-#define DEFAULT_IOU_THRESHOLD   0.45f
+#define DEFAULT_CONF_THRESHOLD  0.6f
+#define DEFAULT_IOU_THRESHOLD   0.35f
 
 // Umbrales por modelo ESPDL (ajustados del entrenamiento)
-#define ESPDET_CONF_THRESHOLD   0.35f
-#define ESPDET_IOU_THRESHOLD    0.40f
-#define YOLO26ESP_CONF_THRESHOLD 0.25f
-#define YOLO26ESP_IOU_THRESHOLD  0.45f
+#define ESPDET_CONF_THRESHOLD   0.6f
+#define ESPDET_IOU_THRESHOLD    0.5f
+#define YOLO26ESP_CONF_THRESHOLD 0.6f
+#define YOLO26ESP_IOU_THRESHOLD  0.35f
+#define YOLO26T3ESP_CONF_THRESHOLD 0.6f   // YOLO26n T3 ESP (sin DFL)
+#define YOLO26T3ESP_IOU_THRESHOLD  0.35f
+
+// Umbrales dinámicos: si es 1, se pueden ajustar desde la interfaz web.
+// Si es 0, se usan los valores fijos definidos arriba.
+#define DYNAMIC_THRESHOLDS      1
+
+// Número de modelos disponibles para cambio en caliente
+#define NUM_AVAILABLE_MODELS    2
 
 // FCOS & DFL grid strides (224×224 → 28, 14, 7)
 #define NUM_SCALES          3
@@ -105,6 +114,7 @@ enum class ModelType : uint8_t {
     YOLO26N,         // yolo26n_v1: [1,300,6], NMS integrado (TFLite)
     ESPDET_PICO,     // ESPDet Pico T4: FCOS 3-scale, 6 outputs (ESP-DL)
     YOLO26N_ESP,     // YOLO26n T2 ESP: DFL 3-scale, 6 outputs (ESP-DL)
+    YOLO26N_T3_ESP,  // YOLO26n T3 ESP: direct 3-scale, 6 outputs (ESP-DL, sin DFL)
 };
 
 // ─── Runtime de inferencia ───────────────────────────────────────────────
@@ -161,6 +171,10 @@ struct InferenceMetrics {
     float    ema_postprocess_ms = 0;
     float    ema_total_ms       = 0;
     float    ema_fps            = 0;
+
+    // Active model info (set by inference_task for broadcast)
+    const char* model_name = nullptr;
+    uint8_t     model_idx  = 0;
 };
 
 // ─── Configuración de modelo ─────────────────────────────────────────────

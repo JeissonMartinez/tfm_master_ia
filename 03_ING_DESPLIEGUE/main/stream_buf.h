@@ -22,6 +22,21 @@
 extern std::atomic<InferMode>  g_infer_mode;
 extern std::atomic<bool>       g_infer_trigger;
 
+#if DYNAMIC_THRESHOLDS
+// ─── Dynamic thresholds (adjustable from web UI) ─────────────────────────
+// These are NOT std::atomic<float> because FreeRTOS on Xtensa doesn't
+// guarantee atomic float loads.  We use a simple volatile + relaxed reads
+// which is safe for single-writer (WS task) / single-reader (inference task)
+// on ESP32-S3 (both cores share coherent RAM).
+extern std::atomic<float>  g_conf_threshold;
+extern std::atomic<float>  g_iou_threshold;
+#endif
+
+// ─── Runtime model switching (shared with main.cpp) ──────────────────────
+extern std::atomic<bool>    g_model_switch;   // flag: switch requested
+extern std::atomic<uint8_t> g_next_model;     // index into AVAILABLE_MODELS
+extern std::atomic<uint32_t> g_model_req_id;  // optional request correlation id
+
 /// Initialise the stream buffer (allocates PSRAM buffer + FreeRTOS primitives).
 esp_err_t stream_buf_init();
 

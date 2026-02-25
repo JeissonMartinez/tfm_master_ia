@@ -21,6 +21,12 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode
 .DS_Store
+03_ING_DESPLIEGUE/.cmake_check
+03_ING_DESPLIEGUE/.cmake_check_autoload
+03_ING_DESPLIEGUE/.cmake_check_lazy
+03_ING_DESPLIEGUE/.venv
+03_ING_DESPLIEGUE/env
+03_ING_DESPLIEGUE/.venv/
 
 # Archivos muy pesados
 02_ING_MODELOS/models/final_export/ssd_v2_model.keras

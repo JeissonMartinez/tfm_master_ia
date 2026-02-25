@@ -277,6 +277,7 @@ esp_err_t postprocess_init() {
              GRID_SIZES[0], GRID_SIZES[1], GRID_SIZES[2],
              GRID_STRIDES[0], GRID_STRIDES[1], GRID_STRIDES[2]);
     ESP_LOGI(TAG, "   YOLO26 DFL: 3 scales, reg_max=%d", DFL_REG_MAX);
+    ESP_LOGI(TAG, "   YOLO26 T3: 3 scales, direct dist (no DFL, box_ch=4)");
     return ESP_OK;
 }
 
@@ -499,6 +500,104 @@ DetectionResult postprocess_yolo26_espdl(
                 det.y1 = clamp01((cy - distances[1] * stride) * inv_dim);
                 det.x2 = clamp01((cx + distances[2] * stride) * inv_dim);
                 det.y2 = clamp01((cy + distances[3] * stride) * inv_dim);
+                det.confidence = conf;
+                det.class_id   = best_cls;
+
+                result.add(det);
+                if (result.count >= MAX_DETECTIONS) break;
+            }
+            if (result.count >= MAX_DETECTIONS) break;
+        }
+        if (result.count >= MAX_DETECTIONS) break;
+    }
+
+    if (result.count > 1) {
+        nms_per_class(result, iou_thr);
+    }
+
+    return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  YOLO26n T3 ESP — Direct distances (3-scale, 4 channels, NO DFL)
+//
+//  Output tensors:
+//    score0 [1,28,28,5] exp=-3   score1 [1,14,14,5] exp=-2   score2 [1,7,7,5] exp=-3
+//    box0   [1,28,28,4] exp=-3   box1   [1,14,14,4] exp=-3   box2   [1,7,7,4] exp=-4
+//
+//  Box layout: [l, t, r, b] — direct predicted distances (like ESPDet)
+//  NO DFL required: reg_max=1, dfl=Identity
+//
+//  Decode identical to ESPDet:
+//    l,t,r,b = dequant(box) (no ReLU needed — values already positive from training)
+//    x1 = (cx - l * stride) / 224, etc.
+// ═══════════════════════════════════════════════════════════════════════════
+DetectionResult postprocess_yolo26_t3_espdl(
+    const InferenceEngine* engine,
+    float conf_thr,
+    float iou_thr)
+{
+    DetectionResult result;
+    result.clear();
+
+    static const char* score_names[NUM_SCALES] = {"score0", "score1", "score2"};
+    static const char* box_names[NUM_SCALES]   = {"box0", "box1", "box2"};
+
+    const float inv_dim = 1.0f / static_cast<float>(INPUT_WIDTH);
+
+    for (int s = 0; s < NUM_SCALES; ++s) {
+        const int8_t* score_data = static_cast<const int8_t*>(
+            engine->get_output_by_name(score_names[s]));
+        const int8_t* box_data = static_cast<const int8_t*>(
+            engine->get_output_by_name(box_names[s]));
+
+        if (!score_data || !box_data) {
+            ESP_LOGW(TAG, "YOLO26T3: output '%s' o '%s' no encontrado",
+                     score_names[s], box_names[s]);
+            continue;
+        }
+
+        int score_exp = engine->get_output_exponent(score_names[s]);
+        int box_exp   = engine->get_output_exponent(box_names[s]);
+        int grid_h    = GRID_SIZES[s];
+        int grid_w    = GRID_SIZES[s];
+        int stride    = GRID_STRIDES[s];
+
+        for (int gy = 0; gy < grid_h; ++gy) {
+            for (int gx = 0; gx < grid_w; ++gx) {
+                int score_offset = (gy * grid_w + gx) * NUM_CLASSES;
+
+                // Find best class (dequant + compare in logit space)
+                int best_cls = 0;
+                float best_score = -1e9f;
+                for (int c = 0; c < NUM_CLASSES; ++c) {
+                    float s_val = dequant(score_data[score_offset + c], score_exp);
+                    if (s_val > best_score) {
+                        best_score = s_val;
+                        best_cls = c;
+                    }
+                }
+
+                float conf = sigmoid(best_score);
+                if (conf < conf_thr) continue;
+
+                // Direct distance decode (NO DFL) — only 4 channels
+                int box_offset = (gy * grid_w + gx) * 4;
+                float l = dequant(box_data[box_offset + 0], box_exp);
+                float t = dequant(box_data[box_offset + 1], box_exp);
+                float r = dequant(box_data[box_offset + 2], box_exp);
+                float b = dequant(box_data[box_offset + 3], box_exp);
+
+                // Grid center
+                float cx = (static_cast<float>(gx) + 0.5f) * stride;
+                float cy = (static_cast<float>(gy) + 0.5f) * stride;
+
+                // dist2bbox normalised
+                Detection det;
+                det.x1 = clamp01((cx - l * stride) * inv_dim);
+                det.y1 = clamp01((cy - t * stride) * inv_dim);
+                det.x2 = clamp01((cx + r * stride) * inv_dim);
+                det.y2 = clamp01((cy + b * stride) * inv_dim);
                 det.confidence = conf;
                 det.class_id   = best_cls;
 

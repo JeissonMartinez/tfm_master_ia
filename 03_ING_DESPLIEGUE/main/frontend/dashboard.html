@@ -12,11 +12,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
 .dot{width:10px;height:10px;border-radius:50%;background:#ef4444;animation:pulse 2s infinite}
 .dot.on{background:#22c55e}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.main-wrap{max-width:960px;margin:0 auto;padding:16px}
+.main-wrap{max-width:1280px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
 
 /* ─── Video + Bounding boxes ─── */
-.cam-section{margin-bottom:16px;max-width:480px}
-.cam-wrap{position:relative;width:100%;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:320/240}
+.cam-section{display:flex;flex-direction:column;gap:12px}
+.cam-wrap{position:relative;width:100%;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:1/1}
 .cam-wrap img{width:100%;height:100%;object-fit:contain;display:block}
 .cam-wrap .bb{position:absolute;border:2px solid;border-radius:3px;pointer-events:none}
 .cam-wrap .bb-label{position:absolute;top:-18px;left:0;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px 3px 0 0;white-space:nowrap}
@@ -37,15 +37,25 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
 .capture-btn svg{width:16px;height:16px}
 .mode-label{font-size:12px;color:#64748b}
 
-/* ─── Captured frame panel ─── */
-.capture-panel{margin-top:12px;display:none}
-.capture-panel.show{display:block}
-.capture-panel .cam-wrap{border:2px solid #7c3aed}
+/* ─── Model selector ─── */
+.model-switch{display:flex;align-items:center;gap:8px}
+.model-select{padding:8px 10px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px;font-weight:600;min-width:170px}
+.model-select:disabled{opacity:.6;cursor:not-allowed}
+.model-label{font-size:12px;color:#64748b}
+.model-state{font-size:12px;color:#94a3b8}
+.model-state.switching{color:#f59e0b}
+.model-state.error{color:#ef4444}
+.model-state.ok{color:#22c55e}
+
+/* ─── Captured frame panel (column 2, beside live feed) ─── */
+.capture-panel{display:none}
+.capture-panel.show{display:flex;flex-direction:column}
+.capture-panel .cam-wrap{border:2px solid #7c3aed;flex:1}
 .capture-title{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:8px}
 
 /* ─── Metrics grid ─── */
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
-@media(max-width:600px){.grid{grid-template-columns:1fr}}
+.grid{display:flex;flex-direction:column;gap:16px}
+@media(max-width:800px){.main-wrap{grid-template-columns:1fr}}
 .card{background:#1e293b;border-radius:10px;padding:16px;border:1px solid #334155}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:12px}
 .val{font-size:28px;font-weight:700;color:#38bdf8}
@@ -56,7 +66,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
 .row .v{color:#e2e8f0;font-variant-numeric:tabular-nums}
 .bar-wrap{background:#0f172a;border-radius:4px;height:6px;margin-top:6px}
 .bar{height:100%;border-radius:4px;transition:width .3s;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444)}
-.dets{grid-column:1/-1}
 .det-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .det-tag{padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid #334155}
 .det-tag.dog{background:#7c3aed22;border-color:#7c3aed;color:#c4b5fd}
@@ -65,6 +74,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
 .det-tag.person{background:#22c55e22;border-color:#22c55e;color:#86efac}
 .det-tag.stair{background:#ec489922;border-color:#ec4899;color:#f9a8d4}
 #status{font-size:12px;color:#64748b;margin-left:auto}
+
+/* ─── Threshold sliders ─── */
+.thr-section{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-top:4px}
+.thr-group{display:flex;align-items:center;gap:8px}
+.thr-group label{font-size:12px;color:#94a3b8;white-space:nowrap}
+.thr-group input[type=range]{width:120px;accent-color:#38bdf8;cursor:pointer}
+.thr-val{font-size:13px;font-weight:600;color:#38bdf8;min-width:36px;text-align:center}
 </style>
 </head>
 <body>
@@ -75,14 +91,59 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
 </div>
 
 <div class="main-wrap">
-  <!-- Live Camera Feed -->
+  <!-- Left: Metrics cards -->
+  <div class="grid">
+    <div class="card">
+      <h2>FPS (EMA)</h2>
+      <div class="val" id="fps">--</div>
+      <div class="row"><span class="lbl">Frame</span><span class="v" id="frame">0</span></div>
+      <div class="row"><span class="lbl">Total</span><span class="v" id="total">-- ms</span></div>
+    </div>
+    <div class="card">
+      <h2>Latencia</h2>
+      <div class="row"><span class="lbl">Preproceso</span><span class="v" id="pre">-- ms</span></div>
+      <div class="row"><span class="lbl">Inferencia</span><span class="v" id="inf">-- ms</span></div>
+      <div class="row"><span class="lbl">Postproceso</span><span class="v" id="post">-- ms</span></div>
+      <div class="row"><span class="lbl">EMA Inferencia</span><span class="v" id="ema_inf">-- ms</span></div>
+    </div>
+    <div class="card">
+      <h2>Memoria</h2>
+      <div class="row"><span class="lbl">Heap interno</span><span class="v" id="heap">-- KB</span></div>
+      <div class="row"><span class="lbl">PSRAM libre</span><span class="v" id="psram">-- KB</span></div>
+      <div class="row"><span class="lbl">Modelo RAM</span><span class="v" id="arena">-- KB</span></div>
+      <div class="bar-wrap"><div class="bar" id="membar" style="width:0%"></div></div>
+    </div>
+    <div class="card">
+      <h2>Sistema</h2>
+      <div class="val sm" id="temp">--°C</div>
+      <div class="row"><span class="lbl">Detecciones</span><span class="v" id="ndets">0</span></div>
+    </div>
+    <div class="card dets">
+      <h2>Detecciones</h2>
+      <div class="det-list" id="detlist"><span style="color:#64748b;font-size:13px">Sin datos</span></div>
+    </div>
+  </div>
+
+  <!-- Right: Camera + Controls -->
   <div class="cam-section">
-    <div class="cam-wrap" id="liveCam">
-      <img id="stream" alt="Live">
-      <!-- Bounding boxes rendered here by JS -->
+    <div>
+      <div class="capture-title">Transmisión en vivo</div>
+      <div class="cam-wrap" id="liveCam">
+        <img id="stream" alt="Live">
+      </div>
     </div>
 
-    <!-- Controls -->
+    <div class="controls">
+      <div class="model-switch">
+        <select id="modelSelect" class="model-select" onchange="onModelSelectChange(this.value)">
+          <option value="0">ESPDet Pico</option>
+          <option value="1">YOLO26n</option>
+        </select>
+      </div>
+      <span class="model-label" id="modelLabel">Modelo: ESPDet Pico</span>
+      <span class="model-state" id="modelState">Estado modelo: estable</span>
+    </div>
+
     <div class="controls">
       <div class="mode-switch">
         <button class="mode-btn active" id="btnContinuous" onclick="setMode('continuous')">Continuo</button>
@@ -95,50 +156,24 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
       <span class="mode-label" id="modeLabel">Modo: Continuo</span>
     </div>
 
-    <!-- Captured Frame (on-demand) -->
+    <div class="thr-section" id="thrSection">
+      <div class="thr-group">
+        <label for="confSlider">Confianza</label>
+        <input type="range" id="confSlider" min="5" max="95" step="5" value="60" oninput="onThrChange()">
+        <span class="thr-val" id="confVal">0.60</span>
+      </div>
+      <div class="thr-group">
+        <label for="iouSlider">IoU NMS</label>
+        <input type="range" id="iouSlider" min="5" max="95" step="5" value="50" oninput="onThrChange()">
+        <span class="thr-val" id="iouVal">0.50</span>
+      </div>
+    </div>
+
     <div class="capture-panel" id="capturePanel">
       <div class="capture-title">Captura analizada</div>
       <div class="cam-wrap" id="capCam">
         <img id="capturedImg" alt="Captura">
       </div>
-    </div>
-  </div>
-
-  <!-- Metrics cards -->
-  <div class="grid">
-    <!-- FPS -->
-    <div class="card">
-      <h2>FPS (EMA)</h2>
-      <div class="val" id="fps">--</div>
-      <div class="row"><span class="lbl">Frame</span><span class="v" id="frame">0</span></div>
-      <div class="row"><span class="lbl">Total</span><span class="v" id="total">-- ms</span></div>
-    </div>
-    <!-- Latencia -->
-    <div class="card">
-      <h2>Latencia</h2>
-      <div class="row"><span class="lbl">Preproceso</span><span class="v" id="pre">-- ms</span></div>
-      <div class="row"><span class="lbl">Inferencia</span><span class="v" id="inf">-- ms</span></div>
-      <div class="row"><span class="lbl">Postproceso</span><span class="v" id="post">-- ms</span></div>
-      <div class="row"><span class="lbl">EMA Inferencia</span><span class="v" id="ema_inf">-- ms</span></div>
-    </div>
-    <!-- Memoria -->
-    <div class="card">
-      <h2>Memoria</h2>
-      <div class="row"><span class="lbl">Heap interno</span><span class="v" id="heap">-- KB</span></div>
-      <div class="row"><span class="lbl">PSRAM libre</span><span class="v" id="psram">-- KB</span></div>
-      <div class="row"><span class="lbl">Arena TFLite</span><span class="v" id="arena">-- KB</span></div>
-      <div class="bar-wrap"><div class="bar" id="membar" style="width:0%"></div></div>
-    </div>
-    <!-- Temperatura -->
-    <div class="card">
-      <h2>Sistema</h2>
-      <div class="val sm" id="temp">--°C</div>
-      <div class="row"><span class="lbl">Detecciones</span><span class="v" id="ndets">0</span></div>
-    </div>
-    <!-- Detections -->
-    <div class="card dets">
-      <h2>Detecciones</h2>
-      <div class="det-list" id="detlist"><span style="color:#64748b;font-size:13px">Sin datos</span></div>
     </div>
   </div>
 </div>
@@ -147,6 +182,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
 const $ = id => document.getElementById(id);
 let ws, retry = 0;
 let currentMode = 'continuous';
+let currentModelIdx = 0;
+let pendingModelIdx = null;
+let pendingModelReqId = 0;
+let modelReqSeq = 0;
+const MODEL_NAMES = ['ESPDet Pico', 'YOLO26n'];
 
 // ─── MJPEG Stream ────────────────────────────────────────────────────────
 function startStream() {
@@ -170,6 +210,34 @@ function setMode(mode) {
   }
 }
 
+function setModel(idx) {
+  idx = Number(idx);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= MODEL_NAMES.length) return;
+  if (pendingModelIdx !== null) return;
+
+  if (!(ws && ws.readyState === WebSocket.OPEN)) {
+    $('modelSelect').value = String(currentModelIdx);
+    setModelState('Estado modelo: sin conexión WS', 'error');
+    return;
+  }
+
+  if (idx === currentModelIdx) {
+    setModelState('Estado modelo: ya activo', 'ok');
+    return;
+  }
+
+  pendingModelIdx = idx;
+  pendingModelReqId = ++modelReqSeq;
+  $('modelSelect').disabled = true;
+  $('modelSelect').value = String(idx);
+  setModelState(`Estado modelo: cambiando a ${MODEL_NAMES[idx]}...`, 'switching');
+  sendCmd({cmd: 'model', index: idx, req_id: pendingModelReqId});
+}
+
+function onModelSelectChange(value) {
+  setModel(Number(value));
+}
+
 function triggerInfer() {
   if (currentMode !== 'ondemand') return;
   sendCmd({cmd: 'infer'});
@@ -181,6 +249,31 @@ function sendCmd(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(obj));
   }
+}
+
+function setModelState(text, cls = '') {
+  const el = $('modelState');
+  el.textContent = text;
+  el.classList.remove('switching', 'error', 'ok');
+  if (cls) el.classList.add(cls);
+}
+
+function syncModelUi(idx, labelFromServer) {
+  currentModelIdx = idx;
+  $('modelSelect').value = String(idx);
+  $('modelLabel').textContent = 'Modelo: ' + (MODEL_NAMES[idx] || labelFromServer || '?');
+}
+
+// ─── Threshold sliders ───────────────────────────────────────────────────
+let thrTimer = null;
+function onThrChange() {
+  const conf = parseInt($('confSlider').value) / 100;
+  const iou  = parseInt($('iouSlider').value) / 100;
+  $('confVal').textContent = conf.toFixed(2);
+  $('iouVal').textContent  = iou.toFixed(2);
+  // Debounce: send after 150 ms of inactivity to avoid flooding
+  clearTimeout(thrTimer);
+  thrTimer = setTimeout(() => sendCmd({cmd:'threshold', conf, iou}), 150);
 }
 
 // ─── Bounding boxes ──────────────────────────────────────────────────────
@@ -215,11 +308,19 @@ function connect() {
     $('dot').classList.add('on');
     $('status').textContent = 'Conectado';
     retry = 0;
+    if (pendingModelIdx === null) {
+      $('modelSelect').disabled = false;
+      setModelState('Estado modelo: estable', '');
+    }
   };
 
   ws.onclose = () => {
     $('dot').classList.remove('on');
     $('status').textContent = 'Reconectando…';
+    pendingModelIdx = null;
+    pendingModelReqId = 0;
+    $('modelSelect').disabled = true;
+    setModelState('Estado modelo: reconectando...', 'switching');
     setTimeout(connect, Math.min(1000 * (++retry), 5000));
   };
 
@@ -239,6 +340,37 @@ function connect() {
     // Text = JSON metrics
     try {
       const d = JSON.parse(e.data);
+
+      // Explicit ACK events for model switching
+      if (d.evt === 'model_switch') {
+        if (d.phase === 'started') {
+          if (pendingModelReqId > 0 && d.req_id && d.req_id !== pendingModelReqId) return;
+          const target = Number.isInteger(d.target_idx) ? d.target_idx : pendingModelIdx;
+          if (target != null && target >= 0 && target < MODEL_NAMES.length) {
+            setModelState(`Estado modelo: cambiando a ${MODEL_NAMES[target]}...`, 'switching');
+          } else {
+            setModelState('Estado modelo: cambiando...', 'switching');
+          }
+        } else if (d.phase === 'done') {
+          if (pendingModelReqId > 0 && d.req_id && d.req_id !== pendingModelReqId) return;
+
+          const activeIdx = Number.isInteger(d.active_idx) ? d.active_idx : currentModelIdx;
+          syncModelUi(activeIdx, d.model);
+
+          if (d.ok) {
+            setModelState('Estado modelo: cambio aplicado', 'ok');
+          } else {
+            const err = d.error ? ` (${d.error})` : '';
+            setModelState(`Estado modelo: error${err}`, 'error');
+          }
+
+          pendingModelIdx = null;
+          pendingModelReqId = 0;
+          $('modelSelect').disabled = false;
+        }
+        return;
+      }
+
       $('fps').textContent = d.ema_fps?.toFixed(1) ?? '--';
       $('frame').textContent = d.frame ?? 0;
       $('total').textContent = (d.total_ms?.toFixed(1) ?? '--') + ' ms';
@@ -262,6 +394,24 @@ function connect() {
         $('btnOndemand').classList.toggle('active', d.mode === 'ondemand');
         $('btnCapture').disabled = (d.mode === 'continuous');
         $('modeLabel').textContent = d.mode === 'continuous' ? 'Modo: Continuo' : 'Modo: Bajo demanda';
+      }
+
+      // Sync model from server
+      if (d.model_idx != null) {
+        syncModelUi(d.model_idx, d.model);
+        if (pendingModelIdx === null) {
+          setModelState('Estado modelo: estable', '');
+        }
+      }
+
+      // Sync thresholds from server (only when slider not being dragged)
+      if (d.conf_thr != null && !document.activeElement?.matches('#confSlider,#iouSlider')) {
+        $('confSlider').value = Math.round(d.conf_thr * 100);
+        $('confVal').textContent = d.conf_thr.toFixed(2);
+      }
+      if (d.iou_thr != null && !document.activeElement?.matches('#confSlider,#iouSlider')) {
+        $('iouSlider').value = Math.round(d.iou_thr * 100);
+        $('iouVal').textContent = d.iou_thr.toFixed(2);
       }
 
       // Detections
