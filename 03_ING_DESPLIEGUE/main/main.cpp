@@ -21,6 +21,9 @@
 #include "metrics.h"
 #include "wifi_manager.h"
 #include "web_server.h"
+#include "stream_buf.h"
+
+#include "img_converters.h"    // frame2jpg() from esp32-camera
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -52,7 +55,7 @@ static const char* TAG = "main";
 //  Compile-time model selection  (override via sdkconfig / menuconfig)
 // ═══════════════════════════════════════════════════════════════════════════
 #ifndef ACTIVE_MODEL_TYPE
-#define ACTIVE_MODEL_TYPE   ModelType::YOLO26N_ESP // ModelType::ESPDET_PICO
+#define ACTIVE_MODEL_TYPE   ModelType::ESPDET_PICO
 #endif
 
 #ifndef ACTIVE_ENGINE_TYPE
@@ -226,16 +229,18 @@ static DetectionResult run_postprocess(const InferenceEngine* engine,
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Inference task — pinned to Core 0
+//
+//  Two modes controlled by g_infer_mode (atomic, set via WebSocket):
+//    CONTINUOUS  — capture → encode JPEG → preprocess → infer → broadcast
+//    ON_DEMAND   — capture → encode JPEG (stream only);
+//                  when g_infer_trigger is set: also preprocess → infer → send capture
 // ═══════════════════════════════════════════════════════════════════════════
 static void inference_task(void* param) {
     auto* engine = static_cast<InferenceEngine*>(param);
     ModelConfig cfg = make_model_config(static_cast<ModelType>(ACTIVE_MODEL_TYPE),
                                         static_cast<EngineType>(ACTIVE_ENGINE_TYPE));
 
-    // Full INT8 models use int8 input; hybrid models with float32 I/O need float
-    // YOLO26N fullint8 and MOBILENET_SSD use int8 input; hybrid YOLO models need float
-    // ESP-DL models use dedicated ESPDL preprocessing (different normalization)
-    bool needs_float = false;  // All active models now use INT8 input
+    bool needs_float = false;
     bool needs_espdl_preprocess = (cfg.engine == EngineType::ESP_DL);
 
     ESP_LOGI(TAG, "═══════════════════════════════════════════════");
@@ -243,6 +248,7 @@ static void inference_task(void* param) {
     ESP_LOGI(TAG, " Engine:  %s", engine->runtime_name());
     ESP_LOGI(TAG, " Input:   %s", needs_float ? "float32" : "INT8");
     ESP_LOGI(TAG, " Core:    %d", xPortGetCoreID());
+    ESP_LOGI(TAG, " Modo:    Ambos (continuous / on-demand via WS)");
     ESP_LOGI(TAG, "═══════════════════════════════════════════════");
 
     while (true) {
@@ -256,7 +262,38 @@ static void inference_task(void* param) {
             continue;
         }
 
-        // ─── 2. Preprocess ──────────────────────────────────────────
+        // ─── 2. Encode JPEG for MJPEG stream (low quality, fast) ────
+        uint8_t* stream_jpg = nullptr;
+        size_t   stream_jpg_len = 0;
+        bool jpg_ok = frame2jpg(fb, STREAM_JPEG_QUALITY,
+                                &stream_jpg, &stream_jpg_len);
+        if (jpg_ok && stream_jpg) {
+            stream_buf_publish(stream_jpg, stream_jpg_len);
+            free(stream_jpg);
+            stream_jpg = nullptr;
+        }
+
+        // ─── 3. Check inference mode ─────────────────────────────────
+        InferMode mode = g_infer_mode.load(std::memory_order_relaxed);
+        bool triggered = g_infer_trigger.exchange(false, std::memory_order_relaxed);
+        bool should_infer = (mode == InferMode::CONTINUOUS) || triggered;
+
+        if (!should_infer) {
+            // Stream-only: release frame and loop fast
+            camera_release_fb(fb);
+            // Yield so watchdog and other tasks run
+            taskYIELD();
+            continue;
+        }
+
+        // ─── 4. Encode high-quality JPEG for captured frame (on-demand) ─
+        uint8_t* capture_jpg = nullptr;
+        size_t   capture_jpg_len = 0;
+        if (triggered) {
+            frame2jpg(fb, CAPTURE_JPEG_QUALITY, &capture_jpg, &capture_jpg_len);
+        }
+
+        // ─── 5. Preprocess ──────────────────────────────────────────
         esp_err_t ret;
 
         if (needs_float) {
@@ -266,23 +303,20 @@ static void inference_task(void* param) {
 
             if (!input_f) {
                 ESP_LOGW(TAG, "Preprocesamiento float fallido");
+                free(capture_jpg);
                 continue;
             }
-
-            // ─── 3. Inference ────────────────────────────────────────
             ret = engine->invoke_float(input_f);
         } else if (needs_espdl_preprocess) {
-            // ESP-DL uses different normalization: [0,127] vs [-128,127]
             int8_t* input_i = image_preprocess_espdl(fb);
             camera_release_fb(fb);
             metrics_preprocess_end();
 
             if (!input_i) {
                 ESP_LOGW(TAG, "Preprocesamiento ESPDL fallido");
+                free(capture_jpg);
                 continue;
             }
-
-            // ─── 3. Inference ────────────────────────────────────────
             ret = engine->invoke(input_i);
         } else {
             int8_t* input_i = image_preprocess(fb);
@@ -291,10 +325,9 @@ static void inference_task(void* param) {
 
             if (!input_i) {
                 ESP_LOGW(TAG, "Preprocesamiento INT8 fallido");
+                free(capture_jpg);
                 continue;
             }
-
-            // ─── 3. Inference ────────────────────────────────────────
             ret = engine->invoke(input_i);
         }
 
@@ -302,21 +335,19 @@ static void inference_task(void* param) {
 
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Inferencia fallida: %s", esp_err_to_name(ret));
+            free(capture_jpg);
             vTaskDelay(pdMS_TO_TICKS(500));
             continue;
         }
 
-        // ─── 4. Postprocess ─────────────────────────────────────────
+        // ─── 6. Postprocess ─────────────────────────────────────────
         DetectionResult dets = run_postprocess(engine, cfg);
         metrics_postprocess_end(dets.count);
 
-        // ─── 5. Report ──────────────────────────────────────────────
+        // ─── 7. Report ──────────────────────────────────────────────
         InferenceMetrics m = metrics_get();
-
-        // Update arena usage
         m.arena_used = engine->get_arena_used();
 
-        // Log every METRICS_REPORT_INTERVAL frames
         if (m.frame_id % METRICS_REPORT_INTERVAL == 0) {
             ESP_LOGI(TAG, "[#%lu] %s | %.1f ms (pre:%.1f inf:%.1f post:%.1f) | "
                           "%.1f FPS | %d dets | heap:%luK psram:%luK",
@@ -326,10 +357,15 @@ static void inference_task(void* param) {
                      m.heap_internal_free / 1024, m.psram_free / 1024);
         }
 
-        // ─── 6. Broadcast to WebSocket ──────────────────────────────
+        // ─── 8. Send captured frame via WS binary (on-demand trigger) ─
+        if (triggered && capture_jpg && capture_jpg_len > 0) {
+            webserver_send_capture(capture_jpg, capture_jpg_len);
+        }
+        free(capture_jpg);
+
+        // ─── 9. Broadcast metrics + detections via WS ───────────────
         webserver_broadcast(m, dets);
 
-        // Yield briefly so WDT is happy
         taskYIELD();
     }
 }
@@ -360,6 +396,9 @@ extern "C" void app_main(void) {
 
     // ─── 4. Init postprocessing ──────────────────────────────────────
     ESP_ERROR_CHECK(postprocess_init());
+
+    // ─── 4b. Init stream buffer (JPEG shared buffer for MJPEG) ───────
+    ESP_ERROR_CHECK(stream_buf_init());
 
     // ─── 5. Create & init inference engine ───────────────────────────
     ModelConfig cfg = make_model_config(static_cast<ModelType>(ACTIVE_MODEL_TYPE),

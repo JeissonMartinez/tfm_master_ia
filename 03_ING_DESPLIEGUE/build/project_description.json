@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "tfm_tinyml_detector",
-    "project_version":    "2e22166ec-dirty",
+    "project_version":    "6d0b813f2-dirty",
     "project_path":       "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE",
     "idf_path":           "/Users/admin/esp/v5.4.3/esp-idf",
     "build_dir":          "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/build",
@@ -1315,7 +1315,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [ "espressif__esp-dl", "espressif__esp-tflite-micro", "espressif__esp32-camera" ],
             "file": "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/build/esp-idf/main/libmain.a",
-            "sources": [ "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/main.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/camera.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/image_proc.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/tflite_engine.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/espdl_engine.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/postprocess.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/metrics.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/wifi_manager.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/web_server.cpp" ],
+            "sources": [ "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/main.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/camera.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/image_proc.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/tflite_engine.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/espdl_engine.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/postprocess.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/metrics.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/wifi_manager.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/web_server.cpp", "/Users/admin/Documents/TFM_UNIR/03_ING_DESPLIEGUE/main/stream_buf.cpp" ],
             "include_dirs": [ ".", "models/tflite" ]
         },
         "mbedtls": {

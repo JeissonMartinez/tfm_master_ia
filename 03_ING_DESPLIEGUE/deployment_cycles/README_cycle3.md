@@ -424,8 +424,136 @@ Estos warnings son inherentes al modelo de single-thread (captura→inferencia s
 ## 9. Próximos Pasos (Post-Baseline)
 
 - [ ] **Ajuste de umbrales:** Calibrar conf/IoU con imágenes reales de la cámara para ambos modelos
-- [ ] **Streaming MJPEG:** Bloque B — stream de video con bounding boxes dibujados client-side
-- [ ] **Controles WebSocket:** Bloque C — toggle de inferencia, cambio de modelo en runtime (sin recompilación)
+- [x] **Streaming MJPEG:** Bloque B — stream de video con bounding boxes dibujados client-side
+- [x] **Controles WebSocket:** Bloque C — toggle de inferencia, cambio de modelo en runtime (sin recompilación)
 - [ ] **Profiling detallado:** Desglose de latencia por capa/operador ESP-DL para identificar cuellos de botella
 - [ ] **Optimización YOLO26n:** Evaluar si reducción de input (160×160), poda, o cuantización más agresiva mejora el FPS a niveles utilizables
 - [ ] **Pipeline asíncrono:** Evaluar captura en Core 1 + inferencia en Core 0 para reducir latencia de preprocesamiento
+
+---
+
+## 9.1 Implementación: MJPEG Stream + Inferencia Dual-Mode
+
+**Fecha:** 24 de febrero de 2026  
+**Objetivo:** Visualizar el video de la cámara en el dashboard web y permitir dos modos de inferencia: continuo (original) y bajo demanda (captura con botón).  
+**Motivación:** El dashboard original solo mostraba métricas de texto sin imagen de cámara. Se necesitaba ver qué estaba viendo el sensor y poder hacer capturas puntuales para análisis sin la latencia del bucle continuo.
+
+### 9.1.1 Arquitectura del Flujo
+
+```
+inference_task (Core 0) — while(true):
+├── camera_capture() ─────────────────────── obtener frame RGB565 320×240
+├── frame2jpg(quality=12) ────────────────── encode JPEG software (~10-20 ms)
+│   └── stream_buf_publish() ─────────────── copia a buffer compartido PSRAM
+│       └── xEventGroupSetBits() ─────────── señal a handlers MJPEG
+├── if CONTINUOUS o triggered:
+│   ├── [triggered] frame2jpg(quality=80) ── JPEG alta calidad para captura
+│   ├── image_preprocess() → invoke() ────── preproceso + inferencia + postproceso
+│   ├── [triggered] webserver_send_capture() envío WS binary del JPEG capturado
+│   └── webserver_broadcast() ────────────── JSON métricas + detecciones
+└── else (ON_DEMAND sin trigger):
+    └── camera_release_fb() → taskYIELD() ── solo stream, máximo FPS
+```
+
+**Decisiones de diseño:**
+
+| Decisión | Alternativa descartada | Justificación |
+|----------|----------------------|---------------|
+| JPEG encode en Core 0 (mismo task) | Task separado + semáforo | Evita contención de cámara y complejidad de sincronización; overhead de ~10-20 ms aceptable vs ~120 ms de inferencia |
+| `frame2jpg()` de esp32-camera | `esp_jpeg_encode` | `esp_jpeg` solo decodifica; `frame2jpg` soporta RGB565 y ya está linkado |
+| Frame capturado vía WS binary | Base64 dentro del JSON | 33% más eficiente en bandwidth; sin overhead de encoding base64 en ESP32 |
+| Calidad stream 12 vs captura 80 | Calidad única | Balance entre fluidez de stream (~5-10 KB/frame) y calidad de análisis (~15-25 KB/frame) |
+| Buffer compartido PSRAM + mutex | Ring buffer o doble buffer | Simplicidad; un solo frame "latest" es suficiente para MJPEG |
+
+### 9.1.2 Archivos Nuevos
+
+| Archivo | Propósito |
+|---------|-----------|
+| `main/stream_buf.h` | Header del módulo de buffer JPEG compartido — EventGroup + mutex FreeRTOS |
+| `main/stream_buf.cpp` | Implementación: buffer PSRAM 60 KB, `stream_buf_publish()`/`stream_buf_read()` thread-safe, variables atómicas `g_infer_mode` y `g_infer_trigger` |
+| `scripts/gen_dashboard_header.py` | Script Python para regenerar `dashboard.h` automáticamente desde `frontend/dashboard.html` (gzip level 9 → C hex array) |
+
+### 9.1.3 Archivos Modificados
+
+| Archivo | Cambio |
+|---------|--------|
+| `main/app_config.h` | Añadidos: `STREAM_JPEG_QUALITY` (12), `CAPTURE_JPEG_QUALITY` (80), `STREAM_BUF_MAX` (60 KB), `STREAM_MAX_CLIENTS` (2), `enum InferMode { CONTINUOUS, ON_DEMAND }` |
+| `main/web_server.h` | Nueva función `webserver_send_capture()` para envío de JPEG binario por WebSocket |
+| `main/web_server.cpp` | **(a)** Endpoint `GET /stream` — MJPEG multipart (`multipart/x-mixed-replace`), espera frames vía EventGroup, buffer local PSRAM para desacoplar mutex del envío HTTP. **(b)** Parsing de comandos WS entrantes: `{"cmd":"mode","value":"continuous|ondemand"}` y `{"cmd":"infer"}`. **(c)** Campo `"mode"` en JSON broadcast para sincronizar estado con frontend. **(d)** `webserver_send_capture()` para envío binario del frame capturado. **(e)** Sockets incrementados a `WS_MAX_CLIENTS + STREAM_MAX_CLIENTS + 2` |
+| `main/main.cpp` | **(a)** Se añade `#include "stream_buf.h"` y `#include "img_converters.h"`. **(b)** `inference_task` reestructurado: encode JPEG low-quality cada frame → publish al stream buffer → condicionalmente ejecutar inferencia según `g_infer_mode`/`g_infer_trigger` → JPEG high-quality para capturas on-demand → envío por WS binary antes de broadcast. **(c)** `stream_buf_init()` en `app_main()` antes de crear inference task |
+| `main/frontend/dashboard.html` | Rediseño completo: **(a)** `<img src="/stream">` para video MJPEG live. **(b)** Toggle segmented control "Continuo / Bajo demanda". **(c)** Botón "Capturar" con icono (envía `{"cmd":"infer"}`). **(d)** Panel de captura con imagen analizada (recibida como blob WS binary). **(e)** Bounding boxes CSS superpuestos (posición absoluta %, coloreados por clase). **(f)** `ws.binaryType='blob'` para diferenciar frames de métricas. **(g)** Sincronización de modo desde el servidor |
+| `main/dashboard.h` | Regenerado: 3911 bytes gzip (antes 2151) desde 12809 bytes HTML |
+| `main/CMakeLists.txt` | Añadido `stream_buf.cpp` a SOURCES |
+
+### 9.1.4 Nuevas Constantes (`app_config.h`)
+
+```cpp
+// MJPEG Stream
+#define STREAM_JPEG_QUALITY   12     // Calidad baja → rápido (~5-10 KB/frame)
+#define CAPTURE_JPEG_QUALITY  80     // Calidad alta para frame capturado
+#define STREAM_BUF_MAX     (60*1024) // Max JPEG buffer size (PSRAM)
+#define STREAM_MAX_CLIENTS    2      // Conexiones MJPEG simultáneas
+
+// Modo de inferencia
+enum class InferMode : uint8_t {
+    CONTINUOUS,   // Inferencia en cada frame (comportamiento original)
+    ON_DEMAND,    // Inferencia solo al presionar "Capturar"
+};
+```
+
+### 9.1.5 Nuevos Endpoints HTTP
+
+| Endpoint | Método | Content-Type | Descripción |
+|----------|--------|-------------|-------------|
+| `/stream` | GET | `multipart/x-mixed-replace;boundary=frameboundary` | Stream MJPEG live. Handler se bloquea esperando frames vía `xEventGroupWaitBits()`. Buffer local PSRAM de 60 KB para desacoplar del mutex compartido. Soporta hasta 2 clientes simultáneos |
+
+### 9.1.6 Protocolo WebSocket Extendido
+
+**Mensajes del cliente → servidor (texto JSON):**
+
+| Comando | Ejemplo | Efecto |
+|---------|---------|--------|
+| Cambio de modo | `{"cmd":"mode","value":"continuous"}` | `g_infer_mode = CONTINUOUS` |
+| Cambio de modo | `{"cmd":"mode","value":"ondemand"}` | `g_infer_mode = ON_DEMAND` |
+| Trigger inferencia | `{"cmd":"infer"}` | `g_infer_trigger = true` (solo efectivo en modo on-demand) |
+
+**Mensajes del servidor → cliente:**
+
+| Tipo WS | Contenido | Cuándo |
+|---------|-----------|--------|
+| TEXT | JSON con métricas + campo `"mode"` + array `"dets"` | Cada inferencia completada |
+| BINARY | JPEG raw del frame analizado | Tras inferencia on-demand (triggered) |
+
+### 9.1.7 Impacto en Recursos
+
+| Recurso | Impacto | Nota |
+|---------|---------|------|
+| PSRAM | +60 KB buffer stream + ~60 KB buffer local handler | ~120 KB adicionales sobre ~6-8 MB disponibles (<2%) |
+| Latencia por frame (modo continuo) | +10-20 ms por `frame2jpg()` | <15% overhead sobre ~120 ms de inferencia (ESPDet Pico) |
+| Latencia modo on-demand (sin inferencia) | Solo JPEG encode ~10-20 ms | Stream a >30 FPS teórico (limitado por red WiFi) |
+| Firmware size | +1760 bytes HTML gzip | Dashboard 3911 vs 2151 bytes anterior |
+| Sockets abiertos | 5 → 7 (máximo) | `WS_MAX_CLIENTS(3) + STREAM_MAX_CLIENTS(2) + 2` |
+
+### 9.1.8 Dashboard — Elementos de UI
+
+| Elemento | Descripción |
+|----------|-------------|
+| **Video live** | `<img id="stream" src="/stream">` dentro de contenedor con `aspect-ratio: 320/240` y bounding boxes CSS posicionados absolutamente |
+| **Toggle de modo** | Segmented control con botones "Continuo" / "Bajo demanda" — envía comando WS y sincroniza visualmente |
+| **Botón Capturar** | Habilitado solo en modo on-demand. Envía `{"cmd":"infer"}`, deshabilitado 500 ms para debounce |
+| **Panel de captura** | Aparece tras primera captura on-demand. Muestra el JPEG recibido por WS binary con bounding boxes superpuestos |
+| **Bounding boxes** | Divs CSS con bordes coloreados por clase (dog=violeta, door=cyan, obstacle=ámbar, person=verde, stair=rosa), posición en % sobre coordenadas normalizadas `[x1,y1,x2,y2]` |
+| **Cards de métricas** | Sin cambios funcionales: FPS, Latencia, Memoria, Sistema, Detecciones |
+
+### 9.1.9 Build
+
+```bash
+# Regenerar dashboard.h tras editar el HTML:
+python3 scripts/gen_dashboard_header.py
+
+# Build del firmware:
+idf.py build
+
+# Resultado: 0 errores, 0 warnings en main/
+# Binary size: 0x888cc0 (~8.5 MB), 15% libre en partición factory
+```

@@ -12,7 +12,39 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
 .dot{width:10px;height:10px;border-radius:50%;background:#ef4444;animation:pulse 2s infinite}
 .dot.on{background:#22c55e}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px;max-width:900px;margin:0 auto}
+.main-wrap{max-width:960px;margin:0 auto;padding:16px}
+
+/* ─── Video + Bounding boxes ─── */
+.cam-section{margin-bottom:16px;max-width:480px}
+.cam-wrap{position:relative;width:100%;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:320/240}
+.cam-wrap img{width:100%;height:100%;object-fit:contain;display:block}
+.cam-wrap .bb{position:absolute;border:2px solid;border-radius:3px;pointer-events:none}
+.cam-wrap .bb-label{position:absolute;top:-18px;left:0;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px 3px 0 0;white-space:nowrap}
+.bb.dog{border-color:#7c3aed}.bb.dog .bb-label{background:#7c3aed;color:#fff}
+.bb.door{border-color:#0ea5e9}.bb.door .bb-label{background:#0ea5e9;color:#fff}
+.bb.obstacle{border-color:#f59e0b}.bb.obstacle .bb-label{background:#f59e0b;color:#000}
+.bb.person{border-color:#22c55e}.bb.person .bb-label{background:#22c55e;color:#000}
+.bb.stair{border-color:#ec4899}.bb.stair .bb-label{background:#ec4899;color:#fff}
+
+/* ─── Controls ─── */
+.controls{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
+.mode-switch{display:flex;background:#0f172a;border-radius:8px;overflow:hidden;border:1px solid #334155}
+.mode-btn{padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;background:transparent;color:#94a3b8;border:none;transition:all .15s}
+.mode-btn.active{background:#38bdf8;color:#0f172a}
+.capture-btn{padding:8px 20px;border-radius:8px;font-size:13px;font-weight:700;border:none;cursor:pointer;background:#7c3aed;color:#fff;transition:all .15s;display:flex;align-items:center;gap:6px}
+.capture-btn:hover{background:#6d28d9}
+.capture-btn:disabled{opacity:.35;cursor:not-allowed}
+.capture-btn svg{width:16px;height:16px}
+.mode-label{font-size:12px;color:#64748b}
+
+/* ─── Captured frame panel ─── */
+.capture-panel{margin-top:12px;display:none}
+.capture-panel.show{display:block}
+.capture-panel .cam-wrap{border:2px solid #7c3aed}
+.capture-title{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:8px}
+
+/* ─── Metrics grid ─── */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
 @media(max-width:600px){.grid{grid-template-columns:1fr}}
 .card{background:#1e293b;border-radius:10px;padding:16px;border:1px solid #334155}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:12px}
@@ -41,50 +73,143 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f
   <h1>TFM TinyML Detector</h1>
   <span id="status">Conectando…</span>
 </div>
-<div class="grid">
-  <!-- FPS -->
-  <div class="card">
-    <h2>FPS (EMA)</h2>
-    <div class="val" id="fps">--</div>
-    <div class="row"><span class="lbl">Frame</span><span class="v" id="frame">0</span></div>
-    <div class="row"><span class="lbl">Total</span><span class="v" id="total">-- ms</span></div>
+
+<div class="main-wrap">
+  <!-- Live Camera Feed -->
+  <div class="cam-section">
+    <div class="cam-wrap" id="liveCam">
+      <img id="stream" alt="Live">
+      <!-- Bounding boxes rendered here by JS -->
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <div class="mode-switch">
+        <button class="mode-btn active" id="btnContinuous" onclick="setMode('continuous')">Continuo</button>
+        <button class="mode-btn" id="btnOndemand" onclick="setMode('ondemand')">Bajo demanda</button>
+      </div>
+      <button class="capture-btn" id="btnCapture" onclick="triggerInfer()" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
+        Capturar
+      </button>
+      <span class="mode-label" id="modeLabel">Modo: Continuo</span>
+    </div>
+
+    <!-- Captured Frame (on-demand) -->
+    <div class="capture-panel" id="capturePanel">
+      <div class="capture-title">Captura analizada</div>
+      <div class="cam-wrap" id="capCam">
+        <img id="capturedImg" alt="Captura">
+      </div>
+    </div>
   </div>
-  <!-- Latencia -->
-  <div class="card">
-    <h2>Latencia</h2>
-    <div class="row"><span class="lbl">Preproceso</span><span class="v" id="pre">-- ms</span></div>
-    <div class="row"><span class="lbl">Inferencia</span><span class="v" id="inf">-- ms</span></div>
-    <div class="row"><span class="lbl">Postproceso</span><span class="v" id="post">-- ms</span></div>
-    <div class="row"><span class="lbl">EMA Inferencia</span><span class="v" id="ema_inf">-- ms</span></div>
-  </div>
-  <!-- Memoria -->
-  <div class="card">
-    <h2>Memoria</h2>
-    <div class="row"><span class="lbl">Heap interno</span><span class="v" id="heap">-- KB</span></div>
-    <div class="row"><span class="lbl">PSRAM libre</span><span class="v" id="psram">-- KB</span></div>
-    <div class="row"><span class="lbl">Arena TFLite</span><span class="v" id="arena">-- KB</span></div>
-    <div class="bar-wrap"><div class="bar" id="membar" style="width:0%"></div></div>
-  </div>
-  <!-- Temperatura -->
-  <div class="card">
-    <h2>Sistema</h2>
-    <div class="val sm" id="temp">--°C</div>
-    <div class="row"><span class="lbl">Detecciones</span><span class="v" id="ndets">0</span></div>
-  </div>
-  <!-- Detections -->
-  <div class="card dets">
-    <h2>Detecciones</h2>
-    <div class="det-list" id="detlist"><span style="color:#64748b;font-size:13px">Sin datos</span></div>
+
+  <!-- Metrics cards -->
+  <div class="grid">
+    <!-- FPS -->
+    <div class="card">
+      <h2>FPS (EMA)</h2>
+      <div class="val" id="fps">--</div>
+      <div class="row"><span class="lbl">Frame</span><span class="v" id="frame">0</span></div>
+      <div class="row"><span class="lbl">Total</span><span class="v" id="total">-- ms</span></div>
+    </div>
+    <!-- Latencia -->
+    <div class="card">
+      <h2>Latencia</h2>
+      <div class="row"><span class="lbl">Preproceso</span><span class="v" id="pre">-- ms</span></div>
+      <div class="row"><span class="lbl">Inferencia</span><span class="v" id="inf">-- ms</span></div>
+      <div class="row"><span class="lbl">Postproceso</span><span class="v" id="post">-- ms</span></div>
+      <div class="row"><span class="lbl">EMA Inferencia</span><span class="v" id="ema_inf">-- ms</span></div>
+    </div>
+    <!-- Memoria -->
+    <div class="card">
+      <h2>Memoria</h2>
+      <div class="row"><span class="lbl">Heap interno</span><span class="v" id="heap">-- KB</span></div>
+      <div class="row"><span class="lbl">PSRAM libre</span><span class="v" id="psram">-- KB</span></div>
+      <div class="row"><span class="lbl">Arena TFLite</span><span class="v" id="arena">-- KB</span></div>
+      <div class="bar-wrap"><div class="bar" id="membar" style="width:0%"></div></div>
+    </div>
+    <!-- Temperatura -->
+    <div class="card">
+      <h2>Sistema</h2>
+      <div class="val sm" id="temp">--°C</div>
+      <div class="row"><span class="lbl">Detecciones</span><span class="v" id="ndets">0</span></div>
+    </div>
+    <!-- Detections -->
+    <div class="card dets">
+      <h2>Detecciones</h2>
+      <div class="det-list" id="detlist"><span style="color:#64748b;font-size:13px">Sin datos</span></div>
+    </div>
   </div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 let ws, retry = 0;
+let currentMode = 'continuous';
 
+// ─── MJPEG Stream ────────────────────────────────────────────────────────
+function startStream() {
+  const host = location.hostname || '192.168.4.1';
+  const img = $('stream');
+  // MJPEG stream on port 81 (separate httpd to avoid blocking WS on port 80)
+  img.src = `http://${host}:81/stream`;
+}
+
+// ─── Mode control ────────────────────────────────────────────────────────
+function setMode(mode) {
+  currentMode = mode;
+  sendCmd({cmd: 'mode', value: mode});
+  $('btnContinuous').classList.toggle('active', mode === 'continuous');
+  $('btnOndemand').classList.toggle('active', mode === 'ondemand');
+  $('btnCapture').disabled = (mode === 'continuous');
+  $('modeLabel').textContent = mode === 'continuous' ? 'Modo: Continuo' : 'Modo: Bajo demanda';
+  if (mode === 'continuous') {
+    $('capturePanel').classList.remove('show');
+    clearBoxes($('capCam'));
+  }
+}
+
+function triggerInfer() {
+  if (currentMode !== 'ondemand') return;
+  sendCmd({cmd: 'infer'});
+  $('btnCapture').disabled = true;
+  setTimeout(() => { $('btnCapture').disabled = false; }, 500);
+}
+
+function sendCmd(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(obj));
+  }
+}
+
+// ─── Bounding boxes ──────────────────────────────────────────────────────
+function renderBoxes(container, dets) {
+  clearBoxes(container);
+  dets.forEach(d => {
+    const box = document.createElement('div');
+    box.className = `bb ${d.cls}`;
+    box.style.left   = (d.x1 * 100).toFixed(2) + '%';
+    box.style.top    = (d.y1 * 100).toFixed(2) + '%';
+    box.style.width  = ((d.x2 - d.x1) * 100).toFixed(2) + '%';
+    box.style.height = ((d.y2 - d.y1) * 100).toFixed(2) + '%';
+    const label = document.createElement('span');
+    label.className = 'bb-label';
+    label.textContent = `${d.cls} ${(d.cf * 100).toFixed(0)}%`;
+    box.appendChild(label);
+    container.appendChild(box);
+  });
+}
+
+function clearBoxes(container) {
+  container.querySelectorAll('.bb').forEach(el => el.remove());
+}
+
+// ─── WebSocket ───────────────────────────────────────────────────────────
 function connect() {
   const host = location.hostname || '192.168.4.1';
   ws = new WebSocket(`ws://${host}/ws`);
+  ws.binaryType = 'blob';
 
   ws.onopen = () => {
     $('dot').classList.add('on');
@@ -101,6 +226,17 @@ function connect() {
   ws.onerror = () => ws.close();
 
   ws.onmessage = e => {
+    // Binary = captured JPEG frame (on-demand)
+    if (e.data instanceof Blob) {
+      const url = URL.createObjectURL(e.data);
+      const img = $('capturedImg');
+      if (img.src && img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+      img.src = url;
+      $('capturePanel').classList.add('show');
+      return;
+    }
+
+    // Text = JSON metrics
     try {
       const d = JSON.parse(e.data);
       $('fps').textContent = d.ema_fps?.toFixed(1) ?? '--';
@@ -115,10 +251,18 @@ function connect() {
       $('arena').textContent = (d.arena_kb ?? '--') + ' KB';
       $('temp').textContent = (d.temp_c?.toFixed(1) ?? '--') + '°C';
 
-      // Memory bar (PSRAM usage %)
-      const totalPsram = 8192; // 8MB approx
+      const totalPsram = 8192;
       const used = totalPsram - (d.psram_kb ?? 0);
       $('membar').style.width = Math.min(100, (used / totalPsram * 100)).toFixed(0) + '%';
+
+      // Sync mode from server
+      if (d.mode) {
+        currentMode = d.mode;
+        $('btnContinuous').classList.toggle('active', d.mode === 'continuous');
+        $('btnOndemand').classList.toggle('active', d.mode === 'ondemand');
+        $('btnCapture').disabled = (d.mode === 'continuous');
+        $('modeLabel').textContent = d.mode === 'continuous' ? 'Modo: Continuo' : 'Modo: Bajo demanda';
+      }
 
       // Detections
       const dets = d.dets ?? [];
@@ -131,12 +275,21 @@ function connect() {
           `<span class="det-tag ${det.cls}">${det.cls} ${(det.cf*100).toFixed(0)}%</span>`
         ).join('');
       }
+
+      // Draw bounding boxes on live stream (continuous) or captured panel (on-demand)
+      if (currentMode === 'continuous') {
+        renderBoxes($('liveCam'), dets);
+      } else {
+        renderBoxes($('capCam'), dets);
+        clearBoxes($('liveCam'));
+      }
     } catch(err) {
       console.error('Parse error:', err);
     }
   };
 }
 
+startStream();
 connect();
 </script>
 </body>

@@ -13,6 +13,7 @@ set(SOURCES
     "metrics.cpp"
     "wifi_manager.cpp"
     "web_server.cpp"
+    "stream_buf.cpp"
 )
 
 idf_component_register(

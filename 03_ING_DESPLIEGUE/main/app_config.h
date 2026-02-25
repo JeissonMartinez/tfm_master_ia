@@ -67,7 +67,20 @@ static const char* const CLASS_NAMES[NUM_CLASSES] = {
 #define WIFI_STA_PASS     "Meca1020@"
 #define WIFI_MAX_RETRY    10
 #define WEB_SERVER_PORT   80
+#define STREAM_SERVER_PORT 81   // MJPEG en puerto separado (no bloquea WS)
 #define WS_MAX_CLIENTS    3
+
+// ─── MJPEG Stream ────────────────────────────────────────────────────────
+#define STREAM_JPEG_QUALITY   12   // Calidad baja → rápido (~5-10 KB/frame)
+#define CAPTURE_JPEG_QUALITY  80   // Calidad alta para frame capturado
+#define STREAM_BUF_MAX     (60 * 1024)  // Max JPEG buffer size (PSRAM)
+#define STREAM_MAX_CLIENTS    2    // Conexiones MJPEG simultáneas
+
+// ─── Modo de inferencia ──────────────────────────────────────────────────
+enum class InferMode : uint8_t {
+    CONTINUOUS,    // Inferencia en cada frame (comportamiento original)
+    ON_DEMAND,     // Inferencia solo al presionar "Capturar"
+};
 
 // ─── Métricas ────────────────────────────────────────────────────────────
 #define EMA_ALPHA         0.065f   // alpha = 2/(N+1), N=30
