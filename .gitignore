@@ -67,8 +67,7 @@ __pycache__/
 02_ING_MODELOS/datasets/IODC
 
 # Documentos privados
-TFE_JeissonMartinezFlorez_Predeposito2.docx
-TFE_JeissonMartinezFlorez_Predeposito2.pdf
+00_PREDEPOSITO
 
 # ESP-IDF build artifacts
 **/build/
