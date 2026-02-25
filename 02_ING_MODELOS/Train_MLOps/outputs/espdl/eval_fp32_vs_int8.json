@@ -1,107 +1,107 @@
 {
-  "yolo26n_t2_esp": {
-    "label": "YOLO26 T2 ESP",
-    "family": "yolo26_esp",
+  "yolo26n_t3_esp": {
+    "label": "YOLO26 T3 ESP (no DFL)",
+    "family": "yolo26_esp_v3",
     "fp32": {
-      "mAP50": 0.5297,
-      "mAP50_95": 0.3272,
-      "precision": 0.8114,
-      "recall": 0.5748,
-      "f1": 0.6729,
-      "n_detections": 385,
+      "mAP50": 0.5027,
+      "mAP50_95": 0.3206,
+      "precision": 0.8437,
+      "recall": 0.5163,
+      "f1": 0.6406,
+      "n_detections": 309,
       "n_ground_truths": 576,
       "per_class": {
         "dog": {
-          "ap50": 0.6236,
-          "precision": 0.9268,
-          "recall": 0.6552,
-          "f1": 0.7677,
+          "ap50": 0.6823,
+          "precision": 0.9111,
+          "recall": 0.7069,
+          "f1": 0.7961,
           "n_gt": 58
         },
         "door": {
-          "ap50": 0.2065,
-          "precision": 0.6452,
-          "recall": 0.2941,
-          "f1": 0.404,
+          "ap50": 0.1489,
+          "precision": 0.6,
+          "recall": 0.1765,
+          "f1": 0.2727,
           "n_gt": 136
         },
         "obstacle": {
-          "ap50": 0.4136,
-          "precision": 0.781,
-          "recall": 0.474,
-          "f1": 0.5899,
+          "ap50": 0.3686,
+          "precision": 0.9155,
+          "recall": 0.3757,
+          "f1": 0.5328,
           "n_gt": 173
         },
         "person": {
-          "ap50": 0.7913,
-          "precision": 0.9111,
-          "recall": 0.8119,
-          "f1": 0.8586,
+          "ap50": 0.8236,
+          "precision": 0.8936,
+          "recall": 0.8317,
+          "f1": 0.8615,
           "n_gt": 101
         },
         "stair": {
-          "ap50": 0.6137,
-          "precision": 0.7931,
-          "recall": 0.6389,
-          "f1": 0.7077,
+          "ap50": 0.4899,
+          "precision": 0.8983,
+          "recall": 0.4907,
+          "f1": 0.6347,
           "n_gt": 108
         }
       },
-      "inference_time_s": 2.9,
-      "avg_ms_per_image": 15.4
+      "inference_time_s": 3.5,
+      "avg_ms_per_image": 18.6
     },
     "int8": {
-      "mAP50": 0.4343,
-      "mAP50_95": 0.274,
-      "precision": 0.8195,
-      "recall": 0.4749,
-      "f1": 0.6013,
-      "n_detections": 308,
+      "mAP50": 0.3769,
+      "mAP50_95": 0.2348,
+      "precision": 0.8643,
+      "recall": 0.3927,
+      "f1": 0.54,
+      "n_detections": 218,
       "n_ground_truths": 576,
       "per_class": {
         "dog": {
-          "ap50": 0.5123,
-          "precision": 0.8857,
-          "recall": 0.5345,
-          "f1": 0.6667,
+          "ap50": 0.5687,
+          "precision": 0.8333,
+          "recall": 0.6034,
+          "f1": 0.7,
           "n_gt": 58
         },
         "door": {
-          "ap50": 0.2348,
-          "precision": 0.6949,
-          "recall": 0.3015,
-          "f1": 0.4205,
+          "ap50": 0.0784,
+          "precision": 0.7222,
+          "recall": 0.0956,
+          "f1": 0.1688,
           "n_gt": 136
         },
         "obstacle": {
-          "ap50": 0.2552,
-          "precision": 0.7937,
-          "recall": 0.289,
-          "f1": 0.4237,
+          "ap50": 0.2268,
+          "precision": 0.9512,
+          "recall": 0.2254,
+          "f1": 0.3645,
           "n_gt": 173
         },
         "person": {
-          "ap50": 0.6554,
-          "precision": 0.8554,
-          "recall": 0.703,
-          "f1": 0.7717,
+          "ap50": 0.7299,
+          "precision": 0.9259,
+          "recall": 0.7426,
+          "f1": 0.8242,
           "n_gt": 101
         },
         "stair": {
-          "ap50": 0.514,
-          "precision": 0.8676,
-          "recall": 0.5463,
-          "f1": 0.6705,
+          "ap50": 0.2809,
+          "precision": 0.8889,
+          "recall": 0.2963,
+          "f1": 0.4444,
           "n_gt": 108
         }
       },
-      "inference_time_s": 15.2,
-      "avg_ms_per_image": 81.3,
-      "quantization_time_s": 72.5
+      "inference_time_s": 16.6,
+      "avg_ms_per_image": 88.6,
+      "quantization_time_s": 82.5
     },
     "degradation": {
-      "mAP50_degradation_pct": 18.01,
-      "verdict": "PASS"
+      "mAP50_degradation_pct": 25.02,
+      "verdict": "MARGINAL"
     }
   }
 }

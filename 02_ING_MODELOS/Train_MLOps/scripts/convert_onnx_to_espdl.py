@@ -72,6 +72,14 @@ MODELS = {
         "run_id": "yolo26n_custom_v2-run1",
         "description": "YOLO26n T2 re-exportado con 6 salidas ESP (box+score separados) — fix cuantización INT8",
     },
+    "yolo26n_t3_esp": {
+        "onnx": "outputs/yolo26n_custom_v3-run1/export/best_esp.onnx",
+        "input_shape": [1, 3, 224, 224],  # NCHW
+        "channel_format": "nchw",
+        "family": "YOLO26_ESP_V3",
+        "run_id": "yolo26n_custom_v3-run1",
+        "description": "YOLO26n T3 DFL Removal — 6 salidas ESP (box[1,4,H,W] directo + score separados)",
+    },
 }
 
 # Salida relativa a Train_MLOps/

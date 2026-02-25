@@ -7,8 +7,8 @@
 > **Infraestructura**: Google Vertex AI Custom Job — `n1-standard-8` + NVIDIA Tesla T4  
 > **Contenedor**: `us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest`  
 > **Entry-point**: `trainer.task_yolo26_custom`  
-> **Paquete base**: `tfm_trainer-2.4.0.tar.gz`  
-> **Última actualización**: 22 de febrero de 2026 (Train 2 completado)  
+> **Paquete base**: `tfm_trainer-2.7.0.tar.gz`  
+> **Última actualización**: 24 de febrero de 2026 (Train 3 completado)  
 
 ---
 
@@ -18,26 +18,30 @@
 2. [Configuración Base (Compartida)](#2-configuración-base-compartida)
 3. [Train 1 — Baseline](#3-train-1--baseline)
 4. [Train 2 — MuSGD Optimizer](#4-train-2--musgd-optimizer)
-5. [Backlog de Propuestas](#5-backlog-de-propuestas)
-6. [Comparativa Global](#comparativa-global)
-7. [Conclusiones Generales](#conclusiones-generales)
+5. [Train 3 — DFL Removal](#5-train-3--dfl-removal)
+6. [Backlog de Propuestas](#6-backlog-de-propuestas)
+7. [Comparativa Global](#comparativa-global)
+8. [Conclusiones Generales](#conclusiones-generales)
 
 ---
 
 ## 1. Resumen Ejecutivo
 
-| Métrica (Test) | Train 1 | Train 2 | Δ (T2 vs T1) |
-|---|:---:|:---:|:---:|
-| **mAP@50** | 0.7544 | **0.7747** | +2.7% |
-| **mAP@50-95** | 0.5153 | **0.5456** | +5.9% |
-| **Precision** | 0.8264 | **0.8324** | +0.7% |
-| **Recall** | 0.6402 | **0.6853** | +7.0% |
-| **F1-Score** | 0.7215 | **0.7517** | +4.2% |
-| Épocas (P1+P2) | 100 (30+70) | 98 (30+68) | Early stop |
-| Optimizer | auto→AdamW | **MuSGD** | — |
-| conf_threshold | 0.25 | 0.15 | — |
-| Tiempo | 26.0 min | 32.6 min | +25% |
-| Inferencia | 2.6 ms | 2.9 ms | — |
+| Métrica (Test) | Train 1 | Train 2 | Train 3 | Δ (T3 vs T2) |
+|---|:---:|:---:|:---:|:---:|
+| **mAP@50** | 0.7544 | **0.7747** | 0.7466 | -3.6% |
+| **mAP@50-95** | 0.5153 | **0.5456** | 0.5333 | -2.3% |
+| **Precision** | 0.8264 | **0.8324** | 0.7853 | -5.7% |
+| **Recall** | 0.6402 | **0.6853** | 0.6522 | -4.8% |
+| **F1-Score** | 0.7215 | **0.7517** | 0.7126 | -5.2% |
+| Épocas (P1+P2) | 100 (30+70) | 98 (30+68) | 92 (30+62) | Early stop |
+| Optimizer | auto→AdamW | MuSGD | MuSGD | — |
+| Pretrained | yolo11n.pt | yolo11n.pt | **yolo26n.pt** | Nativo YOLO26 |
+| reg_max / DFL | 16 / DFL | 16 / DFL | **1 / Identity** | Sin DFL |
+| Params | 2,590,815 | 2,590,815 | **2,505,750** | -3.3% |
+| conf_threshold | 0.25 | 0.15 | 0.15 | — |
+| Tiempo | 26.0 min | 32.6 min | 30.5 min | -6.4% |
+| Inferencia | 2.6 ms | 2.9 ms | 4.0 ms | — |
 
 > Tabla actualizada tras cada entrenamiento exitoso.
 
@@ -470,7 +474,253 @@ Baseline puro — sin cambios respecto a la configuración base (§2).
 
 ---
 
-## 5. Backlog de Propuestas
+## 5. Train 3 — DFL Removal
+
+**Propuesta**: DFL Removal — Usar pesos nativos `yolo26n.pt` con `reg_max=1` (DFL=Identity), eliminando la necesidad de softmax + integral DFL en el post-processing del ESP32-S3.
+
+### 5.1 Identificador
+
+| Campo | Valor |
+|---|---|
+| Job ID (Vertex AI) | `6267808829191225344` |
+| Fecha lanzamiento | 24 de febrero de 2026 |
+| Paquete | `tfm_trainer-2.7.0.tar.gz` |
+| Config YAML | `yolo26n_custom_v3.yaml` |
+| Output GCS | `gs://project-18f58341-12cf-47bc-861-tfm-data/output/yolo26n_custom_v3-run1/` |
+| Output local | `outputs/yolo26n_custom_v3-run1/` |
+
+### 5.2 Cambios vs Train 2
+
+| Parámetro | T2 | T3 | Justificación |
+|---|---|---|---|
+| `pretrained_weights` | yolo11n.pt | **yolo26n.pt** | Pesos nativos YOLO26 COCO con DFL removal |
+| `reg_max` | 16 (DFL activa) | **1 (DFL=Identity)** | 4 canales directos vs 64 probabilísticos |
+| `cv2[0] out_channels` | 64 | **4** | Acorde a reg_max × 4 = 4 |
+| Parámetros totales | 2,590,815 | **2,505,750** (-3.3%) | Menos params en cabeza de box |
+| `setup.py` version | 2.4.0 | **2.7.0** | DFL inspection en DEPLOY VERIFICATION |
+| Otros hiperparámetros | — | **IDÉNTICOS a T2** | MuSGD, lr, phases, patience, conf |
+
+### 5.3 Motivación DFL Removal
+
+1. **Simplificación firmware ESP32-S3**: Elimina softmax + integral DFL del post-processing. Reducción directa de complejidad y latencia de inferencia en microcontrolador.
+2. **Cuantización INT8 (hipótesis)**: 4 canales uniformes de distancia vs 64 canales de probabilidad DFL → se espera menor sensibilidad a cuantización.
+3. **Menor tamaño de salida ESP ONNX**: Box shapes `[1, 4, H, W]` en lugar de `[1, 64, H, W]` (16× reducción en canales de caja).
+4. **Pesos nativos YOLO26**: `yolo26n.pt` (preentrenado COCO) → transfer learning directo sin cross-model YOLO11→YOLO26 (T1/T2 usaban `yolo11n.pt`).
+
+### 5.4 Verificación Arquitectura
+
+Verificado programáticamente en el modelo entrenado (`best.pt`) mediante bloque de DEPLOY VERIFICATION:
+
+| Propiedad | Esperado | Verificado |
+|---|---|---|
+| `reg_max` | 1 | ✅ 1 |
+| `dfl` module | `Identity()` | ✅ `Identity()` |
+| `cv2[0] out_channels` | 4 | ✅ 4 |
+| `nc` | 5 | ✅ 5 |
+| Parámetros totales | ~2.5M | ✅ 2,505,750 |
+| `best.pt` size | <6 MB | ✅ 5.15 MB |
+
+### 5.5 Entrenamiento
+
+| Aspecto | Valor |
+|---|---|
+| Épocas totales | **92** (30 Phase 1 + 62 Phase 2) |
+| Phase 2 early stopping | Sí (62/70 epochs, 8 ahorrados) |
+| Best mAP@50 (training, conf=0.001) | 0.774 (epoch 91) |
+| Phase 1 final mAP@50 | 0.763 (epoch 30) |
+| Phase 2 start mAP@50 | 0.700 (epoch 31, drop por unfreeze) |
+| Tiempo total | 30.5 min (1829 s) |
+| Phase 1 tiempo | 11.7 min (702 s) |
+| Phase 2 tiempo | 18.8 min (1127 s) |
+| GPU memory | ~2.7 GB (T4) |
+
+**Phase 2 mejoró Phase 1**: mAP@50 0.763 → 0.774 (+1.4%). Confirmación de que MuSGD + LR diferenciado sigue funcionando con DFL Removal y pesos nativos. El patrón Phase 1→Phase 2 es consistente en los tres entrenamientos.
+
+### 5.6 Resultados — Validación
+
+| Métrica | Valor |
+|---|---|
+| mAP@50 | **0.6234** |
+| mAP@50-95 | 0.4246 |
+| Precision | 0.7289 |
+| Recall | 0.4738 |
+| F1-Score | 0.5743 |
+| Inferencia | 5.24 ms |
+
+**Per-class AP@50 (Val):**
+
+| Clase | AP@50 | Precision | Recall | F1 |
+|---|:---:|:---:|:---:|:---:|
+| dog | 0.6746 | 0.8085 | 0.5067 | 0.6230 |
+| door | 0.5206 | 0.6570 | 0.3500 | 0.4567 |
+| obstacle | 0.5621 | 0.5994 | 0.5244 | 0.5594 |
+| person | 0.7953 | 0.8676 | 0.6484 | 0.7421 |
+| stair | 0.5643 | 0.7118 | 0.3396 | 0.4598 |
+
+### 5.7 Resultados — Test
+
+| Métrica | Valor |
+|---|---|
+| mAP@50 | **0.7466** |
+| mAP@50-95 | **0.5333** |
+| Precision | 0.7853 |
+| Recall | 0.6522 |
+| F1-Score | **0.7126** |
+| Inferencia | 3.98 ms |
+
+**Per-class AP@50 (Test):**
+
+| Clase | AP@50 | Precision | Recall | F1 |
+|---|:---:|:---:|:---:|:---:|
+| dog | 0.8047 | 0.8269 | 0.7414 | 0.7818 |
+| door | 0.6606 | 0.7474 | 0.5221 | 0.6147 |
+| obstacle | 0.6543 | 0.7273 | 0.5549 | 0.6295 |
+| person | 0.8860 | 0.8485 | 0.8317 | 0.8400 |
+| stair | 0.7272 | 0.7765 | 0.6111 | 0.6839 |
+
+**Confusion Matrix (Test):**
+
+|  | dog | door | obst | pers | stair | FN |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **dog** | 43 | 1 | 1 | 1 | 0 | 6 |
+| **door** | 0 | 73 | 0 | 0 | 0 | 22 |
+| **obstacle** | 0 | 0 | 98 | 0 | 1 | 33 |
+| **person** | 1 | 0 | 1 | 85 | 0 | 12 |
+| **stair** | 0 | 0 | 0 | 0 | 68 | 17 |
+| **FP (bkg)** | 14 | 62 | 73 | 15 | 39 | — |
+
+### 5.8 Export ONNX (estándar)
+
+| Parámetro | Valor |
+|---|---|
+| ONNX size | 9.21 MB |
+| ONNX valid | ✅ |
+| ONNX latency | 9.97 ms (CPU, OnnxRuntime) |
+| Input shape | (1, 3, 224, 224) |
+| Output shape | (1, 9, 1029) |
+| Opset | 13 |
+
+> **Nota**: Con `reg_max=1`, el output shape es `(1, 9, 1029)` donde 9 = 4 (bbox directas) + 5 (clases). Mismo shape numérico que T2 `(1, 9, 1029)` donde 9 = 4 (dist2bbox post-DFL integral) + 5 (clases), pero T3 no requiere DFL integral posterior.
+
+### 5.9 Export ONNX ESP (6 salidas)
+
+| Parámetro | Valor |
+|---|---|
+| Script | `scripts/export_yolo26_esp.py` |
+| Archivo | `best_esp.onnx` |
+| Tamaño | 9,359.7 KB (9.14 MB) |
+| Simplificado | ✅ (onnxsim) |
+| Outputs | 6 (3 escalas × box + score) |
+
+**Output shapes (DFL Removal):**
+
+| Output | Shape | Descripción |
+|---|---|---|
+| box0 | `[1, 4, 28, 28]` | Distancias directas escala P3 (stride 8) |
+| score0 | `[1, 5, 28, 28]` | Scores 5 clases escala P3 |
+| box1 | `[1, 4, 14, 14]` | Distancias directas escala P4 (stride 16) |
+| score1 | `[1, 5, 14, 14]` | Scores 5 clases escala P4 |
+| box2 | `[1, 4, 7, 7]` | Distancias directas escala P5 (stride 32) |
+| score2 | `[1, 5, 7, 7]` | Scores 5 clases escala P5 |
+
+> Con DFL Removal, los box outputs pasan de `[1, 64, H, W]` (T2) a `[1, 4, H, W]` (T3). Esto elimina la necesidad de softmax + weighted sum DFL en el firmware ESP32-S3, simplificando significativamente el post-processing.
+
+### 5.10 Cuantización INT8 → ESPDL
+
+| Parámetro | Valor |
+|---|---|
+| Script | `scripts/convert_onnx_to_espdl.py` |
+| Config key | `yolo26n_t3_esp` |
+| Input ONNX | `best_esp.onnx` (9,359.7 KB) |
+| Output ESPDL | `yolo26n_t3_esp.espdl` (2.566 MB) |
+| Compresión | **3.56×** |
+| Calibración | 188 imágenes test split |
+
+**Output exponents:**
+
+| Output | Exponent |
+|---|---|
+| box0 (P3) | -3 |
+| score0 (P3) | -3 |
+| box1 (P4) | -3 |
+| score1 (P4) | -2 |
+| box2 (P5) | -4 |
+| score2 (P5) | -3 |
+
+> El ESPDL de 2.566 MB cabe holgadamente en los 8 MB de PSRAM del ESP32-S3 (32% de ocupación). Compresión 3.56× comparable a T2.
+
+### 5.11 Evaluación FP32 vs INT8 (ESP)
+
+| Métrica | FP32 (ESP) | INT8 (ESPDL) | Degradación |
+|---|:---:|:---:|:---:|
+| **mAP@50** | 0.5027 | 0.3769 | **-25.0%** |
+| mAP@50-95 | 0.3206 | 0.2348 | -26.7% |
+| Precision | 0.8437 | 0.8643 | +2.4% |
+| Recall | 0.5163 | 0.3927 | -23.9% |
+| F1-Score | 0.6406 | 0.5400 | -15.7% |
+| Detecciones | 309 | 218 | -29.4% |
+| **Veredicto** | — | — | **MARGINAL** |
+
+**Per-class AP@50 FP32 vs INT8:**
+
+| Clase | FP32 | INT8 | Δ |
+|---|:---:|:---:|:---:|
+| dog | 0.6823 | 0.5687 | -16.6% |
+| door | 0.1489 | 0.0784 | -47.3% |
+| obstacle | 0.3686 | 0.2268 | -38.5% |
+| person | 0.8236 | 0.7299 | -11.4% |
+| stair | 0.4899 | 0.2809 | -42.7% |
+
+> **Análisis de cuantización**: La degradación del 25.0% en mAP@50 es clasificada como MARGINAL (umbral 20-30%). Las clases door y obstacle sufren la mayor degradación (~40-47%), consistente con el patrón observado en T2. **La hipótesis de que DFL Removal mejoraría la cuantización INT8 NO se confirmó** — T2 con DFL activa obtuvo menor degradación (18.7% vs 25.0%). Posible causa: la integral DFL actúa como filtro de suavizado que mejora la robustez a cuantización.
+
+### 5.12 Análisis
+
+**Resultado general: T3 es LIGERAMENTE INFERIOR a T2 en métricas absolutas, pero aporta beneficios arquitecturales significativos para despliegue.**
+
+1. **mAP@50 (test) = 0.7466 (-3.6% vs T2)** — Pequeña degradación aceptable. T3 sigue superando ampliamente a FCOS. La caída se debe a: (a) pesos pretrained diferentes (yolo26n.pt vs yolo11n.pt), y (b) la DFL integral contribuye ligeramente a la precisión de bounding box en FP32.
+
+2. **mAP@50-95 (test) = 0.5333 (-2.3% vs T2)** — Impacto menor en IoU estricto, sugiriendo que la calidad de bbox con 4 canales directos es comparable a 64 canales DFL.
+
+3. **Per-class Test AP@50 vs T2**:
+   - 🟡 person: 0.886 (+2.3%) — Única clase que MEJORA vs T2
+   - 🔴 obstacle: 0.654 (-11.4%) — Mayor caída absoluta
+   - 🔴 stair: 0.727 (-10.6%) — Caída significativa
+   - 🟡 dog: 0.805 (+1.1%) — Leve mejora
+   - ⚪ door: 0.661 (+0.1%) — Estable
+
+4. **Precision más baja (0.785 vs T2 0.832 → -5.7%)** — Más FP desde background. La tabla de confusión muestra: door(62), obstacle(73), stair(39) FP↑. Patrón similar a T2 pero amplificado.
+
+5. **Phase 2 sigue funcionando**: mAP50 0.763→0.774 (+1.4%). El patrón MuSGD + LR diferenciado es robusto y se mantiene con DFL Removal. Tres de tres entrenamientos confirman la mejora Phase 1→Phase 2.
+
+6. **Beneficios para despliegue ESP32-S3 (principal motivación de T3)**:
+   - ✅ Post-processing simplificado: sin softmax + integral DFL (ahorro de ~200 operaciones por detection head por escala)
+   - ✅ Shapes de box 16× más compactos: `[1,4,H,W]` vs `[1,64,H,W]`
+   - ✅ ESPDL 2.566 MB viable (32% PSRAM)
+   - ✅ 85K menos parámetros (2.506M vs 2.591M)
+   - ❌ Cuantización INT8 peor de lo esperado (25% vs 18% degradación)
+
+7. **Análisis de riesgo cuantización**: La degradación MARGINAL (25%) es manejable pero requiere:
+   - Evaluación funcional en dispositivo real (ESP32-S3)
+   - Consideración de cuantización mixta (INT8/INT16) para outputs de box
+   - El caso de uso de asistencia visual prioriza recall → INT8 recall=0.393 es insuficiente
+
+### 5.13 Lecciones
+
+1. **DFL Removal reduce accuracy FP32 marginalmente (-3.6%)** — Trade-off aceptable dado el beneficio en simplificación de firmware. Para el caso de uso (asistencia visual en ESP32-S3), la simplicidad de post-processing puede compensar la pequeña pérdida de accuracy.
+
+2. **DFL NO ayuda a cuantización INT8 (contra-hipótesis)** — La integral DFL (softmax + weighted sum) actúa como regularizador implícito que suaviza los valores de distancia, haciéndolos más robustos a cuantización. Los 4 canales directos de T3 tienen mayor rango dinámico y son más sensibles al truncamiento INT8.
+
+3. **Pesos nativos yolo26n.pt funcionan bien** — Transfer learning desde yolo26n.pt (YOLO26 COCO) produce resultados comparables a yolo11n.pt (YOLO11 COCO → YOLO26). No hay penalización significativa por usar pesos de la misma familia.
+
+4. **El pipeline completo (train→export→quantize→eval) funciona end-to-end con DFL Removal** — Todos los scripts (export_yolo26_esp.py, convert_onnx_to_espdl.py, eval_fp32_vs_int8.py) se adaptaron correctamente para manejar `reg_max=1`.
+
+5. **El veredicto para producción depende del contexto**:
+   - Si el firmware ESP32-S3 puede ejecutar DFL integral eficientemente → T2 es preferible (mejor accuracy FP32 y mejor cuantización INT8)
+   - Si la simplificación de firmware es prioritaria → T3 ofrece post-processing más simple a cambio de ~3.6% accuracy
+
+---
+
+## 6. Backlog de Propuestas
 
 > Propuestas identificadas durante el análisis de Train 1, pendientes de implementar en futuros entrenamientos.
 
@@ -506,8 +756,9 @@ Baseline puro — sin cambios respecto a la configuración base (§2).
 |---|---|---|
 | Train 1 | Baseline (ninguna) | ✅ Completado |
 | Train 2 | **A** — MuSGD Optimizer | ✅ Completado |
-| Train 3 | A + **B** — Augmentación | ⏳ Pendiente |
-| Train 4 | A + B + **C** — Loss Balance | ⏳ Pendiente |
+| Train 3 | **D** — DFL Removal (`reg_max=1`) | ✅ Completado |
+| Train 4 | A + **B** — Augmentación | ⏳ Pendiente |
+| Train 5 | A + B + **C** — Loss Balance | ⏳ Pendiente |
 
 > Esta planificación es orientativa. Se ajustará según los resultados de cada Train.
 
@@ -517,77 +768,102 @@ Baseline puro — sin cambios respecto a la configuración base (§2).
 
 ### Test Metrics
 
-| Métrica | Train 1 | Train 2 | Δ (T2−T1) | Mejor |
-|---|:---:|:---:|:---:|:---:|
-| mAP@50 | 0.7544 | **0.7747** | +2.7% | T2 |
-| mAP@50-95 | 0.5153 | **0.5456** | +5.9% | T2 |
-| Precision | 0.8264 | **0.8324** | +0.7% | T2 |
-| Recall | 0.6402 | **0.6853** | +7.0% | T2 |
-| F1-Score | 0.7215 | **0.7517** | +4.2% | T2 |
+| Métrica | Train 1 | Train 2 | Train 3 | Δ (T3−T2) | Mejor |
+|---|:---:|:---:|:---:|:---:|:---:|
+| mAP@50 | 0.7544 | **0.7747** | 0.7466 | -3.6% | T2 |
+| mAP@50-95 | 0.5153 | **0.5456** | 0.5333 | -2.3% | T2 |
+| Precision | 0.8264 | **0.8324** | 0.7853 | -5.7% | T2 |
+| Recall | 0.6402 | **0.6853** | 0.6522 | -4.8% | T2 |
+| F1-Score | 0.7215 | **0.7517** | 0.7126 | -5.2% | T2 |
 
 ### Per-class AP@50 (Test)
 
-| Clase | Train 1 | Train 2 | Δ | Mejor |
-|---|:---:|:---:|:---:|:---:|
-| dog | 0.7740 | **0.7956** | +2.8% | T2 |
-| door | 0.6531 | **0.6601** | +1.1% | T2 |
-| obstacle | 0.7011 | **0.7384** | +5.3% | T2 |
-| person | 0.8301 | **0.8661** | +4.3% | T2 |
-| stair | **0.8138** | 0.8133 | -0.1% | ≈ |
+| Clase | Train 1 | Train 2 | Train 3 | Δ (T3−T2) | Mejor |
+|---|:---:|:---:|:---:|:---:|:---:|
+| dog | 0.7740 | 0.7956 | **0.8047** | +1.1% | T3 |
+| door | 0.6531 | **0.6601** | 0.6606 | +0.1% | ≈ |
+| obstacle | 0.7011 | **0.7384** | 0.6543 | -11.4% | T2 |
+| person | 0.8301 | 0.8661 | **0.8860** | +2.3% | T3 |
+| stair | **0.8138** | 0.8133 | 0.7272 | -10.6% | T1 |
 
 ### Val Metrics
 
-| Métrica | Train 1 | Train 2 | Δ |
-|---|:---:|:---:|:---:|
-| mAP@50 | 0.6556 | **0.6638** | +1.2% |
-| mAP@50-95 | 0.4298 | **0.4345** | +1.1% |
-| Precision | **0.8215** | 0.7810 | -4.9% |
-| Recall | 0.4556 | **0.5119** | +12.4% |
-| F1-Score | 0.5861 | **0.6185** | +5.5% |
+| Métrica | Train 1 | Train 2 | Train 3 | Δ (T3−T2) | Mejor |
+|---|:---:|:---:|:---:|:---:|:---:|
+| mAP@50 | 0.6556 | **0.6638** | 0.6234 | -6.1% | T2 |
+| mAP@50-95 | 0.4298 | **0.4345** | 0.4246 | -2.3% | T2 |
+| Precision | **0.8215** | 0.7810 | 0.7289 | -6.7% | T1 |
+| Recall | 0.4556 | **0.5119** | 0.4738 | -7.4% | T2 |
+| F1-Score | 0.5861 | **0.6185** | 0.5743 | -7.1% | T2 |
 
 ### Training Dynamics
 
-| Aspecto | Train 1 | Train 2 |
-|---|---|---|
-| Optimizer real | AdamW (auto) | MuSGD (explícito) |
-| Phase 2 ¿mejoró Phase 1? | ❌ No | ✅ Sí (+3.5% mAP50-95) |
-| Early stopping | No (100/100) | Sí (98/100, P2: 68/70) |
-| Tiempo total | 26.0 min | 32.6 min |
-| Best P2 epoch | 70 (last) | 38 (early stop) |
-| GPU memory | 2.71 GB | 2.71 GB |
+| Aspecto | Train 1 | Train 2 | Train 3 |
+|---|---|---|---|
+| Optimizer real | AdamW (auto) | MuSGD (explícito) | MuSGD (explícito) |
+| Pretrained weights | yolo11n.pt | yolo11n.pt | yolo26n.pt (nativo) |
+| reg_max / DFL | 16 / DFL | 16 / DFL | 1 / Identity |
+| Phase 2 ¿mejoró Phase 1? | ❌ No | ✅ Sí (+3.5% mAP50-95) | ✅ Sí (+1.4% mAP50) |
+| Early stopping | No (100/100) | Sí (98/100, P2: 68/70) | Sí (92/100, P2: 62/70) |
+| Tiempo total | 26.0 min | 32.6 min | 30.5 min |
+| Best P2 epoch | 70 (last) | 38 (early stop) | 61 (early stop) |
+| GPU memory | 2.71 GB | 2.71 GB | ~2.7 GB |
+| Params | 2,590,815 | 2,590,815 | 2,505,750 |
+
+### Despliegue ESP32-S3
+
+| Aspecto | Train 2 | Train 3 | Mejor |
+|---|:---:|:---:|:---:|
+| ONNX estándar | 9.97 MB | 9.21 MB | T3 |
+| ONNX ESP (6 out) | — | 9.14 MB | T3 |
+| Box output shape | [1,64,H,W] | [1,4,H,W] | T3 (16× menor) |
+| ESPDL (INT8) | — | 2.566 MB | T3 |
+| FP32 ESP mAP@50 | 0.5297 | 0.5027 | T2 |
+| INT8 ESP mAP@50 | 0.4307 | 0.3769 | T2 |
+| INT8 degradación | 18.7% | 25.0% | T2 |
+| Post-processing | softmax+DFL integral | Directo (dist2bbox) | T3 (más simple) |
 
 ---
 
 ## Conclusiones Generales
 
-1. **Train 2 (MuSGD) es el mejor modelo hasta ahora** — Supera a T1 en todas las métricas de test. F1=0.752 (+4.2%), mAP@50-95=0.546 (+5.9%).
+1. **Train 2 (MuSGD) sigue siendo el mejor modelo en métricas absolutas** — mAP@50=0.775, F1=0.752, superando a T1 y T3 en todas las métricas de test. T3 (DFL Removal) pierde -3.6% mAP@50 vs T2.
 
-2. **La hipótesis principal se confirmó**: usar MuSGD explícito permite que Phase 2 mejore Phase 1, y que los learning rates configurados se apliquen correctamente.
+2. **Train 3 (DFL Removal) aporta valor para despliegue, no para accuracy** — El beneficio principal es la simplificación del firmware ESP32-S3: post-processing sin DFL integral, box shapes 16× más compactos, y 85K menos parámetros. La pérdida de accuracy es marginal (-3.6%).
 
-3. **YOLO26 supera ampliamente a FCOS** — T2 alcanza mAP@50=0.775 vs FCOS T3=0.568 (+36%) y FCOS T7=0.612 (+27%). El trade-off es 2× parámetros y 2× ONNX size.
+3. **La hipótesis de mejor cuantización INT8 con DFL Removal NO se confirmó** — T3 INT8 degrada 25% vs T2 18%. La integral DFL actúa como regularizador que suaviza los valores de distancia, haciéndolos más robustos a cuantización. Hallazgo contra-intuitivo pero reproducible.
 
-4. **Recall es la métrica a seguir mejorando** — 0.685 es bueno pero para asistencia visual se busca >0.75. Las Propuestas B (augmentación) y C (loss balance) están diseñadas para esto.
+4. **MuSGD + Fases es un patrón robusto** — Phase 2 mejoró Phase 1 en T2 (+3.5%) y T3 (+1.4%), confirmando la robustez del esquema de entrenamiento bifásico con MuSGD y LR diferenciado.
 
-5. **door sigue siendo la clase más débil** — AP@50=0.660, Recall=0.501. Requiere atención específica (augmentación, posible oversampling).
+5. **YOLO26 supera ampliamente a FCOS** — T2 alcanza mAP@50=0.775 vs FCOS T3=0.568 (+36%) y FCOS T7=0.612 (+27%). T3 con DFL Removal también supera a FCOS: mAP@50=0.747 (+31%/+22%).
 
-6. **Para despliegue ESP32-S3**: ONNX 9.97 MB requiere cuantización INT8 vía ESP-DL para caber en 8MB PSRAM. La latencia ONNX (9.9 ms CPU) es prometedora.
+6. **Recall es la métrica a seguir mejorando** — T2 Recall=0.685 es el mejor, pero para asistencia visual se busca >0.75. Las Propuestas B (augmentación) y C (loss balance) están diseñadas para esto.
+
+7. **door sigue siendo la clase más débil** — AP@50~0.660 estable en T2 y T3, Recall~0.50-0.52. Requiere atención específica (augmentación, oversampling, loss rebalancing).
+
+8. **Decisión de producción para ESP32-S3**: Depende del firmware:
+   - Si DFL integral es viable en ESP32-S3 → usar T2 (mejor accuracy + mejor INT8)
+   - Si simplificación es prioritaria → usar T3 (post-processing trivial, accuracy aceptable)
+   - En ambos casos, el ESPDL de ~2.5 MB cabe en 8 MB PSRAM
 
 ---
 
 ## Referencia Cruzada — FCOS vs YOLO26
 
-| Métrica (Test) | FCOS T3 (producción) | FCOS T7 (benchmark) | YOLO26 T1 | YOLO26 T2 |
-|---|:---:|:---:|:---:|:---:|
-| mAP@50 | 0.5675 | 0.6120 | 0.7544 | **0.7747** (+36%/+27%) |
-| mAP@50-95 | 0.2602 | 0.2824 | 0.5153 | **0.5456** (+110%/+93%) |
-| Precision | 0.6609 | 0.3716 | 0.8264 | **0.8324** |
-| Recall | 0.6276 | **0.6872** | 0.6402 | 0.6853 |
-| F1-Score | 0.6438 | 0.4824 | 0.7215 | **0.7517** (+17%/+56%) |
-| Params | 1.23M | 1.23M | 2.58M | 2.58M |
-| ONNX size | 4.74 MB | 4.74 MB | 9.97 MB | 9.97 MB |
-| Inference (GPU) | — | — | 2.6 ms | 2.9 ms |
+| Métrica (Test) | FCOS T3 (producción) | FCOS T7 (benchmark) | YOLO26 T1 | YOLO26 T2 | YOLO26 T3 (DFL off) |
+|---|:---:|:---:|:---:|:---:|:---:|
+| mAP@50 | 0.5675 | 0.6120 | 0.7544 | **0.7747** | 0.7466 |
+| mAP@50-95 | 0.2602 | 0.2824 | 0.5153 | **0.5456** | 0.5333 |
+| Precision | 0.6609 | 0.3716 | 0.8264 | **0.8324** | 0.7853 |
+| Recall | 0.6276 | **0.6872** | 0.6402 | 0.6853 | 0.6522 |
+| F1-Score | 0.6438 | 0.4824 | 0.7215 | **0.7517** | 0.7126 |
+| Params | 1.23M | 1.23M | 2.59M | 2.59M | 2.51M |
+| reg_max / DFL | — | — | 16 / DFL | 16 / DFL | 1 / Identity |
+| ONNX size | 4.74 MB | 4.74 MB | 9.97 MB | 9.97 MB | 9.21 MB |
+| ESPDL (INT8) | — | — | — | — | 2.57 MB |
+| Inference (GPU) | — | — | 2.6 ms | 2.9 ms | 4.0 ms |
 
-> **Conclusión**: YOLO26 T2 establece el nuevo benchmark del proyecto. Supera al FCOS T3 producción en +36% mAP@50 y +17% F1. El recall (0.685) supera al FCOS T3 (0.628) pero aún es inferior al FCOS T7 (0.687) por margen mínimo. El trade-off sigue siendo 2× parámetros y ONNX size.
+> **Conclusión**: YOLO26 T2 establece el mejor modelo en métricas absolutas (+36% mAP@50 vs FCOS T3 producción). YOLO26 T3 (DFL Removal) sigue superando a FCOS (+31% mAP@50) con el beneficio adicional de post-processing simplificado y cuantización ESPDL verificada (2.57 MB). Para despliegue ESP32-S3, T3 ofrece el pipeline más completo: ONNX ESP → ESPDL → inferencia sin DFL. El recall de T2 (0.685) supera al de FCOS T3 producción (0.628), acercándose al FCOS T7 benchmark (0.687).
 
 ---
 

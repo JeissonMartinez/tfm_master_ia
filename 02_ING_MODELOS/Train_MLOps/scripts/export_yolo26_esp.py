@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-export_yolo26_esp.py — Re-exportar YOLO26 T2 con 6 salidas ESP-compatible
+export_yolo26_esp.py — Re-exportar YOLO26 con 6 salidas ESP-compatible
 ==========================================================================
-Exporta el modelo YOLO26 T2 (.pt) en formato ONNX con 6 salidas separadas
+Exporta el modelo YOLO26 (.pt) en formato ONNX con 6 salidas separadas
 (box0/score0, box1/score1, box2/score2) SIN detection head post-processing.
 
 Esto resuelve el problema de cuantización INT8 donde el output unificado
@@ -13,7 +13,7 @@ Basado en el enfoque probado de:
     03_ING_DESPLIEGUE/models/export_onnx_esp.py
 
 Salidas por nivel de detección (P3, P4, P5):
-  - box{i}: [1, reg_max*4, H, W]  → [1, 64, H, W] (reg_max=16)
+  - box{i}: [1, reg_max*4, H, W]  → [1, 4, H, W] (reg_max=1, sin DFL)
   - score{i}: [1, nc, H, W]       → [1, 5, H, W]
 
     P3 (stride 8):  H=W=28 (224/8)  → 784 candidates
@@ -67,8 +67,8 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).resolve().parent
 TRAIN_MLOPS_DIR = SCRIPT_DIR.parent  # scripts/ → Train_MLOps/
 
-PT_FILE = TRAIN_MLOPS_DIR / "outputs/yolo26n_custom_v2-run1/yolo_project/phase2/weights/best.pt"
-OUTPUT_DIR = TRAIN_MLOPS_DIR / "outputs/yolo26n_custom_v2-run1/export"
+PT_FILE = TRAIN_MLOPS_DIR / "outputs/yolo26n_custom_v3-run1/yolo_project/phase2/weights/best.pt"
+OUTPUT_DIR = TRAIN_MLOPS_DIR / "outputs/yolo26n_custom_v3-run1/export"
 OUTPUT_FILE = OUTPUT_DIR / "best_esp.onnx"
 
 IMGSZ = 224
@@ -273,7 +273,7 @@ def export():
     print(f"\n  Siguiente paso:")
     print(f"  python scripts/convert_onnx_to_espdl.py "
           f"--calib-dir ../datasets/IODC/coco/train/images "
-          f"--models yolo26n_t2_esp")
+          f"--models yolo26n_t3_esp")
     print("=" * 60)
 
 

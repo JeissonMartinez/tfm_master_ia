@@ -90,6 +90,15 @@ MODELS = {
         "nms_threshold": 0.45,
         "label": "YOLO26 T2 ESP",
     },
+    "yolo26n_t3_esp": {
+        "onnx": str(BASE_DIR / "outputs/yolo26n_custom_v3-run1/export/best_esp.onnx"),
+        "input_name": "images",
+        "input_shape": [1, 3, IMGSZ, IMGSZ],
+        "family": "yolo26_esp_v3",
+        "conf_threshold": 0.25,
+        "nms_threshold": 0.45,
+        "label": "YOLO26 T3 ESP (no DFL)",
+    },
     "fcos_v3s_t3_mixed": {
         "onnx": str(BASE_DIR / "outputs/fcos_v3s_v1-1771690809/export/fcos_v3s.onnx"),
         "input_name": "input",
@@ -353,7 +362,7 @@ def quantize_for_evaluation(onnx_path: str, config: dict, calib_data: list):
 
     # For YOLO26, fix negative axes before quantization
     actual_onnx = onnx_path
-    if config["family"] == "yolo26":
+    if config["family"] in ("yolo26", "yolo26_esp", "yolo26_esp_v3"):
         actual_onnx = fix_negative_axes(onnx_path)
 
     # Temporary ESPDL path (we don't need the file, just the PPQ graph)
@@ -715,6 +724,73 @@ def decode_yolo26_esp(
 
 
 # =====================================================================
+#  Decoders — YOLO26 ESP v3 (6 outputs, reg_max=1, NO DFL)
+# =====================================================================
+
+def decode_yolo26_esp_v3(
+    outputs: dict,
+    conf_threshold: float = 0.25,
+    nms_threshold: float = 0.45,
+    is_int8: bool = False,
+) -> List[Tuple[int, float, Tuple[float, float, float, float]]]:
+    """Decode YOLO26 v3 ESP 6-output tensors → detections — SIN DFL.
+
+    Outputs: box{0,1,2} [1, 4, H, W] (reg_max=1, direct l,t,r,b distances)
+             score{0,1,2} [1, 5, H, W] (nc=5, raw logits → need sigmoid)
+
+    Unlike decode_yolo26_esp(), boxes are already 4 direct distance channels
+    without DFL integral (no softmax + weighted sum).
+    """
+    boxes_all, scores_all, labels_all = [], [], []
+
+    for lvl in range(3):
+        stride = STRIDES[lvl]
+
+        box_t = _to_tensor(outputs.get(f"box{lvl}"))      # [1, 4, H, W]
+        score_t = _to_tensor(outputs.get(f"score{lvl}"))   # [1, 5, H, W]
+
+        if box_t is None or score_t is None:
+            continue
+
+        B, _, H, W = box_t.shape
+        N = H * W
+
+        # Boxes: direct distances (NO DFL integral)
+        distances = box_t[0].reshape(4, N).permute(1, 0)       # [N, 4]
+
+        # Scores: sigmoid on raw logits
+        score_flat = score_t[0].reshape(NC, N).permute(1, 0)   # [N, 5]
+        cls_scores = score_flat.sigmoid()
+
+        # Grid centers
+        grid_y, grid_x = torch.meshgrid(
+            torch.arange(H, dtype=torch.float32),
+            torch.arange(W, dtype=torch.float32),
+            indexing="ij"
+        )
+        cx = (grid_x.flatten() + 0.5) * stride   # [N] pixels
+        cy = (grid_y.flatten() + 0.5) * stride
+
+        # dist2bbox: center ± distance * stride → xyxy normalized
+        x1 = (cx - distances[:, 0] * stride) / IMGSZ
+        y1 = (cy - distances[:, 1] * stride) / IMGSZ
+        x2 = (cx + distances[:, 2] * stride) / IMGSZ
+        y2 = (cy + distances[:, 3] * stride) / IMGSZ
+
+        max_scores, max_labels = cls_scores.max(dim=-1)
+        mask = max_scores > conf_threshold
+        if mask.sum() == 0:
+            continue
+
+        boxes = torch.stack([x1, y1, x2, y2], dim=1)[mask].clamp(0, 1)
+        boxes_all.append(boxes)
+        scores_all.append(max_scores[mask])
+        labels_all.append(max_labels[mask])
+
+    return _nms_and_collect(boxes_all, scores_all, labels_all, nms_threshold)
+
+
+# =====================================================================
 #  Shared helpers
 # =====================================================================
 
@@ -796,6 +872,7 @@ DECODERS = {
     "yolo26": decode_yolo26,
     "espdet": decode_espdet,
     "yolo26_esp": decode_yolo26_esp,
+    "yolo26_esp_v3": decode_yolo26_esp_v3,
 }
 
 

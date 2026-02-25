@@ -1,0 +1,104 @@
+# ─────────────────────────────────────────────────────────────
+# Configuración: YOLO26 Custom — v3 (DFL Removal — yolo26n.pt nativo)
+# ─────────────────────────────────────────────────────────────
+# Custom Job de Vertex AI · Ciclo 2 — Train 3
+# Basado en v2 (MuSGD Optimizer), únicas diferencias:
+#
+# CAMBIOS vs v2:
+#   1. pretrained_weights: yolo26n.pt  (era: yolo11n.pt)
+#      → Pesos nativos YOLO26 con DFL Removal (reg_max=1, dfl=Identity)
+#      → cv2 produce 4 canales (distancias directas) en vez de 64 (distribución)
+#      → Elimina cross-model transfer (YOLO11→YOLO26); ahora es transfer nativo
+#   2. version: v3
+#
+# MOTIVACIÓN:
+#   - yolo26n.pt ya incluye DFL Removal en Ultralytics 8.4.9
+#   - reg_max=1 → cv2 out_channels=4 (era 64 con reg_max=16)
+#   - dfl=Identity (era DFL Conv2d(16,1,1))
+#   - Post-procesamiento simplificado: sin softmax+integral DFL
+#   - Mejor cuantización INT8: 4 canales uniformes vs 64 probabilísticos
+#   - Total params: 2,572,280 (vs 2,590,815 con DFL → -18K)
+#
+# HIPERPARÁMETROS IDÉNTICOS A v2:
+#   - optimizer: MuSGD, momentum: 0.9
+#   - phase1: 30ep freeze=10, lr0=0.01
+#   - phase2: 70ep freeze=0, lr0=0.0005
+#   - conf_threshold: 0.15
+#   - Augmentación, loss weights, export — sin cambios
+
+model:
+  family: YOLO26_CUSTOM
+  variant: yolo26n_custom
+  version: v3
+  description: "YOLO26n 2-fases — DFL Removal (yolo26n.pt nativo, reg_max=1)"
+
+dataset:
+  name: iodc_yolo
+  gcs_uri: gs://project-18f58341-12cf-47bc-861-tfm-data/datasets/iodc_yolo.zip
+  class_names: [dog, door, obstacle, person, stair]
+  img_size: 640
+
+common:
+  batch_size: 16
+  patience: 30
+  seed: 42
+  conf_threshold: 0.15
+  iou_threshold: 0.45
+
+yolo26_custom:
+  # ── Modelo base ───────────────────────────────────────────
+  pretrained_weights: yolo26n.pt       # ← CAMBIO: pesos nativos YOLO26 (sin DFL)
+                                       #   Era: yolo11n.pt (cross-model transfer)
+                                       #   yolo26n.pt → reg_max=1, cv2→4ch, dfl=Identity
+
+  # ── Fase 1 — Backbone congelado (Ultralytics) ────────────
+  phase1_epochs: 30
+  phase1_freeze_layers: 10
+  phase1_lr0: 0.01
+  phase1_lrf: 0.01
+  phase1_cos_lr: true
+
+  # ── Fase 2 — Todo descongelado ───────────────────────────
+  phase2_epochs: 70
+  phase2_freeze_layers: 0
+  phase2_lr0: 0.0005
+  phase2_lrf: 0.01
+  phase2_cos_lr: true
+
+  # ── Optimización (idéntica a v2) ──────────────────────────
+  optimizer: MuSGD
+  momentum: 0.9
+  weight_decay: 0.0005
+  warmup_epochs: 3.0
+  warmup_momentum: 0.8
+  warmup_bias_lr: 0.0                  # CRÍTICO con MuSGD explícito
+
+  # ── Augmentación (idéntica a v2) ──────────────────────────
+  mosaic: 1.0
+  mixup: 0.1
+  close_mosaic: 10
+  copy_paste: 0.0
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  degrees: 0.0
+  translate: 0.1
+  scale: 0.5
+  shear: 0.0
+  perspective: 0.0
+  flipud: 0.0
+  fliplr: 0.5
+  erasing: 0.0
+
+  # ── Loss weights (idéntica a v2) ─────────────────────────
+  box: 7.5
+  cls: 0.5
+
+  # ── Otros ─────────────────────────────────────────────────
+  amp: true
+  workers: 4
+  max_det: 300
+
+  # ── Export ────────────────────────────────────────────────
+  export_imgsz: 224
+  export_opset: 13
