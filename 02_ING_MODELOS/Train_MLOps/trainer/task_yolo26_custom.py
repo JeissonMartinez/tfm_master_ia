@@ -182,6 +182,18 @@ def main() -> None:
     print(f"  Batch size:      {setup.batch_size}")
     print(f"  Patience:        {setup.patience}")
 
+    # ── DFL inspection (v3: reg_max=1 expected) ──
+    try:
+        from ultralytics.nn.modules.head import Detect as _Detect
+        for _n, _m in model.model.named_modules():
+            if isinstance(_m, _Detect):
+                print(f"  reg_max:         {_m.reg_max}")
+                print(f"  dfl type:        {type(_m.dfl).__name__}")
+                print(f"  cv2[0] out_ch:   {_m.cv2[0][-1].out_channels}")
+                break
+    except Exception as _e:
+        print(f"  (DFL inspection failed: {_e})")
+
     # ================================================================
     # Bloque 4 — Entrenamiento (2 fases Ultralytics)
     # ================================================================

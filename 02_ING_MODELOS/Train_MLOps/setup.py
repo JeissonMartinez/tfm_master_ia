@@ -9,7 +9,7 @@ Build::
     cd 02_ING_MODELOS/Train_MLOps/
     python setup.py sdist --formats=gztar
 
-The resulting ``dist/tfm_trainer-2.6.0.tar.gz`` is uploaded to GCS
+The resulting ``dist/tfm_trainer-2.7.0.tar.gz`` is uploaded to GCS
 by ``vertex_ai/build_and_launch.sh``.
 
 Changes from v1.0.0:
@@ -79,13 +79,21 @@ Changes from v2.6.2:
       para reducir FP de background sin reentrenar
     - DEPLOY VERIFICATION version string updated
     - Version bump forces pip cache invalidation on Vertex AI
+
+Changes from v2.6.3:
+    - YOLO26 v3: DFL Removal — pretrained_weights cambia de yolo11n.pt a yolo26n.pt
+    - yolo26n.pt nativo: reg_max=1, dfl=Identity, cv2→4 channels (era 64)
+    - Nuevo config: yolo26n_custom_v3.yaml
+    - DEPLOY VERIFICATION: añadido reg_max display
+    - Ultralytics 8.4.9 ya soporta DFL Removal (no requiere upgrade)
+    - Version bump forces pip cache invalidation on Vertex AI
 """
 
 from setuptools import setup, find_packages
 
 setup(
     name="tfm-trainer",
-    version="2.6.3",
+    version="2.7.0",
     description=(
         "TFM — Entrenamiento de modelos de detección de objetos "
         "para ESP32-S3 en Vertex AI (Ciclo 2 — PyTorch)"
